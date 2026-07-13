@@ -1,0 +1,28 @@
+{
+    "name": "PlayerData.Unity.VContainer",
+    "rootNamespace": "PlayerData.Unity",
+    "references": [
+        "PlayerData.Unity",
+        "VContainer",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "PlayerData.Core.dll",
+        "MemoryPack.Core.dll",
+        "System.Collections.Immutable.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.cysharp.unitask",
+            "expression": "",
+            "define": "VCONTAINER_UNITASK_INTEGRATION"
+        }
+    ],
+    "noEngineReferences": false
+}

@@ -1,0 +1,8 @@
+{
+  "name": "com.dreamingdog0529.playerdata",
+  "version": "0.1.0",
+  "displayName": "PlayerData for Unity",
+  "description": "Unity integration for PlayerData: persistentDataPath backend and auto-save helper.",
+  "unity": "6000.0",
+  "dependencies": {}
+}

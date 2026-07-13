@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup>
+    <PackageId>PlayerData.Core</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>dreamingdog0529</Authors>
+    <Description>Session-centric thread-safe player save data with MemoryPack persistence (IDoc/IBag, explicit session composition, multi-document commit).</Description>
+    <RepositoryUrl>https://github.com/dreamingdog0529/PlayerData</RepositoryUrl>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\.local-feed</PackageOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Lets PlayerData.Benchmarks measure BuildManifest/ParseManifest directly, isolated from
+         the full WriteAsync/ReadAsync file-I/O round trip. -->
+    <InternalsVisibleTo Include="PlayerData.Benchmarks" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PolySharp" Version="1.16.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="MemoryPack" Version="1.21.4" />
+    <PackageReference Include="System.Collections.Immutable" Version="10.0.9" />
+  </ItemGroup>
+
+  <!-- Embed PlayerData.SourceGenerator as an analyzer, not a normal compile reference. -->
+  <ItemGroup>
+    <ProjectReference Include="..\PlayerData.SourceGenerator\PlayerData.SourceGenerator.csproj"
+                       PrivateAssets="all"
+                       ReferenceOutputAssembly="false"
+                       OutputItemType="Analyzer" />
+  </ItemGroup>
+
+  <!-- Ship the generator DLL under analyzers/dotnet/cs so consumers get it just by
+       referencing this package (verified working in the ST-1 spike). -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_PackPlayerDataAnalyzer</TargetsForTfmSpecificContentInPackage>
+    <PlayerDataGeneratorDll>$(MSBuildThisFileDirectory)..\PlayerData.SourceGenerator\bin\$(Configuration)\netstandard2.0\PlayerData.SourceGenerator.dll</PlayerDataGeneratorDll>
+  </PropertyGroup>
+  <Target Name="_PackPlayerDataAnalyzer" DependsOnTargets="ResolveProjectReferences">
+    <Error Condition="!Exists('$(PlayerDataGeneratorDll)')" Text="Generator DLL not found at $(PlayerDataGeneratorDll); build PlayerData.SourceGenerator first." />
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(PlayerDataGeneratorDll)" PackagePath="analyzers/dotnet/cs/" />
+    </ItemGroup>
+  </Target>
+</Project>

@@ -1,0 +1,18 @@
+{
+    "name": "PlayerData.Unity",
+    "rootNamespace": "PlayerData.Unity",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "PlayerData.Core.dll",
+        "MemoryPack.Core.dll",
+        "System.Collections.Immutable.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

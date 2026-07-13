@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!-- RS2002 (AnalyzerReleaseTracking) only recognizes DiagnosticAnalyzer.SupportedDiagnostics;
+         our PD00xx diagnostics are reported by an IIncrementalGenerator via ReportDiagnostic, so
+         every entry in AnalyzerReleases.*.md trips RS2002 as a false positive. Pre-existing on
+         this repo's baseline (confirmed on HEAD before this change), unrelated to any specific
+         diagnostic ID. -->
+    <NoWarn>$(NoWarn);RS2002</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Pinned to exactly what Unity's manual requires for custom source generators:
+         https://docs.unity3d.com/6000.0/Documentation/Manual/create-source-generator.html
+         ("Your source generator must use Microsoft.CodeAnalysis.Csharp 4.3 to work with Unity").
+         4.14.0 built fine with dotnet CLI (see ST-1) but the generator silently produced nothing
+         inside Unity - no CS9057, no console warning, just no generated members - confirming this
+         is a hard requirement, not just a floor. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+</Project>

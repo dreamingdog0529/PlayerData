@@ -1,0 +1,16 @@
+# .NET build artifacts
+bin/
+obj/
+
+# NuGet local feed output
+.local-feed/
+
+# BenchmarkDotNet run output
+BenchmarkDotNet.Artifacts/
+
+# ST-1 feasibility spike (throwaway; removed at the start of ST-5)
+spike/
+
+# IDE
+.vs/
+.idea/

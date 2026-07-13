@@ -1,0 +1,14 @@
+<Solution>
+  <Project Path="PlayerData.Benchmarks/PlayerData.Benchmarks.csproj" />
+  <Project Path="PlayerData.Core.Tests/PlayerData.Core.Tests.csproj" />
+  <Project Path="PlayerData.Core/PlayerData.Core.csproj" />
+  <Project Path="PlayerData.MessagePipe.Tests/PlayerData.MessagePipe.Tests.csproj" />
+  <Project Path="PlayerData.MessagePipe/PlayerData.MessagePipe.csproj" />
+  <Project Path="PlayerData.R3.Tests/PlayerData.R3.Tests.csproj" />
+  <Project Path="PlayerData.R3/PlayerData.R3.csproj" />
+  <Project Path="PlayerData.SourceGenerator.IntegrationTests/PlayerData.SourceGenerator.IntegrationTests.csproj" />
+  <Project Path="PlayerData.SourceGenerator.Tests/PlayerData.SourceGenerator.Tests.csproj" />
+  <Project Path="PlayerData.SourceGenerator/PlayerData.SourceGenerator.csproj" />
+  <Project Path="PlayerData.VitalRouter.Tests/PlayerData.VitalRouter.Tests.csproj" />
+  <Project Path="PlayerData.VitalRouter/PlayerData.VitalRouter.csproj" />
+</Solution>
