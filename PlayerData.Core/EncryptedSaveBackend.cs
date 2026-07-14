@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Security.Cryptography;
@@ -79,7 +80,16 @@ public sealed class EncryptedSaveBackend : ISaveBackend
         return _inner.WriteAsync(new SaveBundle(bundle.FormatVersion, documents), cancellationToken);
     }
 
-    private byte[] Protect(int formatVersion, string documentKey, byte[] plaintext)
+    // Builds the final payload buffer once ([FormatTag][IV][ciphertext][HMACTag]) and encrypts
+    // directly into it instead of allocating a separate ciphertext array, an ivAndCiphertext
+    // array, and a MAC-input array along the way (the pre-ST-2 shape of this method). PKCS7
+    // always appends a full padding block even when the input is already block-aligned, so the
+    // ciphertext length is always plaintext rounded up to the next 16-byte boundary - this lets
+    // the final buffer be sized up front. TransformBlock writes full blocks straight into the
+    // payload at the right offset; only the last (possibly all-padding) block still comes back
+    // as a fresh, fixed 16-byte array from TransformFinalBlock, since ICryptoTransform has no
+    // span/offset-writing overload for it on netstandard2.1.
+    internal byte[] Protect(int formatVersion, string documentKey, byte[] plaintext)
     {
         using var aes = Aes.Create();
         aes.Key = _aesKey;
@@ -87,24 +97,34 @@ public sealed class EncryptedSaveBackend : ISaveBackend
         aes.Padding = PaddingMode.PKCS7;
         aes.GenerateIV();
 
-        byte[] ciphertext;
-        using (var encryptor = aes.CreateEncryptor())
-            ciphertext = encryptor.TransformFinalBlock(plaintext, 0, plaintext.Length);
-
-        var ivAndCiphertext = new byte[IvSize + ciphertext.Length];
-        aes.IV.CopyTo(ivAndCiphertext, 0);
-        ciphertext.CopyTo(ivAndCiphertext, IvSize);
-
-        var tag = ComputeMac(formatVersion, documentKey, ivAndCiphertext);
-
-        var payload = new byte[1 + ivAndCiphertext.Length + TagSize];
+        var ciphertextLength = (plaintext.Length / 16 + 1) * 16;
+        var payload = new byte[1 + IvSize + ciphertextLength + TagSize];
         payload[0] = FormatTag;
-        ivAndCiphertext.CopyTo(payload, 1);
-        tag.CopyTo(payload, 1 + ivAndCiphertext.Length);
+        aes.IV.CopyTo(payload, 1);
+
+        var ciphertextOffset = 1 + IvSize;
+        using (var encryptor = aes.CreateEncryptor())
+        {
+            var fullBlockBytes = (plaintext.Length / 16) * 16;
+            var written = fullBlockBytes > 0
+                ? encryptor.TransformBlock(plaintext, 0, fullBlockBytes, payload, ciphertextOffset)
+                : 0;
+            var finalBlock = encryptor.TransformFinalBlock(plaintext, fullBlockBytes, plaintext.Length - fullBlockBytes);
+            finalBlock.CopyTo(payload.AsSpan(ciphertextOffset + written));
+        }
+
+        var ivAndCiphertext = payload.AsSpan(1, IvSize + ciphertextLength);
+        var tag = ComputeMac(formatVersion, documentKey, ivAndCiphertext);
+        tag.CopyTo(payload.AsSpan(1 + IvSize + ciphertextLength));
         return payload;
     }
 
-    private byte[] Unprotect(int formatVersion, string documentKey, byte[] payload)
+    // Operates on the input `payload` array by offset instead of first copying the ciphertext
+    // (and, previously, the IV) out into their own arrays: ICryptoTransform.TransformFinalBlock
+    // accepts an (array, offset, count) triple, so it can decrypt straight out of the caller's
+    // buffer. Only the 16-byte IV still needs a dedicated array, since SymmetricAlgorithm.IV's
+    // setter takes byte[] on netstandard2.1 (no ReadOnlySpan<byte> overload).
+    internal byte[] Unprotect(int formatVersion, string documentKey, byte[] payload)
     {
         if (payload.Length < MinPayloadSize)
             throw new SaveTamperDetectedException(
@@ -122,8 +142,9 @@ public sealed class EncryptedSaveBackend : ISaveBackend
             throw new SaveTamperDetectedException(
                 $"Encrypted document '{documentKey}' failed integrity verification (HMAC mismatch).");
 
-        var iv = ivAndCiphertext.Slice(0, IvSize).ToArray();
-        var ciphertext = ivAndCiphertext.Slice(IvSize).ToArray();
+        var iv = payload.AsSpan(1, IvSize).ToArray();
+        var ciphertextOffset = 1 + IvSize;
+        var ciphertextLength = ivAndCiphertextLength - IvSize;
 
         using var aes = Aes.Create();
         aes.Key = _aesKey;
@@ -134,7 +155,7 @@ public sealed class EncryptedSaveBackend : ISaveBackend
         try
         {
             using var decryptor = aes.CreateDecryptor();
-            return decryptor.TransformFinalBlock(ciphertext, 0, ciphertext.Length);
+            return decryptor.TransformFinalBlock(payload, ciphertextOffset, ciphertextLength);
         }
         catch (CryptographicException ex)
         {
@@ -150,24 +171,41 @@ public sealed class EncryptedSaveBackend : ISaveBackend
     // UTF8(documentKey) || ivAndCiphertext. documentKey and formatVersion are associated data:
     // they are authenticated but never stored in the payload, binding each tag to the specific
     // document slot and bundle version it was written for.
+    //
+    // Built via IncrementalHash.AppendData across three spans instead of concatenating
+    // everything into one macInput array first - HMAC is a streaming construction, so appending
+    // the same bytes in the same order produces an identical tag. documentKey's UTF8 bytes are
+    // encoded into a stack (or, past MaxStackKeyBytes, pooled) buffer rather than a per-call
+    // heap array; GetHashAndReset() is netstandard2.1's only overload (the Span<byte>-writing one
+    // is net5.0+), so the 32-byte tag itself is still a fresh allocation.
+    private const int MaxStackKeyBytes = 256;
+
     private byte[] ComputeMac(int formatVersion, string documentKey, ReadOnlySpan<byte> ivAndCiphertext)
     {
-        var keyBytes = Encoding.UTF8.GetBytes(documentKey);
-        var macInput = new byte[1 + 4 + 4 + keyBytes.Length + ivAndCiphertext.Length];
-        var offset = 0;
+        var maxKeyByteCount = Encoding.UTF8.GetMaxByteCount(documentKey.Length);
+        byte[]? rentedKeyBuffer = null;
+        try
+        {
+            Span<byte> keyBuffer = maxKeyByteCount <= MaxStackKeyBytes
+                ? stackalloc byte[maxKeyByteCount]
+                : (rentedKeyBuffer = ArrayPool<byte>.Shared.Rent(maxKeyByteCount));
+            var keyByteLength = Encoding.UTF8.GetBytes(documentKey, keyBuffer);
 
-        macInput[offset] = FormatTag;
-        offset += 1;
-        BinaryPrimitives.WriteInt32LittleEndian(macInput.AsSpan(offset, 4), formatVersion);
-        offset += 4;
-        BinaryPrimitives.WriteInt32LittleEndian(macInput.AsSpan(offset, 4), keyBytes.Length);
-        offset += 4;
-        keyBytes.AsSpan().CopyTo(macInput.AsSpan(offset));
-        offset += keyBytes.Length;
-        ivAndCiphertext.CopyTo(macInput.AsSpan(offset));
+            Span<byte> header = stackalloc byte[1 + 4 + 4];
+            header[0] = FormatTag;
+            BinaryPrimitives.WriteInt32LittleEndian(header.Slice(1, 4), formatVersion);
+            BinaryPrimitives.WriteInt32LittleEndian(header.Slice(5, 4), keyByteLength);
 
-        using var hmac = new HMACSHA256(_hmacKey);
-        return hmac.ComputeHash(macInput);
+            using var incrementalHash = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA256, _hmacKey);
+            incrementalHash.AppendData(header);
+            incrementalHash.AppendData(keyBuffer.Slice(0, keyByteLength));
+            incrementalHash.AppendData(ivAndCiphertext);
+            return incrementalHash.GetHashAndReset();
+        }
+        finally
+        {
+            if (rentedKeyBuffer is not null) ArrayPool<byte>.Shared.Return(rentedKeyBuffer);
+        }
     }
 
     // RFC 5869 HKDF (Extract-then-Expand), built from HMACSHA256 alone: netstandard2.1 has no
