@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using R3;
 
 namespace PlayerData.R3;
@@ -13,9 +14,34 @@ internal sealed class PlayerDataStoreObservable<T>(IDoc<T> store, bool replayCur
         if (replayCurrent)
             observer.OnNext(store.Value);
 
-        void Handler(DocChange<T> change) => observer.OnNext(change.Current);
-        store.Changed += Handler;
-        return Disposable.Create(() => store.Changed -= Handler);
+        return new Subscription(store, observer);
+    }
+
+    // Holds the target store and observer as fields and uses its own instance method as the
+    // Changed handler, so subscribing allocates exactly one delegate (shared by += and -=)
+    // instead of a local-function Handler closure plus the closure Disposable.Create itself
+    // wraps into a second ephemeral object. The target field is Interlocked.Exchange'd to null
+    // before unsubscribing so a double Dispose() only detaches once.
+    private sealed class Subscription : IDisposable
+    {
+        private IDoc<T>? _store;
+        private readonly Observer<T> _observer;
+
+        public Subscription(IDoc<T> store, Observer<T> observer)
+        {
+            _store = store;
+            _observer = observer;
+            store.Changed += OnChanged;
+        }
+
+        private void OnChanged(DocChange<T> change) => _observer.OnNext(change.Current);
+
+        public void Dispose()
+        {
+            var store = Interlocked.Exchange(ref _store, null);
+            if (store is not null)
+                store.Changed -= OnChanged;
+        }
     }
 }
 
@@ -26,8 +52,28 @@ internal sealed class PlayerDataStoreChangeObservable<T>(IDoc<T> store, bool rep
         if (replayCurrent)
             observer.OnNext(new DocChange<T>(null, store.Value, DataChangeCause.UserWrite));
 
-        void Handler(DocChange<T> change) => observer.OnNext(change);
-        store.Changed += Handler;
-        return Disposable.Create(() => store.Changed -= Handler);
+        return new Subscription(store, observer);
+    }
+
+    private sealed class Subscription : IDisposable
+    {
+        private IDoc<T>? _store;
+        private readonly Observer<DocChange<T>> _observer;
+
+        public Subscription(IDoc<T> store, Observer<DocChange<T>> observer)
+        {
+            _store = store;
+            _observer = observer;
+            store.Changed += OnChanged;
+        }
+
+        private void OnChanged(DocChange<T> change) => _observer.OnNext(change);
+
+        public void Dispose()
+        {
+            var store = Interlocked.Exchange(ref _store, null);
+            if (store is not null)
+                store.Changed -= OnChanged;
+        }
     }
 }
