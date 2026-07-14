@@ -7,8 +7,12 @@ namespace PlayerData;
 // Persistence is owned by SaveSession - this type is memory-only.
 public sealed class DocumentStore<T> : IDoc<T> where T : class
 {
-    private readonly Action? _onDirty;
-    private readonly Func<bool>? _isNotificationSuppressed;
+    // Called exactly once per mutation (not once for the dirty-notification path and again for
+    // the Changed-coalescing check, as the two separate delegates this replaced did). The
+    // callback both forwards the mutation to the owning SaveSession and returns whether
+    // notifications are currently suppressed, so the store can reuse that single answer for its
+    // own RaiseChanged decision below instead of querying suppression state a second time.
+    private readonly Func<bool>? _onMutated;
     private T _current;
     private long _version;
     private long _cleanVersion;
@@ -16,13 +20,11 @@ public sealed class DocumentStore<T> : IDoc<T> where T : class
 
     public DocumentStore(
         Func<T> initialValueFactory,
-        Action? onDirty = null,
-        Func<bool>? isNotificationSuppressed = null)
+        Func<bool>? onMutated = null)
     {
         if (initialValueFactory is null) throw new ArgumentNullException(nameof(initialValueFactory));
         _current = initialValueFactory() ?? throw new InvalidOperationException("initialValueFactory must not return null.");
-        _onDirty = onDirty;
-        _isNotificationSuppressed = isNotificationSuppressed;
+        _onMutated = onMutated;
         _version = 0;
         _cleanVersion = 0;
     }
@@ -53,8 +55,8 @@ public sealed class DocumentStore<T> : IDoc<T> where T : class
         } while (Interlocked.CompareExchange(ref _current, after, before) != before);
 
         Interlocked.Increment(ref _version);
-        _onDirty?.Invoke();
-        RaiseChanged(new DocChange<T>(before, after, DataChangeCause.UserWrite));
+        var suppressed = _onMutated?.Invoke() ?? false;
+        RaiseChanged(new DocChange<T>(before, after, DataChangeCause.UserWrite), suppressed);
         return after;
     }
 
@@ -94,9 +96,9 @@ public sealed class DocumentStore<T> : IDoc<T> where T : class
         Changed?.Invoke(pending.Value);
     }
 
-    private void RaiseChanged(DocChange<T> change)
+    private void RaiseChanged(DocChange<T> change, bool suppressed)
     {
-        if (_isNotificationSuppressed?.Invoke() == true)
+        if (suppressed)
         {
             // Coalesce: keep the first Previous, latest Current.
             if (_pendingChange is { } existing)

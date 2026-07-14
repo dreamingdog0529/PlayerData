@@ -62,7 +62,7 @@ public sealed class SaveSession : ISaveSession
         if (string.IsNullOrEmpty(key)) throw new ArgumentException("Document key must be non-empty.", nameof(key));
         if (initialValueFactory is null) throw new ArgumentNullException(nameof(initialValueFactory));
 
-        var store = new DocumentStore<T>(initialValueFactory, NotifyDirty, IsNotificationSuppressed);
+        var store = new DocumentStore<T>(initialValueFactory, OnMutated);
         var participant = new DocumentParticipant<T>(key, store);
         lock (_gate)
         {
@@ -80,7 +80,7 @@ public sealed class SaveSession : ISaveSession
         if (string.IsNullOrEmpty(key)) throw new ArgumentException("Document key must be non-empty.", nameof(key));
         if (keySelector is null) throw new ArgumentNullException(nameof(keySelector));
 
-        var store = new KeyedDocumentStore<TKey, T>(keySelector, NotifyDirty, IsNotificationSuppressed);
+        var store = new KeyedDocumentStore<TKey, T>(keySelector, OnMutated);
         var participant = new CollectionParticipant<TKey, T>(key, store);
         lock (_gate)
         {
@@ -235,16 +235,20 @@ public sealed class SaveSession : ISaveSession
         PublishDirty(force: true);
     }
 
-    private void NotifyDirty()
+    // Passed to DocumentStore/KeyedDocumentStore as their single onMutated callback. Queries
+    // suppression state exactly once per mutation and hands the answer back to the store (which
+    // reuses it for its own Changed-coalescing decision instead of querying separately), while
+    // also driving the dirty-notification path here when not suppressed.
+    private bool OnMutated()
     {
-        if (IsNotificationSuppressed()) return;
-        PublishDirty(force: false);
+        var suppressed = IsNotificationSuppressed();
+        if (!suppressed)
+            PublishDirty(force: false);
+        return suppressed;
     }
 
     private void PublishDirty(bool force)
     {
-        if (!force && IsNotificationSuppressed()) return;
-
         var dirty = IsDirty;
         if (!force && dirty == _lastDirtyNotified) return;
         _lastDirtyNotified = dirty;

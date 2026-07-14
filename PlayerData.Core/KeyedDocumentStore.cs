@@ -20,8 +20,12 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
     where T : class
 {
     private readonly Func<T, TKey> _keySelector;
-    private readonly Action? _onDirty;
-    private readonly Func<bool>? _isNotificationSuppressed;
+    // Called exactly once per mutation (not once for the dirty-notification path and again for
+    // the Changed-coalescing check, as the two separate delegates this replaced did). The
+    // callback both forwards the mutation to the owning SaveSession and returns whether
+    // notifications are currently suppressed, so the store can reuse that single answer for its
+    // own RaiseChanged decision below instead of querying suppression state a second time.
+    private readonly Func<bool>? _onMutated;
     private readonly object _pendingGate = new();
     private readonly ConcurrentDictionary<TKey, T> _items = new();
     private long _version;
@@ -30,12 +34,10 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
 
     public KeyedDocumentStore(
         Func<T, TKey> keySelector,
-        Action? onDirty = null,
-        Func<bool>? isNotificationSuppressed = null)
+        Func<bool>? onMutated = null)
     {
         _keySelector = keySelector ?? throw new ArgumentNullException(nameof(keySelector));
-        _onDirty = onDirty;
-        _isNotificationSuppressed = isNotificationSuppressed;
+        _onMutated = onMutated;
         _version = 0;
         _cleanVersion = 0;
     }
@@ -210,8 +212,8 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
         _items.Clear();
 
         Interlocked.Increment(ref _version);
-        _onDirty?.Invoke();
-        RaiseChanged(new BagChange<TKey, T>(default!, PlayerDataChangeKind.Cleared, null, null, DataChangeCause.UserWrite));
+        var suppressed = _onMutated?.Invoke() ?? false;
+        RaiseChanged(new BagChange<TKey, T>(default!, PlayerDataChangeKind.Cleared, null, null, DataChangeCause.UserWrite), suppressed);
     }
 
     internal void ReplaceFromLoad(ConcurrentDictionary<TKey, T> items)
@@ -298,13 +300,13 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
     private void BumpAndNotify(TKey key, PlayerDataChangeKind kind, T? previous, T? value)
     {
         Interlocked.Increment(ref _version);
-        _onDirty?.Invoke();
-        RaiseChanged(new BagChange<TKey, T>(key, kind, previous, value, DataChangeCause.UserWrite));
+        var suppressed = _onMutated?.Invoke() ?? false;
+        RaiseChanged(new BagChange<TKey, T>(key, kind, previous, value, DataChangeCause.UserWrite), suppressed);
     }
 
-    private void RaiseChanged(BagChange<TKey, T> change)
+    private void RaiseChanged(BagChange<TKey, T> change, bool suppressed)
     {
-        if (_isNotificationSuppressed?.Invoke() == true)
+        if (suppressed)
         {
             lock (_pendingGate)
             {
