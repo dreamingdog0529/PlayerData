@@ -13,11 +13,22 @@ public class DocumentStoreBenchmarks
     private DocumentStore<PlayerProfile> _store = null!;
     private PlayerProfile _replacement = null!;
 
+    // Dedicated Clean/Dirty stores for IsDirty (round-2 perf plan ST-2): isolates the
+    // Volatile.Read(_version)/Volatile.Read(_cleanVersion) comparison itself from the
+    // Update/Replace call path the other benchmarks in this class exercise.
+    private DocumentStore<PlayerProfile> _cleanStore = null!;
+    private DocumentStore<PlayerProfile> _dirtyStore = null!;
+
     [GlobalSetup]
     public void GlobalSetup()
     {
         _store = new DocumentStore<PlayerProfile>(() => new PlayerProfile(1, "Hero", 0));
         _replacement = new PlayerProfile(2, "Hero", 100);
+
+        _cleanStore = new DocumentStore<PlayerProfile>(() => new PlayerProfile(1, "Hero", 0));
+
+        _dirtyStore = new DocumentStore<PlayerProfile>(() => new PlayerProfile(1, "Hero", 0));
+        _dirtyStore.Replace(new PlayerProfile(1, "Hero", 1));
     }
 
     [Benchmark(Baseline = true)]
@@ -61,5 +72,17 @@ public class DocumentStoreBenchmarks
     public PlayerProfile Value_Read()
     {
         return _store.Value;
+    }
+
+    [Benchmark]
+    public bool IsDirty_Clean()
+    {
+        return _cleanStore.IsDirty;
+    }
+
+    [Benchmark]
+    public bool IsDirty_Dirty()
+    {
+        return _dirtyStore.IsDirty;
     }
 }

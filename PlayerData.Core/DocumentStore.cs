@@ -33,7 +33,14 @@ public sealed class DocumentStore<T> : IDoc<T> where T : class
 
     public event Action<DocChange<T>>? Changed;
 
-    internal bool IsDirty => Volatile.Read(ref _version) != Volatile.Read(ref _cleanVersion);
+    internal bool IsDirty
+    {
+        get
+        {
+            var version = Volatile.Read(ref _version);
+            return version != Volatile.Read(ref _cleanVersion);
+        }
+    }
 
     internal long Version => Volatile.Read(ref _version);
 

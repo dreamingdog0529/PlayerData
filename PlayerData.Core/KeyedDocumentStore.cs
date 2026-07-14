@@ -58,7 +58,14 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
 
     public event Action<BagChange<TKey, T>>? Changed;
 
-    internal bool IsDirty => Volatile.Read(ref _version) != Volatile.Read(ref _cleanVersion);
+    internal bool IsDirty
+    {
+        get
+        {
+            var version = Volatile.Read(ref _version);
+            return version != Volatile.Read(ref _cleanVersion);
+        }
+    }
 
     internal long Version => Volatile.Read(ref _version);
 
