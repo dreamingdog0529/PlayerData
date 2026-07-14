@@ -9,8 +9,12 @@
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageReference Include="MemoryPack" Version="1.21.4" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PlayerData.Core\PlayerData.Core.csproj" />
+    <ProjectReference Include="..\PlayerData.MessagePipe\PlayerData.MessagePipe.csproj" />
+    <ProjectReference Include="..\PlayerData.R3\PlayerData.R3.csproj" />
+    <ProjectReference Include="..\PlayerData.VitalRouter\PlayerData.VitalRouter.csproj" />
   </ItemGroup>
 </Project>
