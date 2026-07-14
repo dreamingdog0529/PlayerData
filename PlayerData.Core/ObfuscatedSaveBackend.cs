@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -53,11 +54,50 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
         return _inner.WriteAsync(new SaveBundle(bundle.FormatVersion, documents), cancellationToken);
     }
 
-    private static byte[] Transform(byte[] data)
+    // Mask.Length (32) generally doesn't divide Vector<byte>.Count evenly on every platform (16
+    // on SSE2/NEON, 32 on AVX2, 64 on AVX-512), so TiledMask repeats Mask out to their least
+    // common multiple: every Vector<byte>.Count-aligned offset into TiledMask then lines up with
+    // the correct phase of the 32-byte mask, letting the same precomputed vector be reused for
+    // every chunk at that offset (mod TiledMask.Length) instead of re-deriving it per call.
+    // System.Numerics.Vector<T> (not a hardware intrinsic type) is used deliberately: it falls
+    // back to a software (non-accelerated) implementation wherever SIMD isn't available, so this
+    // stays correct - if slower - on platforms/backends without vector hardware support.
+    private static readonly byte[] TiledMask = BuildTiledMask();
+
+    private static byte[] BuildTiledMask()
+    {
+        var tileLength = Lcm(Vector<byte>.Count, Mask.Length);
+        var tiled = new byte[tileLength];
+        for (var i = 0; i < tileLength; i++)
+            tiled[i] = Mask[i % Mask.Length];
+        return tiled;
+    }
+
+    private static int Lcm(int a, int b) => a / Gcd(a, b) * b;
+
+    private static int Gcd(int a, int b)
+    {
+        while (b != 0) (a, b) = (b, a % b);
+        return a;
+    }
+
+    internal static byte[] Transform(byte[] data)
     {
         var result = new byte[data.Length];
-        for (var i = 0; i < data.Length; i++)
+        var vectorSize = Vector<byte>.Count;
+        var tileLength = TiledMask.Length;
+
+        var i = 0;
+        for (; i + vectorSize <= data.Length; i += vectorSize)
+        {
+            var dataVector = new Vector<byte>(data, i);
+            var maskVector = new Vector<byte>(TiledMask, i % tileLength);
+            (dataVector ^ maskVector).CopyTo(result, i);
+        }
+
+        for (; i < data.Length; i++)
             result[i] = (byte)(data[i] ^ Mask[i % Mask.Length]);
+
         return result;
     }
 }
