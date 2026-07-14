@@ -8,6 +8,9 @@ obj/
 # BenchmarkDotNet run output
 BenchmarkDotNet.Artifacts/
 
+# Claude Code planning docs (not part of the codebase)
+plans/
+
 # ST-1 feasibility spike (throwaway; removed at the start of ST-5)
 spike/
 
