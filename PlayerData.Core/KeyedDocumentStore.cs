@@ -252,21 +252,36 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
             Changed?.Invoke(change);
     }
 
+    // Per-thread slot AddOrUpdate's updateValueFactory uses to hand the existing value back out
+    // to SetCore below, replacing a separate TryGetValue that used to run before AddOrUpdate (two
+    // dictionary lookups per call instead of one). [ThreadStatic] rather than a plain static field
+    // is load-bearing: two threads racing SetCore on different keys must never observe each
+    // other's captured value. AddOrUpdate may invoke updateValueFactory more than once on this
+    // same thread if another thread's write interleaves the CAS, but only the last invocation
+    // before the successful CAS runs before SetCore reads the slot back, so it always reflects
+    // the value actually replaced - and SetCore drains it into a local and clears the slot before
+    // BumpAndNotify can trigger any same-thread reentrant call.
+    [ThreadStatic]
+    private static T? _capturedPrevious;
+
     private T SetCore(TKey key, T entity, bool validateKeyMatch)
     {
         if (validateKeyMatch)
             EnsureKeyMatches(key, entity);
 
-        // Best-effort peek for the Changed event's Previous field (see the matching note in
-        // TryUpdate above) - both AddOrUpdate factories below are `static`, so this unconditional
-        // overwrite allocates no per-call closure/delegate, only whatever ConcurrentDictionary
-        // itself needs for the node it stores.
-        _items.TryGetValue(key, out var previous);
+        _capturedPrevious = null;
         _items.AddOrUpdate(
             key,
             addValueFactory: static (_, e) => e,
-            updateValueFactory: static (_, _, e) => e,
+            updateValueFactory: static (_, existing, e) =>
+            {
+                _capturedPrevious = existing;
+                return e;
+            },
             entity);
+
+        var previous = _capturedPrevious;
+        _capturedPrevious = null;
 
         BumpAndNotify(key, PlayerDataChangeKind.Upserted, previous, entity);
         return entity;

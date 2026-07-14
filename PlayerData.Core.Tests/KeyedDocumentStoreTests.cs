@@ -182,6 +182,77 @@ public class KeyedDocumentStoreTests
         Assert.That(store.Count, Is.EqualTo(1));
     }
 
+    [Test]
+    public void Upsert_NewKey_ChangedEventReportsNullPrevious()
+    {
+        var store = CreateStore();
+        BagChange<string, SampleItem>? captured = null;
+        store.Changed += change => captured = change;
+
+        store.Upsert(new SampleItem("sword", 1));
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.Value.Previous, Is.Null);
+        Assert.That(captured.Value.Value, Is.EqualTo(new SampleItem("sword", 1)));
+    }
+
+    [Test]
+    public void Upsert_ExistingKey_ChangedEventReportsActualPreviousValue()
+    {
+        var store = CreateStore();
+        store.Upsert(new SampleItem("sword", 1));
+
+        BagChange<string, SampleItem>? captured = null;
+        store.Changed += change => captured = change;
+        store.Upsert(new SampleItem("sword", 2));
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.Value.Previous, Is.EqualTo(new SampleItem("sword", 1)));
+        Assert.That(captured.Value.Value, Is.EqualTo(new SampleItem("sword", 2)));
+    }
+
+    // Regression test for the [ThreadStatic] capture slot SetCore uses to hand AddOrUpdate's
+    // existing value back out without a separate TryGetValue lookup (see KeyedDocumentStore.cs).
+    // A plain (non-thread-local) static field would let one thread's captured value leak into
+    // another thread's Changed event between the two threads' own AddOrUpdate calls. Each thread
+    // writes globally-unique Count values, so any Previous the store reports can be traced back
+    // to exactly the write that produced it; a crossed-thread bug would show up as a Previous
+    // value nothing ever legitimately wrote.
+    [Test]
+    public void Upsert_ConcurrentSameKey_PreviousNeverCrossesThreads()
+    {
+        var store = CreateStore();
+        const int seedValue = -1;
+        store.Upsert(new SampleItem("sword", seedValue));
+
+        const int threads = 8;
+        const int perThread = 2000;
+        var seenPrevious = new System.Collections.Concurrent.ConcurrentBag<int>();
+        store.Changed += change =>
+        {
+            if (change.Kind == PlayerDataChangeKind.Upserted)
+                seenPrevious.Add(change.Previous?.Count ?? seedValue);
+        };
+
+        Parallel.For(0, threads, threadIndex =>
+        {
+            for (var i = 0; i < perThread; i++)
+            {
+                var value = threadIndex * perThread + i;
+                store.Upsert(new SampleItem("sword", value));
+            }
+        });
+
+        var writtenValues = new System.Collections.Generic.HashSet<int> { seedValue };
+        for (var t = 0; t < threads; t++)
+            for (var i = 0; i < perThread; i++)
+                writtenValues.Add(t * perThread + i);
+
+        Assert.That(seenPrevious, Has.Count.EqualTo(threads * perThread));
+        foreach (var previous in seenPrevious)
+            Assert.That(writtenValues, Does.Contain(previous));
+    }
+
     // Regression test for the ABA hazard the ConcurrentDictionary-backed rewrite must avoid:
     // ConcurrentDictionary.TryUpdate(key, newValue, comparisonValue) compares via
     // EqualityComparer<T>.Default, which is structural equality for record T. Under heavy
