@@ -22,6 +22,20 @@ public sealed class SaveSession : ISaveSession
     private bool _isLoaded;
     private bool _lastDirtyNotified;
 
+    // _participants/_validators only grow (AddDocument/AddCollection/AddValidator, always under
+    // _gate), and in practice only during single-threaded session setup before any commit/load
+    // runs. LoadAsync/CommitAsync/EndSuppress used to re-copy the live list into a new List on
+    // every call; caching the array and only rebuilding it when the version counter (bumped on
+    // Add, read/written under _gate) has moved turns that into a one-time cost. The returned
+    // array is never mutated in place - only the field reference is swapped under _gate - so
+    // handing it to a caller that then iterates it outside the lock is safe.
+    private ISessionParticipant[] _participantsSnapshot = Array.Empty<ISessionParticipant>();
+    private int _participantsVersion;
+    private int _participantsSnapshotVersion = -1;
+    private ISaveValidator[] _validatorsSnapshot = Array.Empty<ISaveValidator>();
+    private int _validatorsVersion;
+    private int _validatorsSnapshotVersion = -1;
+
     public SaveSession(ISaveBackend backend, IEnumerable<ISaveMigration>? migrations = null)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
@@ -54,6 +68,7 @@ public sealed class SaveSession : ISaveSession
         {
             EnsureKeyUnique(key);
             _participants.Add(participant);
+            _participantsVersion++;
         }
         return store;
     }
@@ -71,6 +86,7 @@ public sealed class SaveSession : ISaveSession
         {
             EnsureKeyUnique(key);
             _participants.Add(participant);
+            _participantsVersion++;
         }
         return store;
     }
@@ -85,7 +101,10 @@ public sealed class SaveSession : ISaveSession
     {
         if (validator is null) throw new ArgumentNullException(nameof(validator));
         lock (_gate)
+        {
             _validators.Add(validator);
+            _validatorsVersion++;
+        }
     }
 
     public void AddValidator(Action<ISaveSession> validate)
@@ -112,10 +131,10 @@ public sealed class SaveSession : ISaveSession
 
         bundle = ApplyMigrations(bundle);
 
-        List<ISessionParticipant> participants;
+        ISessionParticipant[] participants;
         lock (_gate)
         {
-            participants = _participants.ToList();
+            participants = SnapshotParticipants();
         }
 
         foreach (var participant in participants)
@@ -136,18 +155,18 @@ public sealed class SaveSession : ISaveSession
 
     public async ValueTask CommitAsync(CancellationToken cancellationToken = default)
     {
-        List<(ISessionParticipant Participant, long Version, byte[] Bytes)> snapshot;
+        (ISessionParticipant Participant, long Version, byte[] Bytes)[] snapshot;
         Dictionary<string, byte[]> allDocuments;
-        List<ISessionParticipant> participants;
-        List<ISaveValidator> validators;
+        ISessionParticipant[] participants;
+        ISaveValidator[] validators;
 
         lock (_gate)
         {
             if (!AnyDirty(_participants))
                 return;
 
-            participants = _participants.ToList();
-            validators = _validators.ToList();
+            participants = SnapshotParticipants();
+            validators = SnapshotValidators();
         }
 
         // Fail-fast validation before any I/O or serialization snapshot.
@@ -162,14 +181,18 @@ public sealed class SaveSession : ISaveSession
             if (!AnyDirty(_participants))
                 return;
 
-            snapshot = new List<(ISessionParticipant, long, byte[])>(_participants.Count);
-            allDocuments = new Dictionary<string, byte[]>(_participants.Count);
-            foreach (var p in _participants)
+            // Re-snapshot rather than reusing `participants`: AddDocument/AddCollection could
+            // have registered a new participant while the lock was released for validation above.
+            var current = SnapshotParticipants();
+            snapshot = new (ISessionParticipant, long, byte[])[current.Length];
+            allDocuments = new Dictionary<string, byte[]>(current.Length);
+            for (var i = 0; i < current.Length; i++)
             {
+                var p = current[i];
                 var version = p.Version;
                 // Dirty documents re-serialize; clean ones reuse cached bytes (dirty-only serialize).
                 var bytes = p.GetBytes();
-                snapshot.Add((p, version, bytes));
+                snapshot[i] = (p, version, bytes);
                 allDocuments[p.Key] = bytes;
             }
         }
@@ -202,9 +225,9 @@ public sealed class SaveSession : ISaveSession
 
         if (depth != 0) return;
 
-        List<ISessionParticipant> participants;
+        ISessionParticipant[] participants;
         lock (_gate)
-            participants = _participants.ToList();
+            participants = SnapshotParticipants();
 
         foreach (var p in participants)
             p.FlushPendingNotifications();
@@ -235,6 +258,30 @@ public sealed class SaveSession : ISaveSession
             if (string.Equals(p.Key, key, StringComparison.Ordinal))
                 throw new InvalidOperationException($"A document with key '{key}' is already registered on this session.");
         }
+    }
+
+    // Caller must hold _gate. Regenerates the cached array only when _participants has actually
+    // grown since the last snapshot.
+    private ISessionParticipant[] SnapshotParticipants()
+    {
+        if (_participantsSnapshotVersion != _participantsVersion)
+        {
+            _participantsSnapshot = _participants.ToArray();
+            _participantsSnapshotVersion = _participantsVersion;
+        }
+        return _participantsSnapshot;
+    }
+
+    // Caller must hold _gate. Regenerates the cached array only when _validators has actually
+    // grown since the last snapshot.
+    private ISaveValidator[] SnapshotValidators()
+    {
+        if (_validatorsSnapshotVersion != _validatorsVersion)
+        {
+            _validatorsSnapshot = _validators.ToArray();
+            _validatorsSnapshotVersion = _validatorsVersion;
+        }
+        return _validatorsSnapshot;
     }
 
     private static bool AnyDirty(List<ISessionParticipant> participants)
