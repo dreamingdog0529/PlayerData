@@ -144,31 +144,53 @@ public sealed class DirectorySaveBackend : ISaveBackend
     // key, and a final ms.ToArray() copy. BinaryPrimitives.WriteInt32LittleEndian keeps the
     // encoding explicitly little-endian (matching BinaryWriter's historical behavior) rather
     // than relying on the host CPU happening to be little-endian.
+    // GetByteCount(key) used to run once per key while sizing the buffer and again per key while
+    // writing into it. Each key's count is computed once and held in `byteCounts` (stack-allocated
+    // up to MaxStackKeys, pooled beyond that - manifest key counts come from a session's
+    // registered documents/collections, which is normally a handful) and reused for the write pass.
+    private const int MaxStackKeys = 64;
+
     internal static unsafe byte[] BuildManifest(int formatVersion, string[] keys)
     {
-        var totalSize = sizeof(int) + sizeof(int);
-        foreach (var key in keys)
-            totalSize += sizeof(int) + Encoding.UTF8.GetByteCount(key);
-
-        var result = new byte[totalSize];
-        fixed (byte* basePtr = result)
+        int[]? rentedByteCounts = null;
+        try
         {
-            var ptr = basePtr;
-            BinaryPrimitives.WriteInt32LittleEndian(new Span<byte>(ptr, sizeof(int)), formatVersion);
-            ptr += sizeof(int);
-            BinaryPrimitives.WriteInt32LittleEndian(new Span<byte>(ptr, sizeof(int)), keys.Length);
-            ptr += sizeof(int);
+            Span<int> byteCounts = keys.Length <= MaxStackKeys
+                ? stackalloc int[keys.Length]
+                : (rentedByteCounts = ArrayPool<int>.Shared.Rent(keys.Length));
 
-            foreach (var key in keys)
+            var totalSize = sizeof(int) + sizeof(int);
+            for (var i = 0; i < keys.Length; i++)
             {
-                var byteCount = Encoding.UTF8.GetByteCount(key);
-                BinaryPrimitives.WriteInt32LittleEndian(new Span<byte>(ptr, sizeof(int)), byteCount);
-                ptr += sizeof(int);
-                var written = Encoding.UTF8.GetBytes(key.AsSpan(), new Span<byte>(ptr, byteCount));
-                ptr += written;
+                var byteCount = Encoding.UTF8.GetByteCount(keys[i]);
+                byteCounts[i] = byteCount;
+                totalSize += sizeof(int) + byteCount;
             }
+
+            var result = new byte[totalSize];
+            fixed (byte* basePtr = result)
+            {
+                var ptr = basePtr;
+                BinaryPrimitives.WriteInt32LittleEndian(new Span<byte>(ptr, sizeof(int)), formatVersion);
+                ptr += sizeof(int);
+                BinaryPrimitives.WriteInt32LittleEndian(new Span<byte>(ptr, sizeof(int)), keys.Length);
+                ptr += sizeof(int);
+
+                for (var i = 0; i < keys.Length; i++)
+                {
+                    var byteCount = byteCounts[i];
+                    BinaryPrimitives.WriteInt32LittleEndian(new Span<byte>(ptr, sizeof(int)), byteCount);
+                    ptr += sizeof(int);
+                    var written = Encoding.UTF8.GetBytes(keys[i].AsSpan(), new Span<byte>(ptr, byteCount));
+                    ptr += written;
+                }
+            }
+            return result;
         }
-        return result;
+        finally
+        {
+            if (rentedByteCounts is not null) ArrayPool<int>.Shared.Return(rentedByteCounts);
+        }
     }
 
     internal static unsafe (int FormatVersion, string[] Keys) ParseManifest(ReadOnlySpan<byte> data)
