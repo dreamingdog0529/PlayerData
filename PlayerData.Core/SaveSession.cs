@@ -15,26 +15,20 @@ public sealed class SaveSession : ISaveSession
 
     private readonly ISaveBackend _backend;
     private readonly IReadOnlyList<ISaveMigration> _migrations;
-    private readonly List<ISessionParticipant> _participants = new();
-    private readonly List<ISaveValidator> _validators = new();
     private readonly object _gate = new();
     private int _suppressDepth;
     private bool _isLoaded;
     private bool _lastDirtyNotified;
 
-    // _participants/_validators only grow (AddDocument/AddCollection/AddValidator, always under
-    // _gate), and in practice only during single-threaded session setup before any commit/load
-    // runs. LoadAsync/CommitAsync/EndSuppress used to re-copy the live list into a new List on
-    // every call; caching the array and only rebuilding it when the version counter (bumped on
-    // Add, read/written under _gate) has moved turns that into a one-time cost. The returned
-    // array is never mutated in place - only the field reference is swapped under _gate - so
-    // handing it to a caller that then iterates it outside the lock is safe.
-    private ISessionParticipant[] _participantsSnapshot = Array.Empty<ISessionParticipant>();
-    private int _participantsVersion;
-    private int _participantsSnapshotVersion = -1;
-    private ISaveValidator[] _validatorsSnapshot = Array.Empty<ISaveValidator>();
-    private int _validatorsVersion;
-    private int _validatorsSnapshotVersion = -1;
+    // Copy-on-add arrays instead of List<T> + cached snapshot: AddDocument/AddCollection/
+    // AddValidator (rare, session-setup-time) rebuild the array under _gate and publish it with
+    // a volatile write; every read path (IsDirty via AnyDirty, LoadAsync, CommitAsync,
+    // EndSuppress) takes a lock-free Volatile.Read of the current array. This removes the lock
+    // from IsDirty entirely - which OnMutated/PublishDirty hit once per store mutation, making
+    // it the hottest read in the library. A published array is never mutated in place (only the
+    // field reference is swapped), so iterating it outside any lock is safe.
+    private ISessionParticipant[] _participants = Array.Empty<ISessionParticipant>();
+    private ISaveValidator[] _validators = Array.Empty<ISaveValidator>();
 
     public SaveSession(ISaveBackend backend, IEnumerable<ISaveMigration>? migrations = null)
     {
@@ -42,14 +36,7 @@ public sealed class SaveSession : ISaveSession
         _migrations = NormalizeMigrations(migrations);
     }
 
-    public bool IsDirty
-    {
-        get
-        {
-            lock (_gate)
-                return AnyDirty(_participants);
-        }
-    }
+    public bool IsDirty => AnyDirty(Volatile.Read(ref _participants));
 
     public bool IsLoaded => _isLoaded;
 
@@ -67,8 +54,7 @@ public sealed class SaveSession : ISaveSession
         lock (_gate)
         {
             EnsureKeyUnique(key);
-            _participants.Add(participant);
-            _participantsVersion++;
+            AppendParticipant(participant);
         }
         return store;
     }
@@ -85,8 +71,7 @@ public sealed class SaveSession : ISaveSession
         lock (_gate)
         {
             EnsureKeyUnique(key);
-            _participants.Add(participant);
-            _participantsVersion++;
+            AppendParticipant(participant);
         }
         return store;
     }
@@ -102,8 +87,11 @@ public sealed class SaveSession : ISaveSession
         if (validator is null) throw new ArgumentNullException(nameof(validator));
         lock (_gate)
         {
-            _validators.Add(validator);
-            _validatorsVersion++;
+            var current = _validators;
+            var next = new ISaveValidator[current.Length + 1];
+            Array.Copy(current, next, current.Length);
+            next[current.Length] = validator;
+            Volatile.Write(ref _validators, next);
         }
     }
 
@@ -118,11 +106,8 @@ public sealed class SaveSession : ISaveSession
         var bundle = await _backend.ReadAsync(cancellationToken).ConfigureAwait(false);
         if (bundle is null)
         {
-            lock (_gate)
-            {
-                foreach (var p in _participants)
-                    p.MarkClean();
-            }
+            foreach (var p in Volatile.Read(ref _participants))
+                p.MarkClean();
             _isLoaded = true;
             Loaded?.Invoke();
             PublishDirty(force: true);
@@ -131,18 +116,40 @@ public sealed class SaveSession : ISaveSession
 
         bundle = ApplyMigrations(bundle);
 
-        ISessionParticipant[] participants;
-        lock (_gate)
-        {
-            participants = SnapshotParticipants();
-        }
+        var participants = Volatile.Read(ref _participants);
 
-        foreach (var participant in participants)
+        if (participants.Length <= 1)
         {
-            if (bundle.Documents.TryGetValue(participant.Key, out var bytes))
-                participant.LoadBytes(bytes);
-            else
-                participant.MarkClean();
+            foreach (var participant in participants)
+            {
+                if (bundle.Documents.TryGetValue(participant.Key, out var bytes))
+                    participant.LoadBytes(bytes);
+                else
+                    participant.MarkClean();
+            }
+        }
+        else
+        {
+            // Each participant's MemoryPack deserialization is CPU-bound and touches only that
+            // participant's own store, so with several documents registered they deserialize
+            // concurrently; total load CPU time becomes the largest single document instead of
+            // the sum. TryGetValue runs on the calling thread before any task starts - only
+            // LoadBytes itself fans out.
+            var tasks = new List<Task>(participants.Length);
+            foreach (var participant in participants)
+            {
+                if (bundle.Documents.TryGetValue(participant.Key, out var bytes))
+                {
+                    var (p, b) = (participant, bytes);
+                    tasks.Add(Task.Run(() => p.LoadBytes(b)));
+                }
+                else
+                {
+                    participant.MarkClean();
+                }
+            }
+
+            await Task.WhenAll(tasks).ConfigureAwait(false);
         }
 
         // Participants present on disk but not registered are ignored (forward-compatible).
@@ -157,54 +164,101 @@ public sealed class SaveSession : ISaveSession
     {
         (ISessionParticipant Participant, long Version, byte[] Bytes)[] snapshot;
         Dictionary<string, byte[]> allDocuments;
-        ISessionParticipant[] participants;
-        ISaveValidator[] validators;
 
-        lock (_gate)
-        {
-            if (!AnyDirty(_participants))
-                return;
-
-            participants = SnapshotParticipants();
-            validators = SnapshotValidators();
-        }
+        var participants = Volatile.Read(ref _participants);
+        if (!AnyDirty(participants))
+            return;
 
         // Fail-fast validation before any I/O or serialization snapshot.
         foreach (var participant in participants)
             participant.Validate();
-        foreach (var validator in validators)
+        foreach (var validator in Volatile.Read(ref _validators))
             validator.Validate(this);
 
-        lock (_gate)
         {
-            // Re-check dirty under lock after validation (validation is pure by contract).
-            if (!AnyDirty(_participants))
+            // Re-read rather than reusing `participants`: AddDocument/AddCollection could have
+            // registered a new participant while validation above ran.
+            var current = Volatile.Read(ref _participants);
+
+            // Re-check dirty after validation (validation is pure by contract).
+            if (!AnyDirty(current))
                 return;
 
-            // Re-snapshot rather than reusing `participants`: AddDocument/AddCollection could
-            // have registered a new participant while the lock was released for validation above.
-            var current = SnapshotParticipants();
             snapshot = new (ISessionParticipant, long, byte[])[current.Length];
             allDocuments = new Dictionary<string, byte[]>(current.Length);
-            for (var i = 0; i < current.Length; i++)
+
+            var dirtyCount = 0;
+            foreach (var p in current)
             {
-                var p = current[i];
-                var version = p.Version;
-                // Dirty documents re-serialize; clean ones reuse cached bytes (dirty-only serialize).
-                var bytes = p.GetBytes();
-                snapshot[i] = (p, version, bytes);
-                allDocuments[p.Key] = bytes;
+                if (p.IsDirty) dirtyCount++;
+            }
+
+            if (dirtyCount <= 1)
+            {
+                for (var i = 0; i < current.Length; i++)
+                {
+                    var p = current[i];
+                    var version = p.Version;
+                    // Dirty documents re-serialize; clean ones reuse cached bytes (dirty-only serialize).
+                    var bytes = p.GetBytes();
+                    snapshot[i] = (p, version, bytes);
+                    allDocuments[p.Key] = bytes;
+                }
+            }
+            else
+            {
+                // With two or more dirty documents their MemoryPack serializations - independent
+                // per-participant CPU work - fan out, so total serialize time becomes the largest
+                // single document instead of the sum. Clean participants stay inline: their
+                // GetBytes just returns cached bytes, never worth a task. The dirtyCount gate
+                // keeps the overwhelmingly common one-dirty-document commit on the sequential
+                // path with zero task overhead. Version is captured before GetBytes inside each
+                // task, preserving the sequential path's ordering guarantee: a mutation racing
+                // the serialize bumps the version past the captured one, so MarkCleanAt below
+                // leaves that store dirty for the next commit rather than marking newer bytes
+                // clean. (IsDirty can flip between the count above and this loop; that only
+                // shifts work between the task and inline paths, both of which are correct.)
+                var tasks = new List<Task<(int Index, long Version, byte[] Bytes)>>(dirtyCount);
+                for (var i = 0; i < current.Length; i++)
+                {
+                    var p = current[i];
+                    if (p.IsDirty)
+                    {
+                        var index = i;
+                        tasks.Add(Task.Run(() =>
+                        {
+                            var version = p.Version;
+                            return (index, version, p.GetBytes());
+                        }));
+                    }
+                    else
+                    {
+                        var version = p.Version;
+                        var bytes = p.GetBytes();
+                        snapshot[i] = (p, version, bytes);
+                        allDocuments[p.Key] = bytes;
+                    }
+                }
+
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+
+                foreach (var task in tasks)
+                {
+                    var (index, version, bytes) = task.Result;
+                    var p = current[index];
+                    snapshot[index] = (p, version, bytes);
+                    allDocuments[p.Key] = bytes;
+                }
             }
         }
 
         var bundle = new SaveBundle(CurrentFormatVersion, allDocuments);
         await _backend.WriteAsync(bundle, cancellationToken).ConfigureAwait(false);
 
-        lock (_gate)
-        {
-            foreach (var (participant, version, bytes) in snapshot)
-                participant.MarkCleanAt(version, bytes);
-        }
+        // No lock needed: MarkCleanAt is version-gated per store (a concurrent mutation that
+        // bumped the version past the snapshot leaves the store dirty), and `snapshot` is local.
+        foreach (var (participant, version, bytes) in snapshot)
+            participant.MarkCleanAt(version, bytes);
 
         Committed?.Invoke();
         PublishDirty(force: true);
@@ -225,11 +279,7 @@ public sealed class SaveSession : ISaveSession
 
         if (depth != 0) return;
 
-        ISessionParticipant[] participants;
-        lock (_gate)
-            participants = SnapshotParticipants();
-
-        foreach (var p in participants)
+        foreach (var p in Volatile.Read(ref _participants))
             p.FlushPendingNotifications();
 
         PublishDirty(force: true);
@@ -264,31 +314,17 @@ public sealed class SaveSession : ISaveSession
         }
     }
 
-    // Caller must hold _gate. Regenerates the cached array only when _participants has actually
-    // grown since the last snapshot.
-    private ISessionParticipant[] SnapshotParticipants()
+    // Caller must hold _gate.
+    private void AppendParticipant(ISessionParticipant participant)
     {
-        if (_participantsSnapshotVersion != _participantsVersion)
-        {
-            _participantsSnapshot = _participants.ToArray();
-            _participantsSnapshotVersion = _participantsVersion;
-        }
-        return _participantsSnapshot;
+        var current = _participants;
+        var next = new ISessionParticipant[current.Length + 1];
+        Array.Copy(current, next, current.Length);
+        next[current.Length] = participant;
+        Volatile.Write(ref _participants, next);
     }
 
-    // Caller must hold _gate. Regenerates the cached array only when _validators has actually
-    // grown since the last snapshot.
-    private ISaveValidator[] SnapshotValidators()
-    {
-        if (_validatorsSnapshotVersion != _validatorsVersion)
-        {
-            _validatorsSnapshot = _validators.ToArray();
-            _validatorsSnapshotVersion = _validatorsVersion;
-        }
-        return _validatorsSnapshot;
-    }
-
-    private static bool AnyDirty(List<ISessionParticipant> participants)
+    private static bool AnyDirty(ISessionParticipant[] participants)
     {
         foreach (var p in participants)
         {
