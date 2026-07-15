@@ -46,15 +46,24 @@ public sealed class DirectorySaveBackend : ISaveBackend
             ArrayPool<byte>.Shared.Return(manifestBuffer);
         }
 
-        var documents = new Dictionary<string, byte[]>(keys.Length);
-        foreach (var key in keys)
+        // Existence is checked up front for every key, then all document reads are issued
+        // concurrently: each file is independent, so total read latency is the slowest single
+        // file instead of the sum of all files.
+        var readTasks = new Task<byte[]>[keys.Length];
+        for (var i = 0; i < keys.Length; i++)
         {
-            var path = DocumentPath(key);
+            var path = DocumentPath(keys[i]);
             if (!File.Exists(path))
-                throw new InvalidDataException($"Manifest lists document '{key}' but file '{path}' is missing.");
+                throw new InvalidDataException($"Manifest lists document '{keys[i]}' but file '{path}' is missing.");
 
-            documents[key] = await ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+            readTasks[i] = ReadAllBytesAsync(path, cancellationToken).AsTask();
         }
+
+        await Task.WhenAll(readTasks).ConfigureAwait(false);
+
+        var documents = new Dictionary<string, byte[]>(keys.Length);
+        for (var i = 0; i < keys.Length; i++)
+            documents[keys[i]] = readTasks[i].Result;
 
         return new SaveBundle(formatVersion, documents);
     }
@@ -71,43 +80,48 @@ public sealed class DirectorySaveBackend : ISaveBackend
         var stagingDocs = Path.Combine(staging, "docs");
         Directory.CreateDirectory(stagingDocs);
 
-        var keys = new string[bundle.Documents.Count];
+        // ToFileName is computed exactly once per key (it used to run again for promotion and
+        // once per key per existing file in the cleanup scan below), and all staged document
+        // writes plus the manifest write are issued concurrently - they target distinct files,
+        // so total staging latency is the slowest single write instead of the sum.
+        var count = bundle.Documents.Count;
+        var keys = new string[count];
+        var fileNames = new string[count];
+        var writeTasks = new Task[count + 1];
         var index = 0;
         foreach (var pair in bundle.Documents)
         {
-            keys[index++] = pair.Key;
-            var staged = Path.Combine(stagingDocs, ToFileName(pair.Key));
-            await WriteAllBytesAsync(staged, pair.Value, cancellationToken).ConfigureAwait(false);
+            var fileName = ToFileName(pair.Key);
+            keys[index] = pair.Key;
+            fileNames[index] = fileName;
+            writeTasks[index] = WriteAllBytesAsync(Path.Combine(stagingDocs, fileName), pair.Value, cancellationToken).AsTask();
+            index++;
         }
 
         var stagingManifest = Path.Combine(staging, "manifest.bin");
-        await WriteAllBytesAsync(stagingManifest, BuildManifest(bundle.FormatVersion, keys), cancellationToken)
-            .ConfigureAwait(false);
+        writeTasks[count] = WriteAllBytesAsync(stagingManifest, BuildManifest(bundle.FormatVersion, keys), cancellationToken)
+            .AsTask();
+
+        await Task.WhenAll(writeTasks).ConfigureAwait(false);
 
         var docsDir = Path.Combine(_root, "docs");
         Directory.CreateDirectory(docsDir);
 
-        foreach (var pair in bundle.Documents)
+        for (var i = 0; i < count; i++)
         {
-            var dest = DocumentPath(pair.Key);
-            var src = Path.Combine(stagingDocs, ToFileName(pair.Key));
+            var dest = Path.Combine(docsDir, fileNames[i]);
+            var src = Path.Combine(stagingDocs, fileNames[i]);
             if (File.Exists(dest)) File.Delete(dest);
             File.Move(src, dest);
         }
 
+        // O(existing + keys) via a set lookup, replacing the old O(existing x keys) scan that
+        // also re-ran ToFileName for every comparison.
+        var liveNames = new HashSet<string>(fileNames, StringComparer.Ordinal);
         foreach (var existing in Directory.GetFiles(docsDir, "*.bin"))
         {
-            var name = Path.GetFileName(existing);
-            var stillPresent = false;
-            foreach (var key in keys)
-            {
-                if (string.Equals(ToFileName(key), name, StringComparison.Ordinal))
-                {
-                    stillPresent = true;
-                    break;
-                }
-            }
-            if (!stillPresent) File.Delete(existing);
+            if (!liveNames.Contains(Path.GetFileName(existing)))
+                File.Delete(existing);
         }
 
         var manifestDest = ManifestPath();
@@ -121,18 +135,52 @@ public sealed class DirectorySaveBackend : ISaveBackend
 
     private string DocumentPath(string key) => Path.Combine(_root, "docs", ToFileName(key));
 
+    // Path.GetInvalidFileNameChars() allocates a fresh array on every call and was linearly
+    // scanned per character; every invalid char it returns is ASCII on all supported platforms
+    // ('\0' and '/' on Unix; control chars plus <>:"/\|?* on Windows), so a 128-entry bitmap
+    // (with '.' folded in, per the escaping rule below) answers each character in O(1).
+    private static readonly bool[] InvalidFileNameCharMap = BuildInvalidFileNameCharMap();
+
+    private static bool[] BuildInvalidFileNameCharMap()
+    {
+        var map = new bool[128];
+        foreach (var c in Path.GetInvalidFileNameChars())
+        {
+            if (c < 128) map[c] = true;
+        }
+        map['.'] = true;
+        return map;
+    }
+
     // Keep keys readable when they are type names; escape anything unsafe for file names.
+    // Clean keys (the overwhelmingly common case - keys are usually type names) take a scan-only
+    // fast path with a single string.Concat allocation; keys that need escaping build the result
+    // in-place via string.Create instead of ToCharArray + new string + concat (three allocations).
     internal static string ToFileName(string key)
     {
         if (string.IsNullOrEmpty(key)) throw new ArgumentException("Key must be non-empty.", nameof(key));
-        var invalid = Path.GetInvalidFileNameChars();
-        var chars = key.ToCharArray();
-        for (var i = 0; i < chars.Length; i++)
+
+        var needsEscape = false;
+        foreach (var c in key)
         {
-            if (Array.IndexOf(invalid, chars[i]) >= 0 || chars[i] == '.')
-                chars[i] = '_';
+            if (c < 128 && InvalidFileNameCharMap[c])
+            {
+                needsEscape = true;
+                break;
+            }
         }
-        return new string(chars) + ".bin";
+
+        if (!needsEscape) return string.Concat(key, ".bin");
+
+        return string.Create(key.Length + 4, key, static (span, k) =>
+        {
+            for (var i = 0; i < k.Length; i++)
+            {
+                var c = k[i];
+                span[i] = c < 128 && InvalidFileNameCharMap[c] ? '_' : c;
+            }
+            ".bin".AsSpan().CopyTo(span.Slice(k.Length));
+        });
     }
 
     // Manifest binary layout (little-endian):
@@ -227,8 +275,14 @@ public sealed class DirectorySaveBackend : ISaveBackend
         return value;
     }
 
+    // bufferSize: 1 disables FileStream's internal 4 KB buffer (the same trick the BCL's own
+    // File.ReadAllBytesAsync/WriteAllBytesAsync use): every read here is a single full-length
+    // read into an exact-size destination and every write is one full-payload write, so the
+    // intermediate buffer would only add an allocation plus a memcpy for payloads smaller than
+    // it. SequentialScan hints the OS cache that each file is read front-to-back exactly once.
     private static FileStream OpenRead(string path) =>
-        new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true);
+        new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
 
     private static async ValueTask ReadExactAsync(FileStream stream, string path, byte[] buffer, int length, CancellationToken cancellationToken)
     {
@@ -260,7 +314,8 @@ public sealed class DirectorySaveBackend : ISaveBackend
 
     private static async ValueTask WriteAllBytesAsync(string path, byte[] data, CancellationToken cancellationToken)
     {
-        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 1,
+            FileOptions.Asynchronous);
         await stream.WriteAsync(data, 0, data.Length, cancellationToken).ConfigureAwait(false);
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
