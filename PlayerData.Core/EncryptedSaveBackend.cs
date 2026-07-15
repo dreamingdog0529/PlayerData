@@ -19,7 +19,7 @@ namespace PlayerData;
 // The HMAC additionally authenticates the document key and the bundle's FormatVersion as
 // associated data (not stored in the payload itself), so ciphertext cannot be swapped between
 // documents or replayed from a differently-versioned bundle without detection.
-public sealed class EncryptedSaveBackend : ISaveBackend
+public sealed class EncryptedSaveBackend : ISaveBackend, IDisposable
 {
     private const byte FormatTag = 0x01;
     private const int IvSize = 16;
@@ -35,6 +35,20 @@ public sealed class EncryptedSaveBackend : ISaveBackend
     private readonly byte[] _aesKey;
     private readonly byte[] _hmacKey;
 
+    // Aes.Create() (platform-impl probing + object graph) and IncrementalHash.CreateHMAC (HMAC
+    // key schedule: two SHA-256 block passes over the padded key) used to run once per document
+    // per Protect/Unprotect call. Both are keyed by fields fixed at construction, so one cached
+    // instance each serves every call; _cryptoGate serializes access since neither type is
+    // thread-safe (uncontended lock cost is negligible next to the per-call construction it
+    // replaces, and Read/Write already process documents sequentially).
+    private readonly object _cryptoGate = new();
+    private readonly Aes _aes;
+    private readonly IncrementalHash _hmac;
+    // Scratch IV handed to CreateEncryptor/CreateDecryptor, which clone it internally before
+    // the transform is built - so reusing one buffer per backend (under _cryptoGate) is safe
+    // and saves a 16-byte allocation per document. netstandard2.1 has no span-taking overload.
+    private readonly byte[] _ivScratch = new byte[IvSize];
+
     // key is used as HKDF input key material (IKM), not directly as the AES/HMAC key: reusing
     // one raw key across two primitives is a key-reuse anti-pattern, so AES and HMAC subkeys are
     // derived separately (see DeriveKeys).
@@ -44,6 +58,7 @@ public sealed class EncryptedSaveBackend : ISaveBackend
         if (key is null) throw new ArgumentNullException(nameof(key));
         if (key.Length == 0) throw new ArgumentException("Key must not be empty.", nameof(key));
         (_aesKey, _hmacKey) = DeriveKeys(key);
+        (_aes, _hmac) = CreateCryptoPrimitives(_aesKey, _hmacKey);
     }
 
     public EncryptedSaveBackend(ISaveBackend inner, string passphrase)
@@ -55,6 +70,22 @@ public sealed class EncryptedSaveBackend : ISaveBackend
         using var pbkdf2 = new Rfc2898DeriveBytes(passphrase, Pbkdf2Salt, Pbkdf2Iterations, HashAlgorithmName.SHA256);
         var ikm = pbkdf2.GetBytes(32);
         (_aesKey, _hmacKey) = DeriveKeys(ikm);
+        (_aes, _hmac) = CreateCryptoPrimitives(_aesKey, _hmacKey);
+    }
+
+    private static (Aes Aes, IncrementalHash Hmac) CreateCryptoPrimitives(byte[] aesKey, byte[] hmacKey)
+    {
+        var aes = Aes.Create();
+        aes.Key = aesKey;
+        aes.Mode = CipherMode.CBC;
+        aes.Padding = PaddingMode.PKCS7;
+        return (aes, IncrementalHash.CreateHMAC(HashAlgorithmName.SHA256, hmacKey));
+    }
+
+    public void Dispose()
+    {
+        _aes.Dispose();
+        _hmac.Dispose();
     }
 
     public async ValueTask<SaveBundle?> ReadAsync(CancellationToken cancellationToken = default)
@@ -91,31 +122,32 @@ public sealed class EncryptedSaveBackend : ISaveBackend
     // span/offset-writing overload for it on netstandard2.1.
     internal byte[] Protect(int formatVersion, string documentKey, byte[] plaintext)
     {
-        using var aes = Aes.Create();
-        aes.Key = _aesKey;
-        aes.Mode = CipherMode.CBC;
-        aes.Padding = PaddingMode.PKCS7;
-        aes.GenerateIV();
-
+        // The IV is generated straight into the payload (its final destination); the only copy
+        // is into the reusable scratch buffer CreateEncryptor requires as byte[]. aes.GenerateIV()
+        // + the aes.IV getter used to allocate one internal array plus a defensive copy per call.
         var ciphertextLength = (plaintext.Length / 16 + 1) * 16;
         var payload = new byte[1 + IvSize + ciphertextLength + TagSize];
         payload[0] = FormatTag;
-        aes.IV.CopyTo(payload, 1);
+        RandomNumberGenerator.Fill(payload.AsSpan(1, IvSize));
 
         var ciphertextOffset = 1 + IvSize;
-        using (var encryptor = aes.CreateEncryptor())
+        lock (_cryptoGate)
         {
-            var fullBlockBytes = (plaintext.Length / 16) * 16;
-            var written = fullBlockBytes > 0
-                ? encryptor.TransformBlock(plaintext, 0, fullBlockBytes, payload, ciphertextOffset)
-                : 0;
-            var finalBlock = encryptor.TransformFinalBlock(plaintext, fullBlockBytes, plaintext.Length - fullBlockBytes);
-            finalBlock.CopyTo(payload.AsSpan(ciphertextOffset + written));
-        }
+            payload.AsSpan(1, IvSize).CopyTo(_ivScratch);
+            using (var encryptor = _aes.CreateEncryptor(_aesKey, _ivScratch))
+            {
+                var fullBlockBytes = (plaintext.Length / 16) * 16;
+                var written = fullBlockBytes > 0
+                    ? encryptor.TransformBlock(plaintext, 0, fullBlockBytes, payload, ciphertextOffset)
+                    : 0;
+                var finalBlock = encryptor.TransformFinalBlock(plaintext, fullBlockBytes, plaintext.Length - fullBlockBytes);
+                finalBlock.CopyTo(payload.AsSpan(ciphertextOffset + written));
+            }
 
-        var ivAndCiphertext = payload.AsSpan(1, IvSize + ciphertextLength);
-        var tag = ComputeMac(formatVersion, documentKey, ivAndCiphertext);
-        tag.CopyTo(payload.AsSpan(1 + IvSize + ciphertextLength));
+            var ivAndCiphertext = payload.AsSpan(1, IvSize + ciphertextLength);
+            var tag = ComputeMac(formatVersion, documentKey, ivAndCiphertext);
+            tag.CopyTo(payload.AsSpan(1 + IvSize + ciphertextLength));
+        }
         return payload;
     }
 
@@ -134,36 +166,31 @@ public sealed class EncryptedSaveBackend : ISaveBackend
                 $"Encrypted document '{documentKey}' has an unrecognized format tag (0x{payload[0]:X2}).");
 
         var ivAndCiphertextLength = payload.Length - 1 - TagSize;
-        var ivAndCiphertext = payload.AsSpan(1, ivAndCiphertextLength);
-        var storedTag = payload.AsSpan(1 + ivAndCiphertextLength, TagSize);
-
-        var expectedTag = ComputeMac(formatVersion, documentKey, ivAndCiphertext);
-        if (!CryptographicOperations.FixedTimeEquals(storedTag, expectedTag))
-            throw new SaveTamperDetectedException(
-                $"Encrypted document '{documentKey}' failed integrity verification (HMAC mismatch).");
-
-        var iv = payload.AsSpan(1, IvSize).ToArray();
         var ciphertextOffset = 1 + IvSize;
         var ciphertextLength = ivAndCiphertextLength - IvSize;
 
-        using var aes = Aes.Create();
-        aes.Key = _aesKey;
-        aes.Mode = CipherMode.CBC;
-        aes.Padding = PaddingMode.PKCS7;
-        aes.IV = iv;
+        lock (_cryptoGate)
+        {
+            var expectedTag = ComputeMac(formatVersion, documentKey, payload.AsSpan(1, ivAndCiphertextLength));
+            if (!CryptographicOperations.FixedTimeEquals(payload.AsSpan(1 + ivAndCiphertextLength, TagSize), expectedTag))
+                throw new SaveTamperDetectedException(
+                    $"Encrypted document '{documentKey}' failed integrity verification (HMAC mismatch).");
 
-        try
-        {
-            using var decryptor = aes.CreateDecryptor();
-            return decryptor.TransformFinalBlock(payload, ciphertextOffset, ciphertextLength);
-        }
-        catch (CryptographicException ex)
-        {
-            // A padding failure here would mean the HMAC verified above but the plaintext is
-            // still malformed, which should not happen for anything but a broken key. Fold it
-            // into the same exception rather than exposing a second, more specific error path.
-            throw new SaveTamperDetectedException(
-                $"Encrypted document '{documentKey}' failed to decrypt after passing integrity verification.", ex);
+            payload.AsSpan(1, IvSize).CopyTo(_ivScratch);
+
+            try
+            {
+                using var decryptor = _aes.CreateDecryptor(_aesKey, _ivScratch);
+                return decryptor.TransformFinalBlock(payload, ciphertextOffset, ciphertextLength);
+            }
+            catch (CryptographicException ex)
+            {
+                // A padding failure here would mean the HMAC verified above but the plaintext is
+                // still malformed, which should not happen for anything but a broken key. Fold it
+                // into the same exception rather than exposing a second, more specific error path.
+                throw new SaveTamperDetectedException(
+                    $"Encrypted document '{documentKey}' failed to decrypt after passing integrity verification.", ex);
+            }
         }
     }
 
@@ -180,6 +207,8 @@ public sealed class EncryptedSaveBackend : ISaveBackend
     // is net5.0+), so the 32-byte tag itself is still a fresh allocation.
     private const int MaxStackKeyBytes = 256;
 
+    // Caller must hold _cryptoGate: the shared _hmac instance carries per-computation state
+    // between AppendData and GetHashAndReset (which leaves it reset and ready for the next MAC).
     private byte[] ComputeMac(int formatVersion, string documentKey, ReadOnlySpan<byte> ivAndCiphertext)
     {
         var maxKeyByteCount = Encoding.UTF8.GetMaxByteCount(documentKey.Length);
@@ -196,11 +225,10 @@ public sealed class EncryptedSaveBackend : ISaveBackend
             BinaryPrimitives.WriteInt32LittleEndian(header.Slice(1, 4), formatVersion);
             BinaryPrimitives.WriteInt32LittleEndian(header.Slice(5, 4), keyByteLength);
 
-            using var incrementalHash = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA256, _hmacKey);
-            incrementalHash.AppendData(header);
-            incrementalHash.AppendData(keyBuffer.Slice(0, keyByteLength));
-            incrementalHash.AppendData(ivAndCiphertext);
-            return incrementalHash.GetHashAndReset();
+            _hmac.AppendData(header);
+            _hmac.AppendData(keyBuffer.Slice(0, keyByteLength));
+            _hmac.AppendData(ivAndCiphertext);
+            return _hmac.GetHashAndReset();
         }
         finally
         {

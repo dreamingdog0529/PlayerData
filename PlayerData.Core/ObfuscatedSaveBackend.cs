@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -81,22 +82,42 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
         return a;
     }
 
-    internal static byte[] Transform(byte[] data)
+    // Raw-pointer loop over the previous span/indexer version: pinning src/dst/mask once
+    // removes the per-chunk bounds checks the Vector<byte>(array, index) constructor and
+    // CopyTo(array, index) performed, Unsafe.Read/WriteUnaligned compiles to single unaligned
+    // vector moves, and the mask offset is tracked as a running counter reset at the tile
+    // boundary instead of recomputing `i % tileLength` (an integer division) per chunk.
+    // TiledMask.Length is an exact multiple of Vector<byte>.Count (LCM, see BuildTiledMask), so
+    // `maskOffset + vectorSize <= tileLength` always holds when the counter is in range and the
+    // unaligned mask read never runs off the end of the tile.
+    internal static unsafe byte[] Transform(byte[] data)
     {
-        var result = new byte[data.Length];
-        var vectorSize = Vector<byte>.Count;
-        var tileLength = TiledMask.Length;
+        var length = data.Length;
+        var result = new byte[length];
+        if (length == 0) return result;
 
-        var i = 0;
-        for (; i + vectorSize <= data.Length; i += vectorSize)
+        fixed (byte* src = data, dst = result, mask = TiledMask)
         {
-            var dataVector = new Vector<byte>(data, i);
-            var maskVector = new Vector<byte>(TiledMask, i % tileLength);
-            (dataVector ^ maskVector).CopyTo(result, i);
-        }
+            var vectorSize = Vector<byte>.Count;
+            var tileLength = TiledMask.Length;
 
-        for (; i < data.Length; i++)
-            result[i] = (byte)(data[i] ^ Mask[i % Mask.Length]);
+            var i = 0;
+            var maskOffset = 0;
+            for (; i + vectorSize <= length; i += vectorSize)
+            {
+                var dataVector = Unsafe.ReadUnaligned<Vector<byte>>(src + i);
+                var maskVector = Unsafe.ReadUnaligned<Vector<byte>>(mask + maskOffset);
+                Unsafe.WriteUnaligned(dst + i, dataVector ^ maskVector);
+                maskOffset += vectorSize;
+                if (maskOffset == tileLength) maskOffset = 0;
+            }
+
+            for (; i < length; i++)
+            {
+                dst[i] = (byte)(src[i] ^ mask[maskOffset]);
+                if (++maskOffset == tileLength) maskOffset = 0;
+            }
+        }
 
         return result;
     }
