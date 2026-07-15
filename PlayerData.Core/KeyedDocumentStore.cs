@@ -27,7 +27,12 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
     // own RaiseChanged decision below instead of querying suppression state a second time.
     private readonly Func<bool>? _onMutated;
     private readonly object _pendingGate = new();
-    private readonly ConcurrentDictionary<TKey, T> _items = new();
+    // Not readonly: ReplaceFromLoad swaps in the freshly deserialized dictionary wholesale
+    // (a single volatile reference write) instead of clearing and re-inserting item by item.
+    // Reference reads are atomic, so a concurrent reader sees either the old or the new
+    // dictionary in full, never a half-populated one - strictly better than the old
+    // Clear-then-copy, whose intermediate states (empty, partially filled) were observable.
+    private ConcurrentDictionary<TKey, T> _items = new();
     private long _version;
     private long _cleanVersion;
     private List<BagChange<TKey, T>>? _pendingChanges;
@@ -226,9 +231,7 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
     internal void ReplaceFromLoad(ConcurrentDictionary<TKey, T> items)
     {
         if (items is null) throw new ArgumentNullException(nameof(items));
-        _items.Clear();
-        foreach (var kvp in items)
-            _items[kvp.Key] = kvp.Value;
+        Volatile.Write(ref _items, items);
 
         var v = Volatile.Read(ref _version);
         Volatile.Write(ref _cleanVersion, v);
