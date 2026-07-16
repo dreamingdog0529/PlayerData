@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
@@ -20,6 +21,7 @@ public sealed class CompressedSaveBackend : ISaveBackend
     private const byte FormatTag = 0x01;
     private const int HeaderSize = 1 + 4; // FormatTag + UncompressedLength
     private const int MaxUncompressedLength = 512 * 1024 * 1024; // 512 MiB safety cap
+    private const int MaxInitialCompressionBufferSize = 64 * 1024;
 
     private readonly ISaveBackend _inner;
     private readonly CompressionLevel _compressionLevel;
@@ -82,17 +84,21 @@ public sealed class CompressedSaveBackend : ISaveBackend
             throw new ArgumentOutOfRangeException(nameof(plaintext), plaintext.Length,
                 $"Plaintext length must be between 0 and {MaxUncompressedLength} bytes.");
 
-        using var output = new MemoryStream(HeaderSize + Math.Max(plaintext.Length / 4, 16));
+        if (plaintext.Length == 0)
+        {
+            var empty = new byte[HeaderSize];
+            empty[0] = FormatTag;
+            return empty;
+        }
+
+        using var output = new PooledWriteStream(InitialCompressionBufferSize(plaintext.Length));
         output.WriteByte(FormatTag);
         Span<byte> lengthBytes = stackalloc byte[4];
         BinaryPrimitives.WriteUInt32LittleEndian(lengthBytes, (uint)plaintext.Length);
         output.Write(lengthBytes);
 
-        if (plaintext.Length > 0)
-        {
-            using (var deflate = new DeflateStream(output, _compressionLevel, leaveOpen: true))
-                deflate.Write(plaintext, 0, plaintext.Length);
-        }
+        using (var deflate = new DeflateStream(output, _compressionLevel, leaveOpen: true))
+            deflate.Write(plaintext, 0, plaintext.Length);
 
         return output.ToArray();
     }
@@ -144,5 +150,113 @@ public sealed class CompressedSaveBackend : ISaveBackend
                 $"Compressed document '{documentKey}' produced more than the declared {result.Length} uncompressed bytes.");
 
         return result;
+    }
+
+    private static int InitialCompressionBufferSize(int plaintextLength)
+    {
+        var estimatedCompressedLength = Math.Min(plaintextLength, MaxInitialCompressionBufferSize);
+        return HeaderSize + Math.Max(estimatedCompressedLength, 16);
+    }
+
+    private sealed class PooledWriteStream : Stream
+    {
+        private byte[] _buffer;
+        private int _length;
+        private bool _disposed;
+
+        public PooledWriteStream(int initialCapacity)
+        {
+            _buffer = ArrayPool<byte>.Shared.Rent(initialCapacity);
+        }
+
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => !_disposed;
+
+        public override long Length => _length;
+
+        public override long Position
+        {
+            get => _length;
+            set => throw new NotSupportedException();
+        }
+
+        public byte[] ToArray()
+        {
+            ThrowIfDisposed();
+            var result = new byte[_length];
+            Buffer.BlockCopy(_buffer, 0, result, 0, _length);
+            return result;
+        }
+
+        public override void Flush()
+        {
+            ThrowIfDisposed();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            if (buffer is null) throw new ArgumentNullException(nameof(buffer));
+            if ((uint)offset > (uint)buffer.Length || (uint)count > (uint)(buffer.Length - offset))
+                throw new ArgumentOutOfRangeException(nameof(offset));
+
+            ThrowIfDisposed();
+            EnsureCapacity(count);
+            Buffer.BlockCopy(buffer, offset, _buffer, _length, count);
+            _length += count;
+        }
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            ThrowIfDisposed();
+            EnsureCapacity(buffer.Length);
+            buffer.CopyTo(_buffer.AsSpan(_length));
+            _length += buffer.Length;
+        }
+
+        public override void WriteByte(byte value)
+        {
+            ThrowIfDisposed();
+            EnsureCapacity(1);
+            _buffer[_length++] = value;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                ArrayPool<byte>.Shared.Return(_buffer);
+                _buffer = Array.Empty<byte>();
+                _length = 0;
+                _disposed = true;
+            }
+
+            base.Dispose(disposing);
+        }
+
+        private void EnsureCapacity(int additionalLength)
+        {
+            var required = _length + additionalLength;
+            if ((uint)required <= (uint)_buffer.Length) return;
+
+            var newCapacity = Math.Max(required, _buffer.Length * 2);
+            var newBuffer = ArrayPool<byte>.Shared.Rent(newCapacity);
+            Buffer.BlockCopy(_buffer, 0, newBuffer, 0, _length);
+            ArrayPool<byte>.Shared.Return(_buffer);
+            _buffer = newBuffer;
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(PooledWriteStream));
+        }
     }
 }
