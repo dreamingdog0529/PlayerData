@@ -74,9 +74,9 @@ public sealed class CompressedSaveBackend : ISaveBackend
         Volatile.Write(ref _writeScratch, documents);
     }
 
-    // Builds [FormatTag][UncompressedLength][deflate body]. Empty input still gets a valid
-    // header with length 0 and an empty deflate body (DeflateStream with no writes produces
-    // no trailer data when left incomplete... we flush via Dispose of the stream).
+    // Builds [FormatTag][UncompressedLength][deflate body]. Empty plaintext yields a
+    // header-only payload (FormatTag + LE length 0, no deflate body), matching Decompress
+    // which rejects trailing bytes when the declared length is 0.
     internal byte[] Compress(byte[] plaintext)
     {
         if (plaintext is null) throw new ArgumentNullException(nameof(plaintext));
@@ -233,7 +233,7 @@ public sealed class CompressedSaveBackend : ISaveBackend
         {
             if (!_disposed)
             {
-                ArrayPool<byte>.Shared.Return(_buffer);
+                ArrayPool<byte>.Shared.Return(_buffer, clearArray: true);
                 _buffer = Array.Empty<byte>();
                 _length = 0;
                 _disposed = true;
@@ -250,7 +250,7 @@ public sealed class CompressedSaveBackend : ISaveBackend
             var newCapacity = Math.Max(required, _buffer.Length * 2);
             var newBuffer = ArrayPool<byte>.Shared.Rent(newCapacity);
             Buffer.BlockCopy(_buffer, 0, newBuffer, 0, _length);
-            ArrayPool<byte>.Shared.Return(_buffer);
+            ArrayPool<byte>.Shared.Return(_buffer, clearArray: true);
             _buffer = newBuffer;
         }
 
