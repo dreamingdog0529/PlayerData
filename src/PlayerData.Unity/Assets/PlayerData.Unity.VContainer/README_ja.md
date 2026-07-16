@@ -1,6 +1,6 @@
 # PlayerData VContainer
 
-[English](README.md) | [日本語](README_ja.md)
+[English](README.md) | 日本語
 
 > [PlayerData.Unity](../PlayerData.Unity) 向けの任意 [VContainer](https://github.com/hadashiA/VContainer) 統合。
 
