@@ -30,6 +30,19 @@ public sealed class SaveSession : ISaveSession
     private ISessionParticipant[] _participants = Array.Empty<ISessionParticipant>();
     private ISaveValidator[] _validators = Array.Empty<ISaveValidator>();
 
+    // CommitAsync's snapshot array, recycled between commits so a steady-state commit's fixed
+    // overhead does not include re-allocating it every time. Interlocked.Exchange hands the
+    // array to at most one in-flight commit; a concurrent commit (or a participant-count change)
+    // simply allocates a fresh array, so correctness never depends on the cache being available.
+    private (ISessionParticipant Participant, long Version, byte[] Bytes)[]? _snapshotScratch;
+
+    // CommitAsync's document-payload dictionary, recycled between commits with the same
+    // Interlocked.Exchange handoff as _snapshotScratch. Recycling is safe even though the
+    // dictionary escapes into the SaveBundle handed to the backend: ISaveBackend's ownership
+    // contract makes the bundle valid only for the duration of WriteAsync, so by the time the
+    // next commit reuses the instance no conforming backend still holds it.
+    private Dictionary<string, byte[]>? _documentsScratch;
+
     public SaveSession(ISaveBackend backend, IEnumerable<ISaveMigration>? migrations = null)
     {
         _backend = backend ?? throw new ArgumentNullException(nameof(backend));
@@ -76,10 +89,10 @@ public sealed class SaveSession : ISaveSession
         return store;
     }
 
-    public IDisposable SuppressNotifications()
+    public SuppressionScope SuppressNotifications()
     {
         Interlocked.Increment(ref _suppressDepth);
-        return new SuppressScope(this);
+        return new SuppressionScope(this);
     }
 
     public void AddValidator(ISaveValidator validator)
@@ -184,8 +197,12 @@ public sealed class SaveSession : ISaveSession
             if (!AnyDirty(current))
                 return;
 
-            snapshot = new (ISessionParticipant, long, byte[])[current.Length];
-            allDocuments = new Dictionary<string, byte[]>(current.Length);
+            var scratch = Interlocked.Exchange(ref _snapshotScratch, null);
+            snapshot = scratch is not null && scratch.Length == current.Length
+                ? scratch
+                : new (ISessionParticipant, long, byte[])[current.Length];
+            allDocuments = Interlocked.Exchange(ref _documentsScratch, null)
+                ?? new Dictionary<string, byte[]>(current.Length);
 
             var dirtyCount = 0;
             foreach (var p in current)
@@ -260,6 +277,17 @@ public sealed class SaveSession : ISaveSession
         foreach (var (participant, version, bytes) in snapshot)
             participant.MarkCleanAt(version, bytes);
 
+        // Recycle the snapshot array for the next commit. Cleared first so it doesn't pin
+        // participant/byte[] references from a session whose registrations later change.
+        Array.Clear(snapshot, 0, snapshot.Length);
+        Volatile.Write(ref _snapshotScratch, snapshot);
+
+        // The documents dictionary is recycled too: WriteAsync completed above, and the
+        // ownership contract bars backends from holding the bundle past that point. Cleared so
+        // it doesn't pin byte[] payloads beyond what the participants cache themselves.
+        allDocuments.Clear();
+        Volatile.Write(ref _documentsScratch, allDocuments);
+
         Committed?.Invoke();
         PublishDirty(force: true);
     }
@@ -268,7 +296,7 @@ public sealed class SaveSession : ISaveSession
 
     private bool IsNotificationSuppressed() => Volatile.Read(ref _suppressDepth) > 0;
 
-    private void EndSuppress()
+    internal void EndSuppress()
     {
         var depth = Interlocked.Decrement(ref _suppressDepth);
         if (depth < 0)
@@ -372,19 +400,6 @@ public sealed class SaveSession : ISaveSession
     {
         if (migrations is null) return Array.Empty<ISaveMigration>();
         return migrations.OrderBy(m => m.FromVersion).ToList();
-    }
-
-    private sealed class SuppressScope : IDisposable
-    {
-        private SaveSession? _owner;
-
-        public SuppressScope(SaveSession owner) => _owner = owner;
-
-        public void Dispose()
-        {
-            var owner = Interlocked.Exchange(ref _owner, null);
-            owner?.EndSuppress();
-        }
     }
 
     private sealed class DelegateSaveValidator : ISaveValidator

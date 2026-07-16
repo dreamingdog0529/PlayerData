@@ -24,7 +24,7 @@ public class SaveSessionMutationBenchmarks
     private SaveSession _suppressedSession = null!;
     private IDoc<PlayerProfile> _suppressedProfile = null!;
     private IBag<string, InventoryItem> _suppressedItems = null!;
-    private System.IDisposable _suppressScope = null!;
+    private SuppressionScope _suppressScope;
     private int _suppressedCounter;
 
     [GlobalSetup]

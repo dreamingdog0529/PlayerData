@@ -22,7 +22,9 @@ public interface ISaveSession : IAsyncDisposable
     ValueTask CommitAsync(CancellationToken cancellationToken = default);
 
     // Suppress store Changed and DirtyChanged until dispose; then flush coalesced notifications.
-    IDisposable SuppressNotifications();
+    // Returns a concrete struct (not IDisposable, which would box it) so opening a scope is
+    // allocation-free; dispose each scope exactly once - `using` does this naturally.
+    SuppressionScope SuppressNotifications();
 
     // Session-level commit validators (in addition to IValidatable on document values).
     void AddValidator(ISaveValidator validator);

@@ -36,6 +36,10 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
     private long _version;
     private long _cleanVersion;
     private List<BagChange<TKey, T>>? _pendingChanges;
+    // The previous suppress cycle's (cleared) list, recycled by RaiseChanged so steady-state
+    // suppress/flush cycles allocate no new list once its capacity has warmed up. Guarded by
+    // _pendingGate like _pendingChanges itself.
+    private List<BagChange<TKey, T>>? _pendingChangesSpare;
 
     public KeyedDocumentStore(
         Func<T, TKey> keySelector,
@@ -236,7 +240,14 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
         var v = Volatile.Read(ref _version);
         Volatile.Write(ref _cleanVersion, v);
         lock (_pendingGate)
-            _pendingChanges = null;
+        {
+            if (_pendingChanges is { } dropped)
+            {
+                dropped.Clear();
+                _pendingChangesSpare ??= dropped;
+                _pendingChanges = null;
+            }
+        }
     }
 
     internal void MarkCleanAt(long version)
@@ -262,6 +273,12 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
         if (pending is null) return;
         foreach (var change in pending)
             Changed?.Invoke(change);
+
+        // Hand the drained list back for the next suppress cycle. Skipped when a handler above
+        // threw (this line never runs), which only costs the recycling, not correctness.
+        pending.Clear();
+        lock (_pendingGate)
+            _pendingChangesSpare ??= pending;
     }
 
     // Per-thread slot AddOrUpdate's updateValueFactory uses to hand the existing value back out
@@ -320,7 +337,11 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
         {
             lock (_pendingGate)
             {
-                _pendingChanges ??= new List<BagChange<TKey, T>>();
+                if (_pendingChanges is null)
+                {
+                    _pendingChanges = _pendingChangesSpare ?? new List<BagChange<TKey, T>>();
+                    _pendingChangesSpare = null;
+                }
                 _pendingChanges.Add(change);
             }
             return;

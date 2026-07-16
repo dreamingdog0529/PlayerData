@@ -44,6 +44,7 @@ public sealed class EncryptedSaveBackend : ISaveBackend, IDisposable
     private readonly object _cryptoGate = new();
     private readonly Aes _aes;
     private readonly IncrementalHash _hmac;
+    private Dictionary<string, byte[]>? _writeScratch;
     // Scratch IV handed to CreateEncryptor/CreateDecryptor, which clone it internally before
     // the transform is built - so reusing one buffer per backend (under _cryptoGate) is safe
     // and saves a 16-byte allocation per document. netstandard2.1 has no span-taking overload.
@@ -100,15 +101,24 @@ public sealed class EncryptedSaveBackend : ISaveBackend, IDisposable
         return new SaveBundle(bundle.FormatVersion, documents);
     }
 
-    public ValueTask WriteAsync(SaveBundle bundle, CancellationToken cancellationToken = default)
+    public async ValueTask WriteAsync(SaveBundle bundle, CancellationToken cancellationToken = default)
     {
         if (bundle is null) throw new ArgumentNullException(nameof(bundle));
 
-        var documents = new Dictionary<string, byte[]>(bundle.Documents.Count);
+        // Recycled dictionary (same Interlocked.Exchange handoff as ObfuscatedSaveBackend):
+        // taken by at most one in-flight write, returned only after the inner WriteAsync
+        // completed (the ownership contract bars the inner backend from holding the bundle past
+        // that point), dropped when the write throws. The encrypted payloads themselves are
+        // fresh per call - only the dictionary is reused.
+        var documents = Interlocked.Exchange(ref _writeScratch, null)
+            ?? new Dictionary<string, byte[]>(bundle.Documents.Count);
         foreach (var pair in bundle.Documents)
             documents[pair.Key] = Protect(bundle.FormatVersion, pair.Key, pair.Value);
 
-        return _inner.WriteAsync(new SaveBundle(bundle.FormatVersion, documents), cancellationToken);
+        await _inner.WriteAsync(new SaveBundle(bundle.FormatVersion, documents), cancellationToken).ConfigureAwait(false);
+
+        documents.Clear();
+        Volatile.Write(ref _writeScratch, documents);
     }
 
     // Builds the final payload buffer once ([FormatTag][IV][ciphertext][HMACTag]) and encrypts

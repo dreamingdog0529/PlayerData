@@ -17,6 +17,9 @@ public class SaveSessionBenchmarks
 
     private SaveSession _cleanSession = null!;
 
+    private SaveSession _nullBackendSession = null!;
+    private IDoc<PlayerProfile> _nullBackendProfile = null!;
+
     [GlobalSetup]
     public void GlobalSetup()
     {
@@ -33,6 +36,13 @@ public class SaveSessionBenchmarks
             cleanItems.Upsert(new InventoryItem("item" + i, i));
         _cleanSession.CommitAsync().AsTask().GetAwaiter().GetResult();
         _ = cleanProfile;
+
+        _nullBackendSession = new SaveSession(new NullSaveBackend());
+        _nullBackendProfile = _nullBackendSession.AddDocument("profile", () => new PlayerProfile(1, "Hero", 0));
+        var nullItems = _nullBackendSession.AddCollection<string, InventoryItem>("items", i => i.ItemId);
+        for (var i = 0; i < SeedCount; i++)
+            nullItems.Upsert(new InventoryItem("item" + i, i));
+        _nullBackendSession.CommitAsync().AsTask().GetAwaiter().GetResult();
     }
 
     // Every invocation dirties the profile doc itself, so this stays representative regardless
@@ -50,5 +60,15 @@ public class SaveSessionBenchmarks
     public async System.Threading.Tasks.Task CommitAsync_NoOp()
     {
         await _cleanSession.CommitAsync();
+    }
+
+    // Same steady-state shape as CommitAsync_Dirty but against a backend that neither stores nor
+    // allocates, so the Allocated column is purely the session's own commit path (snapshot,
+    // document dictionary, bundle, serialize).
+    [Benchmark]
+    public async System.Threading.Tasks.Task CommitAsync_Dirty_NullBackend()
+    {
+        _nullBackendProfile.Replace(_nullBackendProfile.Value with { Gold = ++_counter });
+        await _nullBackendSession.CommitAsync();
     }
 }

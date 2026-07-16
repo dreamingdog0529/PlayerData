@@ -27,6 +27,13 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
 
     private readonly ISaveBackend _inner;
 
+    // Write-path transformed-document dictionary, recycled between writes via the same
+    // Interlocked.Exchange handoff SaveSession's commit scratch uses: at most one in-flight
+    // write holds it, a concurrent write just allocates fresh, and it is only recycled after
+    // the inner WriteAsync completed (the ownership contract bars the inner backend from
+    // holding the bundle past that point). Dropped, not recycled, when the write throws.
+    private Dictionary<string, byte[]>? _writeScratch;
+
     public ObfuscatedSaveBackend(ISaveBackend inner)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
@@ -37,22 +44,30 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
         var bundle = await _inner.ReadAsync(cancellationToken).ConfigureAwait(false);
         if (bundle is null) return null;
 
-        var documents = new Dictionary<string, byte[]>(bundle.Documents.Count);
+        // The inner backend transfers ownership of the returned bundle (see ISaveBackend), so
+        // each masked payload is unmasked in place and the same bundle instance is returned -
+        // no per-document copy, no new dictionary, no new bundle.
         foreach (var pair in bundle.Documents)
-            documents[pair.Key] = Transform(pair.Value);
+            TransformInPlace(pair.Value);
 
-        return new SaveBundle(bundle.FormatVersion, documents);
+        return bundle;
     }
 
-    public ValueTask WriteAsync(SaveBundle bundle, CancellationToken cancellationToken = default)
+    public async ValueTask WriteAsync(SaveBundle bundle, CancellationToken cancellationToken = default)
     {
         if (bundle is null) throw new ArgumentNullException(nameof(bundle));
 
-        var documents = new Dictionary<string, byte[]>(bundle.Documents.Count);
+        // The input arrays are the caller's (SaveSession caches them as clean-state bytes), so
+        // the write path must transform into fresh arrays - only the dictionary is recycled.
+        var documents = Interlocked.Exchange(ref _writeScratch, null)
+            ?? new Dictionary<string, byte[]>(bundle.Documents.Count);
         foreach (var pair in bundle.Documents)
             documents[pair.Key] = Transform(pair.Value);
 
-        return _inner.WriteAsync(new SaveBundle(bundle.FormatVersion, documents), cancellationToken);
+        await _inner.WriteAsync(new SaveBundle(bundle.FormatVersion, documents), cancellationToken).ConfigureAwait(false);
+
+        documents.Clear();
+        Volatile.Write(ref _writeScratch, documents);
     }
 
     // Mask.Length (32) generally doesn't divide Vector<byte>.Count evenly on every platform (16
@@ -82,6 +97,29 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
         return a;
     }
 
+    internal static unsafe byte[] Transform(byte[] data)
+    {
+        var length = data.Length;
+        var result = new byte[length];
+        if (length == 0) return result;
+
+        fixed (byte* src = data, dst = result, mask = TiledMask)
+            TransformCore(src, dst, length, mask);
+
+        return result;
+    }
+
+    // Self-XOR variant for buffers this backend owns (the read path, where the inner backend
+    // transferred ownership): dst == src is safe in TransformCore because every location is
+    // fully read before it is written.
+    internal static unsafe void TransformInPlace(byte[] data)
+    {
+        if (data.Length == 0) return;
+
+        fixed (byte* buffer = data, mask = TiledMask)
+            TransformCore(buffer, buffer, data.Length, mask);
+    }
+
     // Raw-pointer loop over the previous span/indexer version: pinning src/dst/mask once
     // removes the per-chunk bounds checks the Vector<byte>(array, index) constructor and
     // CopyTo(array, index) performed, Unsafe.Read/WriteUnaligned compiles to single unaligned
@@ -90,35 +128,26 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
     // TiledMask.Length is an exact multiple of Vector<byte>.Count (LCM, see BuildTiledMask), so
     // `maskOffset + vectorSize <= tileLength` always holds when the counter is in range and the
     // unaligned mask read never runs off the end of the tile.
-    internal static unsafe byte[] Transform(byte[] data)
+    private static unsafe void TransformCore(byte* src, byte* dst, int length, byte* mask)
     {
-        var length = data.Length;
-        var result = new byte[length];
-        if (length == 0) return result;
+        var vectorSize = Vector<byte>.Count;
+        var tileLength = TiledMask.Length;
 
-        fixed (byte* src = data, dst = result, mask = TiledMask)
+        var i = 0;
+        var maskOffset = 0;
+        for (; i + vectorSize <= length; i += vectorSize)
         {
-            var vectorSize = Vector<byte>.Count;
-            var tileLength = TiledMask.Length;
-
-            var i = 0;
-            var maskOffset = 0;
-            for (; i + vectorSize <= length; i += vectorSize)
-            {
-                var dataVector = Unsafe.ReadUnaligned<Vector<byte>>(src + i);
-                var maskVector = Unsafe.ReadUnaligned<Vector<byte>>(mask + maskOffset);
-                Unsafe.WriteUnaligned(dst + i, dataVector ^ maskVector);
-                maskOffset += vectorSize;
-                if (maskOffset == tileLength) maskOffset = 0;
-            }
-
-            for (; i < length; i++)
-            {
-                dst[i] = (byte)(src[i] ^ mask[maskOffset]);
-                if (++maskOffset == tileLength) maskOffset = 0;
-            }
+            var dataVector = Unsafe.ReadUnaligned<Vector<byte>>(src + i);
+            var maskVector = Unsafe.ReadUnaligned<Vector<byte>>(mask + maskOffset);
+            Unsafe.WriteUnaligned(dst + i, dataVector ^ maskVector);
+            maskOffset += vectorSize;
+            if (maskOffset == tileLength) maskOffset = 0;
         }
 
-        return result;
+        for (; i < length; i++)
+        {
+            dst[i] = (byte)(src[i] ^ mask[maskOffset]);
+            if (++maskOffset == tileLength) maskOffset = 0;
+        }
     }
 }

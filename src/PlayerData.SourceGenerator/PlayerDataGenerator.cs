@@ -290,7 +290,7 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"{indent}    public global::System.Threading.Tasks.ValueTask CommitAsync(global::System.Threading.CancellationToken cancellationToken = default) => _session.CommitAsync(cancellationToken);");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public global::System.IDisposable SuppressNotifications() => _session.SuppressNotifications();");
+        sb.AppendLine($"{indent}    public global::PlayerData.SuppressionScope SuppressNotifications() => _session.SuppressNotifications();");
         sb.AppendLine();
         sb.AppendLine($"{indent}    public void AddValidator(global::PlayerData.ISaveValidator validator) => _session.AddValidator(validator);");
         sb.AppendLine();
