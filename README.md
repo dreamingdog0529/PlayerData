@@ -391,13 +391,22 @@ auto.Bind(save); // dirty only; concurrent commits gated
 
 ### VContainer
 
-Optional. Details: [PlayerData.Unity.VContainer/README.md](src/PlayerData.Unity/Assets/PlayerData.Unity.VContainer/README.md)
+Optional [VContainer](https://github.com/hadashiA/VContainer) integration. If you do not use VContainer, install only `PlayerData.Unity` — do not add this package.
 
-```
-https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity.VContainer
+Add **both** PlayerData packages (plus VContainer itself) to `Packages/manifest.json`:
+
+```json
+"com.dreamingdog0529.playerdata": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity",
+"com.dreamingdog0529.playerdata.vcontainer": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity.VContainer",
+"jp.hadashikick.vcontainer": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer#1.16.8"
 ```
 
 ```csharp
+using PlayerData.Unity;
+using VContainer;
+
+// In LifetimeScope.Configure:
+// Registers ISaveBackend (UnitySaveBackend) + GameSave singleton, then LoadAsync on IAsyncStartable.
 builder.RegisterPlayerDataSession<GameSave>(relativeFolder: "PlayerData", slot: 0);
 
 // With EncryptedSaveBackend / ObfuscatedSaveBackend layered on top of UnitySaveBackend:

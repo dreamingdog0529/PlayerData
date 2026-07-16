@@ -391,13 +391,22 @@ auto.Bind(save); // dirty 時のみ。並行コミットはゲート
 
 ### VContainer
 
-任意です。詳細: [PlayerData.Unity.VContainer/README_ja.md](src/PlayerData.Unity/Assets/PlayerData.Unity.VContainer/README_ja.md)
+任意の [VContainer](https://github.com/hadashiA/VContainer) 統合です。VContainer を使わない場合はこのパッケージを入れないでください（`PlayerData.Unity` のみで可）。
 
-```
-https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity.VContainer
+`Packages/manifest.json` に PlayerData の **両方** のパッケージ（+ VContainer 本体）を追加します:
+
+```json
+"com.dreamingdog0529.playerdata": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity",
+"com.dreamingdog0529.playerdata.vcontainer": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity.VContainer",
+"jp.hadashikick.vcontainer": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer#1.16.8"
 ```
 
 ```csharp
+using PlayerData.Unity;
+using VContainer;
+
+// LifetimeScope.Configure 内で:
+// ISaveBackend (UnitySaveBackend) + GameSave シングルトンを登録し、IAsyncStartable で LoadAsync する。
 builder.RegisterPlayerDataSession<GameSave>(relativeFolder: "PlayerData", slot: 0);
 
 // UnitySaveBackend の上に EncryptedSaveBackend / ObfuscatedSaveBackend を重ねる場合:
