@@ -56,7 +56,7 @@ public class PlayerDataGeneratorTests
         Assert.That(text, Does.Contain("AddCollection<string, global::Sample.InventoryItem>(\"Inventory\""));
         Assert.That(text, Does.Contain("OpenAsync"));
         Assert.That(text, Does.Contain("PlayerProfile.NewGame()"));
-        Assert.That(text, Does.Contain("SuppressNotifications()"));
+        Assert.That(text, Does.Contain("global::PlayerData.SuppressionScope SuppressNotifications()"));
         Assert.That(text, Does.Contain("AddValidator"));
     }
 
@@ -374,6 +374,161 @@ public class PlayerDataGeneratorTests
         Assert.That(diagnostics.Select(d => d.Id), Does.Contain("PD0011"));
         var session = generatedTrees.Single(t => t.FilePath.EndsWith("GameSave.PlayerDataSession.g.cs")).GetText().ToString();
         Assert.That(session, Does.Not.Contain("Level"));
+    }
+
+    [Test]
+    public void Single_MissingDefaultFactory_ReportsPD0005()
+    {
+        // No parameterless ctor and no Default= factory → PD0005.
+        const string source = """
+            using MemoryPack;
+            using PlayerData;
+
+            namespace Sample;
+
+            [PlayerDataSession]
+            [PlayerDataSingle(typeof(PlayerProfile), "Profile")]
+            public partial class GameSave
+            {
+            }
+
+            [MemoryPackable(GenerateType.VersionTolerant)]
+            public partial class PlayerProfile
+            {
+                public PlayerProfile(int level) => Level = level;
+                [MemoryPackOrder(0)] public int Level { get; set; }
+            }
+            """;
+
+        var (diagnostics, _) = RunGenerator(source);
+
+        Assert.That(diagnostics.Select(d => d.Id), Does.Contain("PD0005"));
+    }
+
+    [Test]
+    public void DuplicateDocumentStorageKey_ReportsPD0006()
+    {
+        const string source = """
+            using MemoryPack;
+            using PlayerData;
+
+            namespace Sample;
+
+            [PlayerDataSession]
+            [PlayerDataSingle(typeof(PlayerProfile), "Profile", Key = "shared")]
+            [PlayerDataCollection(typeof(InventoryItem), "Inventory", Key = "shared")]
+            public partial class GameSave
+            {
+            }
+
+            [MemoryPackable(GenerateType.VersionTolerant)]
+            public partial class PlayerProfile
+            {
+                [MemoryPackOrder(0)] public int Level { get; set; }
+            }
+
+            [MemoryPackable(GenerateType.VersionTolerant)]
+            public partial class InventoryItem
+            {
+                [PlayerDataKey]
+                [MemoryPackOrder(0)] public string ItemId { get; set; } = "";
+            }
+            """;
+
+        var (diagnostics, _) = RunGenerator(source);
+
+        Assert.That(diagnostics.Select(d => d.Id), Does.Contain("PD0006"));
+    }
+
+    [Test]
+    public void Collection_MultipleKeyMembers_ReportsPD0002()
+    {
+        const string source = """
+            using MemoryPack;
+            using PlayerData;
+
+            namespace Sample;
+
+            [PlayerDataSession]
+            [PlayerDataCollection(typeof(InventoryItem))]
+            public partial class GameSave
+            {
+            }
+
+            [MemoryPackable(GenerateType.VersionTolerant)]
+            public partial class InventoryItem
+            {
+                [PlayerDataKey]
+                [MemoryPackOrder(0)] public string ItemId { get; set; } = "";
+                [PlayerDataKey]
+                [MemoryPackOrder(1)] public string SlotId { get; set; } = "";
+            }
+            """;
+
+        var (diagnostics, _) = RunGenerator(source);
+
+        Assert.That(diagnostics.Select(d => d.Id), Does.Contain("PD0002"));
+    }
+
+    [Test]
+    public void Collection_ExplicitKey_UsesConfiguredKey()
+    {
+        const string source = """
+            using MemoryPack;
+            using PlayerData;
+
+            namespace Sample;
+
+            [PlayerDataSession]
+            [PlayerDataCollection(typeof(InventoryItem), "Inventory", Key = "bag")]
+            public partial class GameSave
+            {
+            }
+
+            [MemoryPackable(GenerateType.VersionTolerant)]
+            public partial class InventoryItem
+            {
+                [PlayerDataKey]
+                [MemoryPackOrder(0)] public string ItemId { get; set; } = "";
+            }
+            """;
+
+        var (diagnostics, generatedTrees) = RunGenerator(source);
+
+        Assert.That(diagnostics, Is.Empty);
+        var text = generatedTrees.Single(t => t.FilePath.EndsWith("GameSave.PlayerDataSession.g.cs")).GetText().ToString();
+        Assert.That(text, Does.Contain("\"bag\""));
+        Assert.That(text, Does.Contain("IBag<string, global::Sample.InventoryItem> Inventory"));
+    }
+
+    [Test]
+    public void Single_WithDefaultFactory_UsesNamedMethod()
+    {
+        const string source = """
+            using MemoryPack;
+            using PlayerData;
+
+            namespace Sample;
+
+            [PlayerDataSession]
+            [PlayerDataSingle(typeof(PlayerProfile), "Profile", Default = "Create")]
+            public partial class GameSave
+            {
+            }
+
+            [MemoryPackable(GenerateType.VersionTolerant)]
+            public partial class PlayerProfile
+            {
+                [MemoryPackOrder(0)] public int Level { get; set; }
+                public static PlayerProfile Create() => new() { Level = 1 };
+            }
+            """;
+
+        var (diagnostics, generatedTrees) = RunGenerator(source);
+
+        Assert.That(diagnostics, Is.Empty);
+        var text = generatedTrees.Single(t => t.FilePath.EndsWith("GameSave.PlayerDataSession.g.cs")).GetText().ToString();
+        Assert.That(text, Does.Contain("PlayerProfile.Create()"));
     }
 
     private static (System.Collections.Immutable.ImmutableArray<Diagnostic> Diagnostics, System.Collections.Immutable.ImmutableArray<SyntaxTree> GeneratedTrees) RunGenerator(string additionalSource)

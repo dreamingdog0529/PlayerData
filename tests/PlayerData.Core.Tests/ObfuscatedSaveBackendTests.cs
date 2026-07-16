@@ -75,4 +75,68 @@ public class ObfuscatedSaveBackendTests
     {
         Assert.Throws<ArgumentNullException>(() => new ObfuscatedSaveBackend(null!));
     }
+
+    [Test]
+    public async Task ReadAsync_NoSave_ReturnsNull()
+    {
+        var backend = new ObfuscatedSaveBackend(new DirectorySaveBackend(_directory));
+        Assert.That(await backend.ReadAsync(), Is.Null);
+    }
+
+    [Test]
+    public async Task WriteAsync_NullBundle_Throws()
+    {
+        var backend = new ObfuscatedSaveBackend(new DirectorySaveBackend(_directory));
+        Assert.ThrowsAsync<ArgumentNullException>(async () => await backend.WriteAsync(null!));
+    }
+
+    [Test]
+    public async Task MultiDocument_RoundTripsIndependently()
+    {
+        var backend = new ObfuscatedSaveBackend(new DirectorySaveBackend(_directory));
+        await backend.WriteAsync(new SaveBundle(1, new Dictionary<string, byte[]>
+        {
+            ["a"] = MakePlaintext(10),
+            ["b"] = MakePlaintext(64),
+            ["c"] = MakePlaintext(0),
+        }));
+
+        var result = await backend.ReadAsync();
+        Assert.That(result!.Documents["a"], Is.EqualTo(MakePlaintext(10)));
+        Assert.That(result.Documents["b"], Is.EqualTo(MakePlaintext(64)));
+        Assert.That(result.Documents["c"], Is.EqualTo(MakePlaintext(0)));
+    }
+
+    [Test]
+    public async Task WriteAsync_ThenSecondWrite_Overwrites()
+    {
+        var backend = new ObfuscatedSaveBackend(new DirectorySaveBackend(_directory));
+        await backend.WriteAsync(new SaveBundle(1, new Dictionary<string, byte[]>
+        {
+            ["doc"] = MakePlaintext(8),
+        }));
+        var next = MakePlaintext(12);
+        await backend.WriteAsync(new SaveBundle(1, new Dictionary<string, byte[]>
+        {
+            ["doc"] = next,
+        }));
+
+        var result = await backend.ReadAsync();
+        Assert.That(result!.Documents["doc"], Is.EqualTo(next));
+    }
+
+    [Test]
+    public async Task ChainedWithDirectory_SessionRoundTrip()
+    {
+        var backend = new ObfuscatedSaveBackend(new DirectorySaveBackend(_directory));
+        var writer = new SaveSession(backend);
+        var player = writer.AddDocument("player", () => new SamplePlayerData(1, "New"));
+        player.Update(_ => new SamplePlayerData(8, "Obf"));
+        await writer.CommitAsync();
+
+        var reader = new SaveSession(new ObfuscatedSaveBackend(new DirectorySaveBackend(_directory)));
+        var player2 = reader.AddDocument("player", () => new SamplePlayerData(0, ""));
+        await reader.LoadAsync();
+        Assert.That(player2.Value, Is.EqualTo(new SamplePlayerData(8, "Obf")));
+    }
 }

@@ -65,4 +65,49 @@ public class PlayerDataStoreR3ExtensionsTests
 
         Assert.That(secondReceived, Is.EqualTo(new SampleData("x", 3)));
     }
+
+    [Test]
+    public void AsObservable_Collection_Clear_EmitsCleared()
+    {
+        var collection = new KeyedDocumentStore<string, SampleData>(d => d.Id);
+        collection.Upsert(new SampleData("a", 1));
+
+        var received = new System.Collections.Generic.List<PlayerDataChangeKind>();
+        using var subscription = collection.AsObservable().Subscribe(change => received.Add(change.Kind));
+
+        collection.Clear();
+
+        Assert.That(received, Is.EqualTo(new[] { PlayerDataChangeKind.Cleared }));
+    }
+
+    [Test]
+    public void AsObservable_Collection_SubscriptionDisposed_StopsReceiving()
+    {
+        var collection = new KeyedDocumentStore<string, SampleData>(d => d.Id);
+        var receivedCount = 0;
+        var subscription = collection.AsObservable().Subscribe(_ => receivedCount++);
+
+        collection.Upsert(new SampleData("a", 1));
+        subscription.Dispose();
+        collection.Upsert(new SampleData("b", 2));
+
+        Assert.That(receivedCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void AsObservable_MultipleSubscribers_AllReceiveUpdates()
+    {
+        var store = new DocumentStore<SampleData>(() => new SampleData("x", 0));
+        var a = new System.Collections.Generic.List<int>();
+        var b = new System.Collections.Generic.List<int>();
+
+        using var subA = store.AsObservable(replayCurrent: false).Subscribe(v => a.Add(v.Value));
+        using var subB = store.AsObservable(replayCurrent: false).Subscribe(v => b.Add(v.Value));
+
+        store.Update(_ => new SampleData("x", 1));
+        store.Update(_ => new SampleData("x", 2));
+
+        Assert.That(a, Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(b, Is.EqualTo(new[] { 1, 2 }));
+    }
 }

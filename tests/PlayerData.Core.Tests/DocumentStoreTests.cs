@@ -80,4 +80,60 @@ public class DocumentStoreTests
         var store = new DocumentStore<SamplePlayerData>(() => new SamplePlayerData(1, "New"));
         Assert.Throws<ArgumentNullException>(() => store.Update<int>(5, null!));
     }
+
+    [Test]
+    public void Constructor_NullFactory_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() => new DocumentStore<SamplePlayerData>(null!));
+    }
+
+    [Test]
+    public void Constructor_FactoryReturningNull_Throws()
+    {
+        Assert.Throws<InvalidOperationException>(() => new DocumentStore<SamplePlayerData>(() => null!));
+    }
+
+    [Test]
+    public void Update_UpdaterReturningNull_Throws()
+    {
+        var store = new DocumentStore<SamplePlayerData>(() => new SamplePlayerData(1, "New"));
+        Assert.Throws<InvalidOperationException>(() => store.Update(_ => null!));
+    }
+
+    [Test]
+    public void Replace_NullValue_Throws()
+    {
+        var store = new DocumentStore<SamplePlayerData>(() => new SamplePlayerData(1, "New"));
+        Assert.Throws<ArgumentNullException>(() => store.Replace(null!));
+    }
+
+    [Test]
+    public void Replace_FiresChangedWithPreviousAndCurrent()
+    {
+        var store = new DocumentStore<SamplePlayerData>(() => new SamplePlayerData(1, "New"));
+        DocChange<SamplePlayerData>? observed = null;
+        store.Changed += value => observed = value;
+
+        store.Replace(new SamplePlayerData(3, "Replaced"));
+
+        Assert.That(observed, Is.Not.Null);
+        Assert.That(observed!.Value.Previous, Is.EqualTo(new SamplePlayerData(1, "New")));
+        Assert.That(observed.Value.Current, Is.EqualTo(new SamplePlayerData(3, "Replaced")));
+        Assert.That(observed.Value.Cause, Is.EqualTo(DataChangeCause.UserWrite));
+    }
+
+    [Test]
+    public void Update_MultipleSubscribers_AllReceiveChange()
+    {
+        var store = new DocumentStore<SamplePlayerData>(() => new SamplePlayerData(1, "New"));
+        var a = 0;
+        var b = 0;
+        store.Changed += _ => a++;
+        store.Changed += _ => b++;
+
+        store.Update(p => p with { Level = 2 });
+
+        Assert.That(a, Is.EqualTo(1));
+        Assert.That(b, Is.EqualTo(1));
+    }
 }

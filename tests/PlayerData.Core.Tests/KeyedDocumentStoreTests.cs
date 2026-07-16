@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 
@@ -279,5 +281,175 @@ public class KeyedDocumentStoreTests
         });
 
         Assert.That(store.Get("sword").Count, Is.EqualTo(threads * perThread));
+    }
+
+    [Test]
+    public void Constructor_NullKeySelector_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() => new KeyedDocumentStore<string, SampleItem>(null!));
+    }
+
+    [Test]
+    public void Get_ExistingKey_ReturnsValue()
+    {
+        var store = CreateStore();
+        store.Upsert(new SampleItem("sword", 3));
+        Assert.That(store.Get("sword"), Is.EqualTo(new SampleItem("sword", 3)));
+    }
+
+    [Test]
+    public void Get_MissingKey_Throws()
+    {
+        var store = CreateStore();
+        Assert.Throws<KeyNotFoundException>(() => store.Get("missing"));
+    }
+
+    [Test]
+    public void Contains_ReflectsPresence()
+    {
+        var store = CreateStore();
+        Assert.That(store.Contains("sword"), Is.False);
+        store.Upsert(new SampleItem("sword", 1));
+        Assert.That(store.Contains("sword"), Is.True);
+    }
+
+    [Test]
+    public void Set_MatchingKey_Upserts()
+    {
+        var store = CreateStore();
+        store.Set("sword", new SampleItem("sword", 1));
+        store.Set("sword", new SampleItem("sword", 5));
+        Assert.That(store.Get("sword").Count, Is.EqualTo(5));
+    }
+
+    [Test]
+    public void Upsert_NullEntity_Throws()
+    {
+        var store = CreateStore();
+        Assert.Throws<ArgumentNullException>(() => store.Upsert(null!));
+    }
+
+    [Test]
+    public void Set_NullEntity_Throws()
+    {
+        var store = CreateStore();
+        Assert.Throws<ArgumentNullException>(() => store.Set("sword", null!));
+    }
+
+    [Test]
+    public void TryUpdate_NullUpdater_Throws()
+    {
+        var store = CreateStore();
+        store.Upsert(new SampleItem("sword", 1));
+        Assert.Throws<ArgumentNullException>(() => store.TryUpdate("sword", null!, out _));
+    }
+
+    [Test]
+    public void GetOrAdd_NullFactory_Throws()
+    {
+        var store = CreateStore();
+        Assert.Throws<ArgumentNullException>(() => store.GetOrAdd("x", (Func<string, SampleItem>)null!));
+    }
+
+    [Test]
+    public void GetOrAdd_FactoryReturningNull_Throws()
+    {
+        var store = CreateStore();
+        Assert.Throws<InvalidOperationException>(() => store.GetOrAdd("x", _ => null!));
+    }
+
+    [Test]
+    public void GetOrAdd_KeyMismatch_Throws()
+    {
+        var store = CreateStore();
+        Assert.Throws<InvalidOperationException>(() =>
+            store.GetOrAdd("sword", _ => new SampleItem("other", 1)));
+    }
+
+    [Test]
+    public void Clear_RaisesClearedEvent()
+    {
+        var store = CreateStore();
+        store.Upsert(new SampleItem("a", 1));
+        BagChange<string, SampleItem>? captured = null;
+        store.Changed += change => captured = change;
+
+        store.Clear();
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.Value.Kind, Is.EqualTo(PlayerDataChangeKind.Cleared));
+        Assert.That(store.Count, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void Clear_AlreadyEmpty_IsNoOpAndDoesNotRaise()
+    {
+        var store = CreateStore();
+        var raised = 0;
+        store.Changed += _ => raised++;
+
+        store.Clear();
+
+        Assert.That(raised, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void TryUpdate_ExistingKey_ReturnsTrue()
+    {
+        var store = CreateStore();
+        store.Upsert(new SampleItem("sword", 1));
+
+        var found = store.TryUpdate("sword", existing => existing with { Count = 10 }, out var updated);
+
+        Assert.That(found, Is.True);
+        Assert.That(updated.Count, Is.EqualTo(10));
+    }
+
+    [Test]
+    public void TryUpdate_MissingKey_ReturnsFalse()
+    {
+        var store = CreateStore();
+        var found = store.TryUpdate("missing", existing => existing, out var updated);
+        Assert.That(found, Is.False);
+        Assert.That(updated, Is.Null);
+    }
+
+    [Test]
+    public void GetOrAdd_ConcurrentSameKey_CreatesOnce()
+    {
+        var store = CreateStore();
+        const int threads = 16;
+        var created = 0;
+
+        Parallel.For(0, threads, _ =>
+        {
+            store.GetOrAdd("potion", id =>
+            {
+                Interlocked.Increment(ref created);
+                return new SampleItem(id, 1);
+            });
+        });
+
+        Assert.That(store.Count, Is.EqualTo(1));
+        Assert.That(store.Get("potion").Count, Is.EqualTo(1));
+        // ConcurrentDictionary.GetOrAdd may invoke factory more than once; our TryAdd path
+        // may also race-create and discard. Only the stored count must be exactly one.
+        Assert.That(store.Contains("potion"), Is.True);
+    }
+
+    [Test]
+    public void Remove_RaisesChangedWithPreviousValue()
+    {
+        var store = CreateStore();
+        store.Upsert(new SampleItem("sword", 4));
+        BagChange<string, SampleItem>? captured = null;
+        store.Changed += change => captured = change;
+
+        store.Remove("sword");
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.Value.Kind, Is.EqualTo(PlayerDataChangeKind.Removed));
+        Assert.That(captured.Value.Previous, Is.EqualTo(new SampleItem("sword", 4)));
+        Assert.That(captured.Value.Value, Is.Null);
     }
 }

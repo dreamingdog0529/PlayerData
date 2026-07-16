@@ -162,4 +162,84 @@ public class EncryptedSaveBackendTests
     {
         Assert.Throws<ArgumentException>(() => new EncryptedSaveBackend(new DirectorySaveBackend(_directory), string.Empty));
     }
+
+    [Test]
+    public void Constructor_NullKey_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => new EncryptedSaveBackend(new DirectorySaveBackend(_directory), (byte[])null!));
+    }
+
+    [Test]
+    public void Constructor_NullPassphrase_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => new EncryptedSaveBackend(new DirectorySaveBackend(_directory), (string)null!));
+    }
+
+    [Test]
+    public async Task ReadAsync_NoSave_ReturnsNull()
+    {
+        using var backend = new EncryptedSaveBackend(new DirectorySaveBackend(_directory), Key);
+        Assert.That(await backend.ReadAsync(), Is.Null);
+    }
+
+    [Test]
+    public async Task WriteAsync_NullBundle_Throws()
+    {
+        using var backend = new EncryptedSaveBackend(new DirectorySaveBackend(_directory), Key);
+        Assert.ThrowsAsync<ArgumentNullException>(async () => await backend.WriteAsync(null!));
+    }
+
+    [Test]
+    public async Task ReadAsync_FormatVersionTamper_ThrowsSaveTamperDetectedException()
+    {
+        // HMAC binds FormatVersion as associated data. Changing only the manifest's version
+        // must fail authentication even when ciphertext bytes are untouched.
+        using (var writer = new EncryptedSaveBackend(new DirectorySaveBackend(_directory), Key))
+        {
+            await writer.WriteAsync(new SaveBundle(1, new Dictionary<string, byte[]>
+            {
+                ["doc"] = MakePlaintext(32),
+            }));
+        }
+
+        // Rewrite manifest with a different format version while keeping document ciphertext.
+        var docs = await File.ReadAllBytesAsync(Path.Combine(_directory, "docs", "doc.bin"));
+        var inner = new DirectorySaveBackend(_directory);
+        await inner.WriteAsync(new SaveBundle(2, new Dictionary<string, byte[]> { ["doc"] = docs }));
+
+        using var reader = new EncryptedSaveBackend(new DirectorySaveBackend(_directory), Key);
+        Assert.ThrowsAsync<SaveTamperDetectedException>(async () => await reader.ReadAsync());
+    }
+
+    [Test]
+    public async Task MultiDocument_RoundTripsIndependently()
+    {
+        using var backend = new EncryptedSaveBackend(new DirectorySaveBackend(_directory), Key);
+        await backend.WriteAsync(new SaveBundle(1, new Dictionary<string, byte[]>
+        {
+            ["a"] = MakePlaintext(10),
+            ["b"] = MakePlaintext(20),
+            ["c"] = MakePlaintext(0),
+        }));
+
+        var result = await backend.ReadAsync();
+        Assert.That(result!.Documents["a"], Is.EqualTo(MakePlaintext(10)));
+        Assert.That(result.Documents["b"], Is.EqualTo(MakePlaintext(20)));
+        Assert.That(result.Documents["c"], Is.EqualTo(MakePlaintext(0)));
+    }
+
+    [Test]
+    public async Task PassphraseConstructor_WrongPassphrase_ThrowsSaveTamperDetectedException()
+    {
+        using (var writer = new EncryptedSaveBackend(new DirectorySaveBackend(_directory), "correct horse battery staple"))
+        {
+            await writer.WriteAsync(new SaveBundle(1, new Dictionary<string, byte[]>
+            {
+                ["doc"] = MakePlaintext(16),
+            }));
+        }
+
+        using var reader = new EncryptedSaveBackend(new DirectorySaveBackend(_directory), "wrong passphrase");
+        Assert.ThrowsAsync<SaveTamperDetectedException>(async () => await reader.ReadAsync());
+    }
 }

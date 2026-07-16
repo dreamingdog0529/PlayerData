@@ -187,6 +187,51 @@ public class SaveSessionTests
     }
 
     [Test]
+    public void Constructor_NullBackend_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() => new SaveSession(null!));
+    }
+
+    [Test]
+    public void AddDocument_EmptyKey_Throws()
+    {
+        var session = new SaveSession(new DirectorySaveBackend(_directory));
+        Assert.Throws<ArgumentException>(() => session.AddDocument("", () => new SamplePlayerData(1, "A")));
+        Assert.Throws<ArgumentException>(() => session.AddDocument(null!, () => new SamplePlayerData(1, "A")));
+    }
+
+    [Test]
+    public void AddDocument_NullFactory_Throws()
+    {
+        var session = new SaveSession(new DirectorySaveBackend(_directory));
+        Assert.Throws<ArgumentNullException>(() => session.AddDocument<SamplePlayerData>("player", null!));
+    }
+
+    [Test]
+    public void AddCollection_NullKeySelector_Throws()
+    {
+        var session = new SaveSession(new DirectorySaveBackend(_directory));
+        Assert.Throws<ArgumentNullException>(() => session.AddCollection<string, SampleItem>("items", null!));
+    }
+
+    [Test]
+    public void AddCollection_DuplicateKey_Throws()
+    {
+        var session = new SaveSession(new DirectorySaveBackend(_directory));
+        session.AddDocument("shared", () => new SamplePlayerData(1, "A"));
+        Assert.Throws<InvalidOperationException>(() =>
+            session.AddCollection<string, SampleItem>("shared", i => i.ItemId));
+    }
+
+    [Test]
+    public void AddValidator_Null_Throws()
+    {
+        var session = new SaveSession(new DirectorySaveBackend(_directory));
+        Assert.Throws<ArgumentNullException>(() => session.AddValidator((ISaveValidator)null!));
+        Assert.Throws<ArgumentNullException>(() => session.AddValidator((Action<ISaveSession>)null!));
+    }
+
+    [Test]
     public async Task CommitAsync_UpdateDuringCommit_RemainsDirty()
     {
         var session = CreateSession(out var player, out _);
@@ -268,6 +313,64 @@ public class SaveSessionTests
     }
 
     [Test]
+    public void SuppressNotifications_Nested_OnlyFlushesOnOuterDispose()
+    {
+        var session = CreateSession(out var player, out _);
+        var playerChanges = 0;
+        player.Changed += _ => playerChanges++;
+
+        using (session.SuppressNotifications())
+        {
+            player.Update(p => p with { Level = 2 });
+            using (session.SuppressNotifications())
+            {
+                player.Update(p => p with { Level = 3 });
+                Assert.That(playerChanges, Is.EqualTo(0));
+            }
+            // Inner dispose only drops depth; outer scope still suppresses.
+            Assert.That(playerChanges, Is.EqualTo(0));
+            player.Update(p => p with { Level = 4 });
+        }
+
+        Assert.That(playerChanges, Is.EqualTo(1));
+        Assert.That(player.Value.Level, Is.EqualTo(4));
+    }
+
+    [Test]
+    public void SuppressNotifications_DoubleDisposeOfSameScope_IsIdempotent()
+    {
+        var session = CreateSession(out var player, out _);
+        var playerChanges = 0;
+        player.Changed += _ => playerChanges++;
+
+        var scope = session.SuppressNotifications();
+        player.Update(p => p with { Level = 2 });
+        scope.Dispose();
+        Assert.That(playerChanges, Is.EqualTo(1));
+
+        scope.Dispose(); // second dispose of the same copy is a no-op
+        Assert.That(playerChanges, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void SuppressNotifications_DisposeOfCopiedScope_Throws()
+    {
+        var session = CreateSession(out _, out _);
+        var scope = session.SuppressNotifications();
+        var copy = scope;
+        scope.Dispose();
+
+        // Each copy owns the same suppress-depth token; disposing both over-closes the counter.
+        Assert.Throws<InvalidOperationException>(() => copy.Dispose());
+    }
+
+    [Test]
+    public void DefaultSuppressionScope_Dispose_IsNoOp()
+    {
+        Assert.DoesNotThrow(() => default(SuppressionScope).Dispose());
+    }
+
+    [Test]
     public void CommitAsync_ValidatorFailure_ThrowsAndDoesNotWrite()
     {
         var session = CreateSession(out var player, out _);
@@ -288,6 +391,189 @@ public class SaveSessionTests
 
         Assert.ThrowsAsync<SaveValidationException>(async () => await session.CommitAsync());
         Assert.That(File.Exists(Path.Combine(_directory, "manifest.bin")), Is.False);
+    }
+
+    [Test]
+    public void CommitAsync_CollectionIValidatableFailure_ThrowsAndDoesNotWrite()
+    {
+        var session = new SaveSession(new DirectorySaveBackend(_directory));
+        var bag = session.AddCollection<string, GuardedItem>("guarded", g => g.Id);
+        bag.Upsert(new GuardedItem("ok", 1));
+        bag.Upsert(new GuardedItem("bad", -1));
+
+        Assert.ThrowsAsync<SaveValidationException>(async () => await session.CommitAsync());
+        Assert.That(File.Exists(Path.Combine(_directory, "manifest.bin")), Is.False);
+        Assert.That(session.IsDirty, Is.True);
+    }
+
+    [Test]
+    public async Task LoadAsync_MissingDocumentKeyInSave_KeepsInitialAndStaysClean()
+    {
+        var backend = new DirectorySaveBackend(_directory);
+        var bundle = new SaveBundle(SaveSession.CurrentFormatVersion, new Dictionary<string, byte[]>
+        {
+            ["player"] = MemoryPackSerializer.Serialize(new SamplePlayerData(7, "OnlyPlayer")),
+            // intentionally no "items" entry
+        });
+        await backend.WriteAsync(bundle);
+
+        var session = CreateSession(out var player, out var items);
+        var result = await session.LoadAsync();
+
+        Assert.That(result.Found, Is.True);
+        Assert.That(player.Value, Is.EqualTo(new SamplePlayerData(7, "OnlyPlayer")));
+        Assert.That(items.Count, Is.EqualTo(0));
+        Assert.That(session.IsDirty, Is.False);
+    }
+
+    [Test]
+    public async Task LoadAsync_UnregisteredDocumentKeys_AreIgnored()
+    {
+        var backend = new DirectorySaveBackend(_directory);
+        var bundle = new SaveBundle(SaveSession.CurrentFormatVersion, new Dictionary<string, byte[]>
+        {
+            ["player"] = MemoryPackSerializer.Serialize(new SamplePlayerData(3, "P")),
+            ["items"] = MemoryPackSerializer.Serialize(new Dictionary<string, SampleItem>
+            {
+                ["sword"] = new SampleItem("sword", 1),
+            }),
+            ["future_feature"] = new byte[] { 1, 2, 3 },
+        });
+        await backend.WriteAsync(bundle);
+
+        var reader = CreateSession(out var player, out var items);
+        var result = await reader.LoadAsync();
+
+        Assert.That(result.Found, Is.True);
+        Assert.That(player.Value.Level, Is.EqualTo(3));
+        Assert.That(items.TryGet("sword", out _), Is.True);
+        Assert.That(reader.IsDirty, Is.False);
+    }
+
+    [Test]
+    public async Task CommitAsync_MultipleDirtyDocuments_RoundTrips()
+    {
+        // Exercises the parallel dirty-serialize path (dirtyCount > 1).
+        var writer = CreateSession(out var player, out var items);
+        player.Update(_ => new SamplePlayerData(11, "Multi"));
+        items.Upsert(new SampleItem("a", 1));
+        items.Upsert(new SampleItem("b", 2));
+        await writer.CommitAsync();
+
+        var reader = CreateSession(out var player2, out var items2);
+        await reader.LoadAsync();
+        Assert.That(player2.Value, Is.EqualTo(new SamplePlayerData(11, "Multi")));
+        Assert.That(items2.Snapshot.Count, Is.EqualTo(2));
+        Assert.That(items2.Get("b").Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task LoadAsync_AppliesMigrationsInOrder()
+    {
+        var backend = new DirectorySaveBackend(_directory);
+        // Version 0 save with a single document key the migration will rewrite.
+        await backend.WriteAsync(new SaveBundle(0, new Dictionary<string, byte[]>
+        {
+            ["legacy_player"] = MemoryPackSerializer.Serialize(new SamplePlayerData(9, "Legacy")),
+        }));
+
+        var migrations = new ISaveMigration[]
+        {
+            new RenameDocumentMigration(fromVersion: 0, toVersion: 1, fromKey: "legacy_player", toKey: "player"),
+        };
+        var session = new SaveSession(backend, migrations);
+        var player = session.AddDocument("player", () => new SamplePlayerData(1, "New"));
+
+        var result = await session.LoadAsync();
+
+        Assert.That(result.Found, Is.True);
+        Assert.That(result.FormatVersion, Is.EqualTo(1));
+        Assert.That(player.Value, Is.EqualTo(new SamplePlayerData(9, "Legacy")));
+    }
+
+    [Test]
+    public async Task LoadAsync_FutureFormatVersion_Throws()
+    {
+        var backend = new DirectorySaveBackend(_directory);
+        await backend.WriteAsync(new SaveBundle(SaveSession.CurrentFormatVersion + 1, new Dictionary<string, byte[]>
+        {
+            ["player"] = MemoryPackSerializer.Serialize(new SamplePlayerData(1, "X")),
+        }));
+
+        var session = CreateSession(out _, out _);
+        Assert.ThrowsAsync<InvalidDataException>(async () => await session.LoadAsync());
+    }
+
+    [Test]
+    public async Task LoadAsync_MissingMigration_Throws()
+    {
+        var backend = new DirectorySaveBackend(_directory);
+        await backend.WriteAsync(new SaveBundle(0, new Dictionary<string, byte[]>
+        {
+            ["player"] = MemoryPackSerializer.Serialize(new SamplePlayerData(1, "X")),
+        }));
+
+        // No migrations registered for version 0 → 1.
+        var session = CreateSession(out _, out _);
+        Assert.ThrowsAsync<InvalidDataException>(async () => await session.LoadAsync());
+    }
+
+    [Test]
+    public async Task LoadAsync_MigrationReturningNull_Throws()
+    {
+        var backend = new DirectorySaveBackend(_directory);
+        await backend.WriteAsync(new SaveBundle(0, new Dictionary<string, byte[]>
+        {
+            ["player"] = MemoryPackSerializer.Serialize(new SamplePlayerData(1, "X")),
+        }));
+
+        var session = new SaveSession(backend, new[] { new NullMigration(0, 1) });
+        session.AddDocument("player", () => new SamplePlayerData(1, "New"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await session.LoadAsync());
+    }
+
+    [Test]
+    public async Task LoadAsync_MigrationWrongToVersion_Throws()
+    {
+        var backend = new DirectorySaveBackend(_directory);
+        await backend.WriteAsync(new SaveBundle(0, new Dictionary<string, byte[]>
+        {
+            ["player"] = MemoryPackSerializer.Serialize(new SamplePlayerData(1, "X")),
+        }));
+
+        var session = new SaveSession(backend, new[] { new WrongVersionMigration(0, 1) });
+        session.AddDocument("player", () => new SamplePlayerData(1, "New"));
+        Assert.ThrowsAsync<InvalidOperationException>(async () => await session.LoadAsync());
+    }
+
+    [Test]
+    public async Task CommitAsync_AfterLoad_ThenModify_OnlyNewChangesAreDirty()
+    {
+        var writer = CreateSession(out var player, out var items);
+        player.Update(_ => new SamplePlayerData(5, "A"));
+        items.Upsert(new SampleItem("sword", 1));
+        await writer.CommitAsync();
+
+        var session = CreateSession(out var player2, out var items2);
+        await session.LoadAsync();
+        Assert.That(session.IsDirty, Is.False);
+
+        items2.Upsert(new SampleItem("sword", 9));
+        Assert.That(session.IsDirty, Is.True);
+        await session.CommitAsync();
+        Assert.That(session.IsDirty, Is.False);
+
+        var reader = CreateSession(out var player3, out var items3);
+        await reader.LoadAsync();
+        Assert.That(player3.Value.Level, Is.EqualTo(5));
+        Assert.That(items3.Get("sword").Count, Is.EqualTo(9));
+    }
+
+    [Test]
+    public async Task DisposeAsync_Completes()
+    {
+        var session = CreateSession(out _, out _);
+        await session.DisposeAsync();
     }
 
     // Coverage gap identified when KeyedDocumentStore moved from ImmutableDictionary (frozen
@@ -382,6 +668,81 @@ public class SaveSessionTests
             if (Value < 0)
                 throw new SaveValidationException("Value must be non-negative.");
         }
+    }
+
+    private sealed class GuardedItem : IValidatable
+    {
+        public GuardedItem(string id, int value)
+        {
+            Id = id;
+            Value = value;
+        }
+
+        public string Id { get; }
+        public int Value { get; }
+
+        public void Validate()
+        {
+            if (Value < 0)
+                throw new SaveValidationException("Item value must be non-negative.");
+        }
+    }
+
+    private sealed class RenameDocumentMigration : ISaveMigration
+    {
+        private readonly string _fromKey;
+        private readonly string _toKey;
+
+        public RenameDocumentMigration(int fromVersion, int toVersion, string fromKey, string toKey)
+        {
+            FromVersion = fromVersion;
+            ToVersion = toVersion;
+            _fromKey = fromKey;
+            _toKey = toKey;
+        }
+
+        public int FromVersion { get; }
+        public int ToVersion { get; }
+
+        public SaveBundle Migrate(SaveBundle bundle)
+        {
+            var docs = new Dictionary<string, byte[]>(bundle.Documents);
+            if (docs.TryGetValue(_fromKey, out var bytes))
+            {
+                docs.Remove(_fromKey);
+                docs[_toKey] = bytes;
+            }
+            return new SaveBundle(ToVersion, docs);
+        }
+    }
+
+    private sealed class NullMigration : ISaveMigration
+    {
+        public NullMigration(int fromVersion, int toVersion)
+        {
+            FromVersion = fromVersion;
+            ToVersion = toVersion;
+        }
+
+        public int FromVersion { get; }
+        public int ToVersion { get; }
+        public SaveBundle Migrate(SaveBundle bundle) => null!;
+    }
+
+    private sealed class WrongVersionMigration : ISaveMigration
+    {
+        public WrongVersionMigration(int fromVersion, int toVersion)
+        {
+            FromVersion = fromVersion;
+            ToVersion = toVersion;
+        }
+
+        public int FromVersion { get; }
+        public int ToVersion { get; }
+
+        public SaveBundle Migrate(SaveBundle bundle) =>
+            // Claims ToVersion but leaves the bundle's FormatVersion unchanged.
+            new SaveBundle(FromVersion, new Dictionary<string, byte[]>(bundle.Documents));
     }
 }
 
