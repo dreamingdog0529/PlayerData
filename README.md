@@ -360,7 +360,7 @@ Extension Packages
 | [PlayerData.VitalRouter](src/PlayerData.VitalRouter/) | VitalRouter commands |
 | [PlayerData.MessagePipe](src/PlayerData.MessagePipe/) | MessagePipe publish |
 | [PlayerData.Unity](src/PlayerData.Unity/Assets/PlayerData.Unity/) | `UnitySaveBackend` / `PlayerDataAutoSave` (UPM) |
-| [PlayerData.Unity.VContainer](src/PlayerData.Unity/Assets/PlayerData.Unity.VContainer/) | `RegisterPlayerDataSession` (UPM, optional) |
+| [PlayerData.Unity.VContainer](src/PlayerData.Unity/Assets/External/PlayerData.Unity.VContainer/) | `RegisterPlayerDataSession` (UPM, optional) |
 
 ### R3
 
@@ -412,7 +412,7 @@ Add **both** PlayerData packages (plus VContainer itself) to `Packages/manifest.
 
 ```json
 "com.dreamingdog0529.playerdata": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity",
-"com.dreamingdog0529.playerdata.vcontainer": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity.VContainer",
+"com.dreamingdog0529.playerdata.vcontainer": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/External/PlayerData.Unity.VContainer",
 "jp.hadashikick.vcontainer": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer#1.16.8"
 ```
 
