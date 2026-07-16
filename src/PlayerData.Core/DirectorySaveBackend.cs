@@ -135,19 +135,24 @@ public sealed class DirectorySaveBackend : ISaveBackend
 
     private string DocumentPath(string key) => Path.Combine(_root, "docs", ToFileName(key));
 
-    // Path.GetInvalidFileNameChars() allocates a fresh array on every call and was linearly
-    // scanned per character; every invalid char it returns is ASCII on all supported platforms
-    // ('\0' and '/' on Unix; control chars plus <>:"/\|?* on Windows), so a 128-entry bitmap
-    // (with '.' folded in, per the escaping rule below) answers each character in O(1).
+    // Portable invalid-filename set (union of Unix and Windows Path.GetInvalidFileNameChars),
+    // with '.' folded in so a key cannot collide with the ".bin" extension rule below. The host
+    // API is OS-specific - Unix only reports '\0' and '/', so backslash and Windows-reserved
+    // characters would otherwise survive into file names, break the EscapesPathSeparators test
+    // on Linux, and make on-disk layouts non-portable. A 128-entry bitmap answers each character
+    // in O(1) without allocating or scanning Path.GetInvalidFileNameChars() per key.
     private static readonly bool[] InvalidFileNameCharMap = BuildInvalidFileNameCharMap();
 
     private static bool[] BuildInvalidFileNameCharMap()
     {
         var map = new bool[128];
-        foreach (var c in Path.GetInvalidFileNameChars())
-        {
-            if (c < 128) map[c] = true;
-        }
+        // C0 controls are invalid on Windows and include '\0' (invalid everywhere).
+        for (var c = 0; c < 32; c++)
+            map[c] = true;
+        // Both path separators (backslash is a legal file-name char on Unix) plus the rest of
+        // the Windows-reserved set, so generated names are safe on every supported host.
+        foreach (var c in "<>:\"/\\|?*")
+            map[c] = true;
         map['.'] = true;
         return map;
     }
