@@ -167,7 +167,9 @@ public class SaveSessionTests
             var store = session.AddDocument("player", () => new SamplePlayerData(1, "X"));
             store.Update(p => p with { Level = 2 });
 
-            Assert.ThrowsAsync<IOException>(async () => await session.CommitAsync());
+            // Windows surfaces the blocking file as IOException, Linux as its subclass
+            // DirectoryNotFoundException (ENOTDIR) - accept the whole IOException family.
+            Assert.CatchAsync<IOException>(async () => await session.CommitAsync());
         }
         finally
         {
