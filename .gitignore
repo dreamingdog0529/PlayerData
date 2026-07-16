@@ -17,3 +17,15 @@ spike/
 # IDE
 .vs/
 .idea/
+.vscode/
+
+# Unity generated (src/PlayerData.Unity is a Unity project)
+src/PlayerData.Unity/Library/
+src/PlayerData.Unity/Temp/
+src/PlayerData.Unity/Logs/
+src/PlayerData.Unity/UserSettings/
+src/PlayerData.Unity/Build/
+src/PlayerData.Unity/*.sln
+src/PlayerData.Unity/*.slnx
+src/PlayerData.Unity/*.csproj
+src/PlayerData.Unity/Assets/AssetStoreTools*

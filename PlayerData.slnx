@@ -1,14 +1,20 @@
 <Solution>
-  <Project Path="PlayerData.Benchmarks/PlayerData.Benchmarks.csproj" />
-  <Project Path="PlayerData.Core.Tests/PlayerData.Core.Tests.csproj" />
-  <Project Path="PlayerData.Core/PlayerData.Core.csproj" />
-  <Project Path="PlayerData.MessagePipe.Tests/PlayerData.MessagePipe.Tests.csproj" />
-  <Project Path="PlayerData.MessagePipe/PlayerData.MessagePipe.csproj" />
-  <Project Path="PlayerData.R3.Tests/PlayerData.R3.Tests.csproj" />
-  <Project Path="PlayerData.R3/PlayerData.R3.csproj" />
-  <Project Path="PlayerData.SourceGenerator.IntegrationTests/PlayerData.SourceGenerator.IntegrationTests.csproj" />
-  <Project Path="PlayerData.SourceGenerator.Tests/PlayerData.SourceGenerator.Tests.csproj" />
-  <Project Path="PlayerData.SourceGenerator/PlayerData.SourceGenerator.csproj" />
-  <Project Path="PlayerData.VitalRouter.Tests/PlayerData.VitalRouter.Tests.csproj" />
-  <Project Path="PlayerData.VitalRouter/PlayerData.VitalRouter.csproj" />
+  <Folder Name="/src/">
+    <Project Path="src/PlayerData.Core/PlayerData.Core.csproj" />
+    <Project Path="src/PlayerData.MessagePipe/PlayerData.MessagePipe.csproj" />
+    <Project Path="src/PlayerData.R3/PlayerData.R3.csproj" />
+    <Project Path="src/PlayerData.SourceGenerator/PlayerData.SourceGenerator.csproj" />
+    <Project Path="src/PlayerData.VitalRouter/PlayerData.VitalRouter.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PlayerData.Core.Tests/PlayerData.Core.Tests.csproj" />
+    <Project Path="tests/PlayerData.MessagePipe.Tests/PlayerData.MessagePipe.Tests.csproj" />
+    <Project Path="tests/PlayerData.R3.Tests/PlayerData.R3.Tests.csproj" />
+    <Project Path="tests/PlayerData.SourceGenerator.IntegrationTests/PlayerData.SourceGenerator.IntegrationTests.csproj" />
+    <Project Path="tests/PlayerData.SourceGenerator.Tests/PlayerData.SourceGenerator.Tests.csproj" />
+    <Project Path="tests/PlayerData.VitalRouter.Tests/PlayerData.VitalRouter.Tests.csproj" />
+  </Folder>
+  <Folder Name="/sandbox/">
+    <Project Path="sandbox/PlayerData.Benchmarks/PlayerData.Benchmarks.csproj" />
+  </Folder>
 </Solution>

@@ -1,0 +1,26 @@
+name: Build-Debug
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build-dotnet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      # PlayerData.SourceGenerator.IntegrationTests consumes the packed
+      # PlayerData.Core nupkg from the local feed (../.local-feed, see nuget.config),
+      # so pack Core into the feed before restoring the full solution.
+      - run: mkdir -p ../.local-feed
+      - run: dotnet build src/PlayerData.Core/PlayerData.Core.csproj -c Debug
+      - run: dotnet build PlayerData.slnx -c Debug
+      - run: dotnet test PlayerData.slnx -c Debug --no-build

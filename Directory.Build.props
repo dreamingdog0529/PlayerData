@@ -1,0 +1,19 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- NuGet Packaging -->
+    <Authors>dreamingdog0529</Authors>
+    <PackageProjectUrl>https://github.com/dreamingdog0529/PlayerData</PackageProjectUrl>
+    <RepositoryUrl>$(PackageProjectUrl)</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Packed nupkgs go to the local feed one level above the repo (see nuget.config). -->
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\.local-feed</PackageOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
