@@ -248,6 +248,7 @@ Save Backends
 | `UnitySaveBackend` | Under `Application.persistentDataPath` |
 | `EncryptedSaveBackend` | Wraps another `ISaveBackend`; AES-256-CBC + HMAC-SHA256 |
 | `ObfuscatedSaveBackend` | Wraps another `ISaveBackend`; fixed XOR, not a security feature |
+| `CompressedSaveBackend` | Wraps another `ISaveBackend`; Deflate compression per document |
 | Custom | `ISaveBackend` |
 
 Save slots:
@@ -267,9 +268,9 @@ public interface ISaveBackend
 }
 ```
 
-### Encryption & Obfuscation
+### Encryption, Obfuscation & Compression
 
-Both wrap any `ISaveBackend` and transform each document's bytes on write/read; nothing about `SaveSession` / `IDoc` / `IBag` changes.
+These wrap any `ISaveBackend` and transform each document's bytes on write/read; nothing about `SaveSession` / `IDoc` / `IBag` changes.
 
 ```csharp
 // Real confidentiality + tamper detection (AES-256-CBC + HMAC-SHA256, Encrypt-then-MAC).
@@ -282,12 +283,26 @@ await using var save = await GameSave.OpenAsync(backend);
 var backend = new ObfuscatedSaveBackend(new DirectorySaveBackend(path));
 ```
 
-| | `EncryptedSaveBackend` | `ObfuscatedSaveBackend` |
-| --- | --- | --- |
-| Key | `byte[]` or `string` passphrase, caller-supplied | None |
-| Confidentiality | Yes (AES-256-CBC) | No — reversible without any secret |
-| Tamper detection | Yes (`SaveTamperDetectedException` on mismatch) | No |
-| Use when | Real protection against save editing or data extraction is required | You just don't want plain values visible in a hex/text editor |
+```csharp
+// Smaller on-disk documents (raw Deflate). Optional CompressionLevel; default is Optimal.
+var backend = new CompressedSaveBackend(new DirectorySaveBackend(path));
+// var backend = new CompressedSaveBackend(inner, CompressionLevel.Fastest);
+```
+
+When combining compression with encryption, **compress first, then encrypt** so the compressor sees structured plaintext (ciphertext does not compress well):
+
+```csharp
+var backend = new EncryptedSaveBackend(
+    new CompressedSaveBackend(new DirectorySaveBackend(path)),
+    key);
+```
+
+| | `EncryptedSaveBackend` | `ObfuscatedSaveBackend` | `CompressedSaveBackend` |
+| --- | --- | --- | --- |
+| Key | `byte[]` or `string` passphrase, caller-supplied | None | None |
+| Confidentiality | Yes (AES-256-CBC) | No — reversible without any secret | No |
+| Tamper detection | Yes (`SaveTamperDetectedException` on mismatch) | No | No (corrupt payload → `InvalidDataException`) |
+| Use when | Real protection against save editing or data extraction is required | You just don't want plain values visible in a hex/text editor | You want smaller save files |
 
 Key/passphrase generation, storage, and rotation are the caller's responsibility; `PlayerData.Core` never persists or manages them. Only each document's byte value is transformed — document keys and `DirectorySaveBackend`'s `manifest.bin` / file names stay in plaintext (so a document's type name may still be inferable from its file name; `EncryptedSaveBackend` does bind the document key into its HMAC, so swapping ciphertext between documents is still detected). Unity + VContainer: pass `wrapBackend` to `RegisterPlayerDataSession` (see [VContainer](#vcontainer)).
 

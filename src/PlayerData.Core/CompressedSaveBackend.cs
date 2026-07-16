@@ -1,0 +1,148 @@
+using System;
+using System.Buffers.Binary;
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace PlayerData;
+
+// Wraps an ISaveBackend to compress each document's bytes with Deflate (raw DEFLATE, no
+// GZip/zlib header). This is a size optimization only: it provides no confidentiality or
+// integrity. Stack with EncryptedSaveBackend when those are required, and compress first so
+// the ciphertext is not fed into the compressor (e.g. EncryptedSaveBackend(Compressed(...))).
+//
+// Payload layout per document: [FormatTag(1)] [UncompressedLength(LE u32)] [deflate body].
+// Storing the original length lets Decompress allocate the exact output buffer once.
+public sealed class CompressedSaveBackend : ISaveBackend
+{
+    private const byte FormatTag = 0x01;
+    private const int HeaderSize = 1 + 4; // FormatTag + UncompressedLength
+    private const int MaxUncompressedLength = 512 * 1024 * 1024; // 512 MiB safety cap
+
+    private readonly ISaveBackend _inner;
+    private readonly CompressionLevel _compressionLevel;
+
+    // Write-path transformed-document dictionary, recycled between writes via the same
+    // Interlocked.Exchange handoff the other wrapper backends use: at most one in-flight
+    // write holds it, a concurrent write just allocates fresh, and it is only recycled after
+    // the inner WriteAsync completed. Dropped, not recycled, when the write throws.
+    private Dictionary<string, byte[]>? _writeScratch;
+
+    public CompressedSaveBackend(ISaveBackend inner)
+        : this(inner, CompressionLevel.Optimal)
+    {
+    }
+
+    public CompressedSaveBackend(ISaveBackend inner, CompressionLevel compressionLevel)
+    {
+        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        if (compressionLevel is < CompressionLevel.Optimal or > CompressionLevel.NoCompression)
+            throw new ArgumentOutOfRangeException(nameof(compressionLevel));
+        _compressionLevel = compressionLevel;
+    }
+
+    public async ValueTask<SaveBundle?> ReadAsync(CancellationToken cancellationToken = default)
+    {
+        var bundle = await _inner.ReadAsync(cancellationToken).ConfigureAwait(false);
+        if (bundle is null) return null;
+
+        var documents = new Dictionary<string, byte[]>(bundle.Documents.Count);
+        foreach (var pair in bundle.Documents)
+            documents[pair.Key] = Decompress(pair.Key, pair.Value);
+
+        return new SaveBundle(bundle.FormatVersion, documents);
+    }
+
+    public async ValueTask WriteAsync(SaveBundle bundle, CancellationToken cancellationToken = default)
+    {
+        if (bundle is null) throw new ArgumentNullException(nameof(bundle));
+
+        // The input arrays are the caller's (SaveSession caches them as clean-state bytes), so
+        // the write path must compress into fresh arrays - only the dictionary is recycled.
+        var documents = Interlocked.Exchange(ref _writeScratch, null)
+            ?? new Dictionary<string, byte[]>(bundle.Documents.Count);
+        foreach (var pair in bundle.Documents)
+            documents[pair.Key] = Compress(pair.Value);
+
+        await _inner.WriteAsync(new SaveBundle(bundle.FormatVersion, documents), cancellationToken).ConfigureAwait(false);
+
+        documents.Clear();
+        Volatile.Write(ref _writeScratch, documents);
+    }
+
+    // Builds [FormatTag][UncompressedLength][deflate body]. Empty input still gets a valid
+    // header with length 0 and an empty deflate body (DeflateStream with no writes produces
+    // no trailer data when left incomplete... we flush via Dispose of the stream).
+    internal byte[] Compress(byte[] plaintext)
+    {
+        if (plaintext is null) throw new ArgumentNullException(nameof(plaintext));
+        if ((uint)plaintext.Length > MaxUncompressedLength)
+            throw new ArgumentOutOfRangeException(nameof(plaintext), plaintext.Length,
+                $"Plaintext length must be between 0 and {MaxUncompressedLength} bytes.");
+
+        using var output = new MemoryStream(HeaderSize + Math.Max(plaintext.Length / 4, 16));
+        output.WriteByte(FormatTag);
+        Span<byte> lengthBytes = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32LittleEndian(lengthBytes, (uint)plaintext.Length);
+        output.Write(lengthBytes);
+
+        if (plaintext.Length > 0)
+        {
+            using (var deflate = new DeflateStream(output, _compressionLevel, leaveOpen: true))
+                deflate.Write(plaintext, 0, plaintext.Length);
+        }
+
+        return output.ToArray();
+    }
+
+    internal static byte[] Decompress(string documentKey, byte[] payload)
+    {
+        if (payload is null) throw new ArgumentNullException(nameof(payload));
+        if (payload.Length < HeaderSize)
+            throw new InvalidDataException(
+                $"Compressed document '{documentKey}' payload is too short ({payload.Length} bytes, minimum {HeaderSize}).");
+        if (payload[0] != FormatTag)
+            throw new InvalidDataException(
+                $"Compressed document '{documentKey}' has an unrecognized format tag (0x{payload[0]:X2}).");
+
+        var uncompressedLength = BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(1, 4));
+        if (uncompressedLength > MaxUncompressedLength)
+            throw new InvalidDataException(
+                $"Compressed document '{documentKey}' claims an uncompressed length of {uncompressedLength} bytes, which exceeds the {MaxUncompressedLength}-byte safety cap.");
+
+        var result = new byte[uncompressedLength];
+        if (uncompressedLength == 0)
+        {
+            // Length 0 payloads must not carry a deflate body; anything else is corrupt.
+            if (payload.Length != HeaderSize)
+                throw new InvalidDataException(
+                    $"Compressed document '{documentKey}' has uncompressed length 0 but carries {payload.Length - HeaderSize} trailing bytes.");
+            return result;
+        }
+
+        using var input = new MemoryStream(payload, HeaderSize, payload.Length - HeaderSize, writable: false);
+        using var deflate = new DeflateStream(input, CompressionMode.Decompress);
+        var totalRead = 0;
+        while (totalRead < result.Length)
+        {
+            var n = deflate.Read(result, totalRead, result.Length - totalRead);
+            if (n == 0) break;
+            totalRead += n;
+        }
+
+        if (totalRead != result.Length)
+            throw new InvalidDataException(
+                $"Compressed document '{documentKey}' inflated to {totalRead} bytes, expected {result.Length}.");
+
+        // Ensure the stream is fully consumed: extra inflated bytes would mean the stored
+        // length was wrong or the payload was concatenated with foreign data.
+        Span<byte> overflow = stackalloc byte[1];
+        if (deflate.Read(overflow) != 0)
+            throw new InvalidDataException(
+                $"Compressed document '{documentKey}' produced more than the declared {result.Length} uncompressed bytes.");
+
+        return result;
+    }
+}

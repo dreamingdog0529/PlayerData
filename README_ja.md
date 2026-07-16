@@ -248,6 +248,7 @@ public partial class GameSave { }
 | `UnitySaveBackend` | `Application.persistentDataPath` 下（Unity パッケージ） |
 | `EncryptedSaveBackend` | 他の `ISaveBackend` をラップ。AES-256-CBC + HMAC-SHA256 |
 | `ObfuscatedSaveBackend` | 他の `ISaveBackend` をラップ。固定XOR、セキュリティ機能ではない |
+| `CompressedSaveBackend` | 他の `ISaveBackend` をラップ。ドキュメント単位の Deflate 圧縮 |
 | カスタム | `ISaveBackend` |
 
 セーブスロット:
@@ -267,9 +268,9 @@ public interface ISaveBackend
 }
 ```
 
-### 暗号化と難読化
+### 暗号化・難読化・圧縮
 
-どちらも任意の `ISaveBackend` をラップし、書き込み/読み込み時に各ドキュメントのバイト列を変換します。`SaveSession` / `IDoc` / `IBag` 側は一切変わりません。
+いずれも任意の `ISaveBackend` をラップし、書き込み/読み込み時に各ドキュメントのバイト列を変換します。`SaveSession` / `IDoc` / `IBag` 側は一切変わりません。
 
 ```csharp
 // 本格的な機密性 + 改ざん検知(AES-256-CBC + HMAC-SHA256、Encrypt-then-MAC)。
@@ -282,12 +283,26 @@ await using var save = await GameSave.OpenAsync(backend);
 var backend = new ObfuscatedSaveBackend(new DirectorySaveBackend(path));
 ```
 
-| | `EncryptedSaveBackend` | `ObfuscatedSaveBackend` |
-| --- | --- | --- |
-| 鍵 | `byte[]` または `string` passphrase(呼び出し側が用意) | なし |
-| 機密性 | あり(AES-256-CBC) | なし — 秘密なしで誰でも復元可能 |
-| 改ざん検知 | あり(不一致時 `SaveTamperDetectedException`) | なし |
-| 使いどころ | セーブ改変やデータ抽出への本格的な防御が必要なとき | 平文の値がテキスト/16進エディタでそのまま見えなければ十分なとき |
+```csharp
+// ディスク上のドキュメントを小さくする(raw Deflate)。CompressionLevel は任意、既定は Optimal。
+var backend = new CompressedSaveBackend(new DirectorySaveBackend(path));
+// var backend = new CompressedSaveBackend(inner, CompressionLevel.Fastest);
+```
+
+圧縮と暗号化を併用する場合は、**先に圧縮してから暗号化する**のが推奨です(暗号文はエントロピーが高く圧縮しにくいため)。
+
+```csharp
+var backend = new EncryptedSaveBackend(
+    new CompressedSaveBackend(new DirectorySaveBackend(path)),
+    key);
+```
+
+| | `EncryptedSaveBackend` | `ObfuscatedSaveBackend` | `CompressedSaveBackend` |
+| --- | --- | --- | --- |
+| 鍵 | `byte[]` または `string` passphrase(呼び出し側が用意) | なし | なし |
+| 機密性 | あり(AES-256-CBC) | なし — 秘密なしで誰でも復元可能 | なし |
+| 改ざん検知 | あり(不一致時 `SaveTamperDetectedException`) | なし | なし(破損時は `InvalidDataException`) |
+| 使いどころ | セーブ改変やデータ抽出への本格的な防御が必要なとき | 平文の値がテキスト/16進エディタでそのまま見えなければ十分なとき | セーブファイルを小さくしたいとき |
 
 鍵/パスフレーズの生成・保存・ローテーションは呼び出し側の責務であり、`PlayerData.Core` は一切保持・管理しません。変換対象は各ドキュメントのバイト値のみで、ドキュメントキーや `DirectorySaveBackend` の `manifest.bin`・ファイル名は平文のまま残ります(そのためファイル名からドキュメントの型名が推測できる可能性があります。ただし `EncryptedSaveBackend` はドキュメントキーをHMACに束縛しているため、ドキュメント間での暗号文の入れ替えは検知されます)。Unity + VContainer では `RegisterPlayerDataSession` に `wrapBackend` を渡します([VContainer](#vcontainer)参照)。
 
