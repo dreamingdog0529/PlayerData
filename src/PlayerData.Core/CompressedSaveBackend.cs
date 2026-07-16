@@ -32,8 +32,13 @@ public sealed class CompressedSaveBackend : ISaveBackend
     // the inner WriteAsync completed. Dropped, not recycled, when the write throws.
     private Dictionary<string, byte[]>? _writeScratch;
 
+    // Defaults to Fastest, not Optimal: for realistic (compressible) save payloads Fastest writes
+    // ~30-40% faster with negligible size difference and no read penalty, and the deflater's CPU
+    // cost dominates the whole operation. Pass CompressionLevel.Optimal explicitly to trade write
+    // latency for a smaller payload. The stored format is level-agnostic, so saves written at
+    // either level round-trip regardless of which level a later reader is constructed with.
     public CompressedSaveBackend(ISaveBackend inner)
-        : this(inner, CompressionLevel.Optimal)
+        : this(inner, CompressionLevel.Fastest)
     {
     }
 

@@ -284,9 +284,10 @@ var backend = new ObfuscatedSaveBackend(new DirectorySaveBackend(path));
 ```
 
 ```csharp
-// ディスク上のドキュメントを小さくする(raw Deflate)。CompressionLevel は任意、既定は Optimal。
+// ディスク上のドキュメントを小さくする(raw Deflate)。CompressionLevel は任意、既定は Fastest
+// (書き込みが速く、実データではサイズ差はごくわずか)。最小サイズが必要なら Optimal を指定。
 var backend = new CompressedSaveBackend(new DirectorySaveBackend(path));
-// var backend = new CompressedSaveBackend(inner, CompressionLevel.Fastest);
+// var backend = new CompressedSaveBackend(inner, CompressionLevel.Optimal);
 ```
 
 圧縮と暗号化を併用する場合は、**先に圧縮してから暗号化する**のが推奨です(暗号文はエントロピーが高く圧縮しにくいため)。

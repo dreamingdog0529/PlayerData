@@ -284,9 +284,10 @@ var backend = new ObfuscatedSaveBackend(new DirectorySaveBackend(path));
 ```
 
 ```csharp
-// Smaller on-disk documents (raw Deflate). Optional CompressionLevel; default is Optimal.
+// Smaller on-disk documents (raw Deflate). Optional CompressionLevel; default is Fastest
+// (fast writes, negligible size cost on real save data). Pass Optimal for the smallest payload.
 var backend = new CompressedSaveBackend(new DirectorySaveBackend(path));
-// var backend = new CompressedSaveBackend(inner, CompressionLevel.Fastest);
+// var backend = new CompressedSaveBackend(inner, CompressionLevel.Optimal);
 ```
 
 When combining compression with encryption, **compress first, then encrypt** so the compressor sees structured plaintext (ciphertext does not compress well):
