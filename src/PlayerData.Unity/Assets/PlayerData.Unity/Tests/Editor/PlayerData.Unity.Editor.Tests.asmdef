@@ -1,0 +1,29 @@
+{
+    "name": "PlayerData.Unity.Editor.Tests",
+    "rootNamespace": "PlayerData.Unity.Editor.Tests",
+    "references": [
+        "PlayerData.Unity",
+        "PlayerData.Unity.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "PlayerData.Core.dll",
+        "MemoryPack.Core.dll",
+        "System.Collections.Immutable.dll",
+        "Newtonsoft.Json.dll",
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

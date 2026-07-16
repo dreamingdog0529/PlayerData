@@ -19,6 +19,11 @@ spike/
 .idea/
 .vscode/
 
+# NuGetForUnity restored packages (binaries are local-only; restore via
+# `nugetforunity restore src/PlayerData.Unity` — packages.config/NuGet.config are committed)
+src/PlayerData.Unity/Assets/Packages/
+src/PlayerData.Unity/Assets/Packages.meta
+
 # Unity generated (src/PlayerData.Unity is a Unity project)
 src/PlayerData.Unity/Library/
 src/PlayerData.Unity/Temp/

@@ -1,0 +1,23 @@
+{
+    "name": "PlayerData.Unity.Editor",
+    "rootNamespace": "PlayerData.Unity.Editor",
+    "references": [
+        "PlayerData.Unity"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "PlayerData.Core.dll",
+        "MemoryPack.Core.dll",
+        "System.Collections.Immutable.dll",
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
