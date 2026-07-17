@@ -407,15 +407,46 @@ auto.Bind(save); // dirty only; concurrent commits gated
 
 ### Save Data Viewer (Editor)
 
-`Window > PlayerData > Data Viewer` opens an editor window for inspecting and editing saved data (`DirectorySaveBackend` layout, `slot_{n}` included) without entering play mode: pick your `[PlayerDataSession]` type, set the root path (defaults to `Application.persistentDataPath`), **Scan**, then select a save and a document to view it as JSON. Edit the JSON and press **Apply** to write it back.
+`Window > PlayerData > Data Viewer` opens an editor window for inspecting and editing save data. The **Source** dropdown selects where the data comes from: **Disk** (the default) reads save files, and any registered live session (below) edits the running game directly.
+
+**Disk** shows saved data (`DirectorySaveBackend` layout, `slot_{n}` included) without entering play mode: pick your `[PlayerDataSession]` type, set the root path (defaults to `Application.persistentDataPath`), **Scan**, then select a save and a document. **Open Folder** reveals the selected save's directory (or the scan root) in the OS file browser.
+
+**Live sessions** are opt-in — register your session and it appears in the **Source** dropdown during play mode:
+
+```csharp
+await using var save = await GameSave.OpenAsync(backend);
+
+// Safe without #if UNITY_EDITOR: in player builds Register stores nothing and
+// returns a shared no-op token, so game code pays zero overhead.
+IDisposable viewerToken = LiveSessionRegistry.Register("Main Save", save);
+
+// On teardown, alongside closing the session:
+viewerToken.Dispose();
+```
+
+Live mode lists the session's documents — single docs and collections. Collections get an entry list with **Add Entry** / **Remove Entry** plus per-entry JSON editing. All edits go through the session's own APIs (`IDoc<T>.Replace`, `IBag<TKey,T>.Set/Upsert/Remove`), so the game receives them as ordinary `Changed` events (`DataChangeCause.UserWrite`). The display auto-refreshes (throttled to roughly twice a second) while the game mutates data, but never overwrites your unapplied edits — a stale hint appears instead until you **Apply** or **Revert**. Stopping play mode removes all live sources and the viewer falls back to **Disk**.
+
+The selected document is edited on two tabs. **Fields** (the default) builds type-aware inline editors for the document's top-level members; the **JSON** tab edits the whole payload as text. Disk collection payloads are JSON-tab only.
+
+| Member type | Fields editor |
+| --- | --- |
+| `bool` | Toggle |
+| `string` | Text field |
+| Numeric (`int`, `float`, `decimal`, …) | Validated text — invalid input turns red and blocks Apply |
+| Enum | Dropdown |
+| Anything else (nested objects, lists, `DateTime`, nullable, …) | Read-only preview with an "Edit via JSON tab" hint |
+
+The **Search** field filters the document list by case-insensitive substring over storage key / property name / type name. Unapplied changes show as a trailing `*` in the info label; **Apply** / **Revert** are enabled only while there are unapplied changes.
 
 Safety rules:
 
-- A document is editable only when its `bytes → JSON → bytes` round-trip reproduces the payload exactly; documents that JSON cannot represent losslessly (e.g. written by a newer schema) are view-only.
+- A disk document is editable only when its `bytes → JSON → bytes` round-trip reproduces the payload exactly; documents that JSON cannot represent losslessly (e.g. written by a newer schema) are view-only.
 - Encrypted / obfuscated saves cannot be decoded by the viewer and show as *unreadable*. Unknown keys are preserved untouched on write-back.
 - Saves whose `FormatVersion` differs from the current one are view-only — run your migrations in game code first.
-- Applying during play mode asks for confirmation; a live session's next commit wins over your edit.
-- **Applied edits overwrite the save file immediately and cannot be undone.**
+- Applying to disk during play mode asks for confirmation; a live session's next commit wins over your edit.
+- **Applied edits take effect immediately and cannot be undone** — on disk they overwrite the save file; in live mode they mutate the running game's state.
+- The key of an existing collection entry cannot be changed by editing the entry (rejected with an error) — use **Add Entry** / **Remove Entry** instead.
+- Live documents whose values cannot round-trip through JSON are view-only, with the reason shown in the info label.
 
 ### VContainer
 

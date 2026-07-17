@@ -1,6 +1,6 @@
 {
   "name": "com.dreamingdog0529.playerdata",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "displayName": "PlayerData for Unity",
   "description": "Unity integration for PlayerData: persistentDataPath backend, auto-save helper and an editor save-data viewer.",
   "unity": "6000.0",
