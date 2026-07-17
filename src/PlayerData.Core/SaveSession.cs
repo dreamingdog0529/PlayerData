@@ -173,7 +173,21 @@ public sealed class SaveSession : ISaveSession
         return new LoadResult(Found: true, FormatVersion: bundle.FormatVersion);
     }
 
-    public async ValueTask CommitAsync(CancellationToken cancellationToken = default)
+    public ValueTask CommitAsync(CancellationToken cancellationToken = default)
+    {
+        // The autosave-tick no-op: a clean session returns a completed ValueTask without ever
+        // entering the async state machine below, so polling CommitAsync every frame prices only
+        // the participant dirty scan (a few ns), not the state-machine setup (~10 ns). The dirty
+        // re-check inside CommitCoreAsync (after validation) remains the correctness gate; this
+        // check is purely an early-out, so the race where a store turns clean/dirty in between
+        // resolves exactly as it would have with the single in-method check.
+        if (!AnyDirty(Volatile.Read(ref _participants)))
+            return default;
+
+        return CommitCoreAsync(cancellationToken);
+    }
+
+    private async ValueTask CommitCoreAsync(CancellationToken cancellationToken)
     {
         (ISessionParticipant Participant, long Version, byte[] Bytes)[] snapshot;
         Dictionary<string, byte[]> allDocuments;

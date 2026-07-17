@@ -5,9 +5,14 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- BenchmarkDotNet.Diagnostics.Windows is loaded via reflection (dynamic assembly loading),
+         so nothing in this project consumes its types; without this, MSBuild would not copy it
+         to the output directory and hardware counters (-counters) would fail to resolve. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.15.8" />
     <PackageReference Include="MemoryPack" Version="1.21.4" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
   </ItemGroup>

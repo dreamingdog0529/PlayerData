@@ -263,6 +263,13 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
 
     internal void FlushPendingNotifications()
     {
+        // Lock-free early-out: EndSuppress calls this on every participant at the end of every
+        // suppress cycle, so a store that saw no mutations during the cycle should not pay the
+        // Monitor enter/exit pair just to discover there is nothing to drain. A mutation racing
+        // this read (appending just after we observed null) belongs to the next cycle - the same
+        // window the lock-only version already had for appends arriving after its drain.
+        if (Volatile.Read(ref _pendingChanges) is null) return;
+
         List<BagChange<TKey, T>>? pending;
         lock (_pendingGate)
         {
@@ -281,36 +288,37 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
             _pendingChangesSpare ??= pending;
     }
 
+    // Per-thread slot AddOrUpdate's updateValueFactory uses to hand the existing value back out
+    // to SetCore below, replacing a separate TryGetValue that used to run before AddOrUpdate (two
+    // dictionary lookups per call instead of one). [ThreadStatic] rather than a plain static field
+    // is load-bearing: two threads racing SetCore on different keys must never observe each
+    // other's captured value. AddOrUpdate may invoke updateValueFactory more than once on this
+    // same thread if another thread's write interleaves the CAS, but only the last invocation
+    // before the successful CAS runs before SetCore reads the slot back, so it always reflects
+    // the value actually replaced - and SetCore drains it into a local and clears the slot before
+    // BumpAndNotify can trigger any same-thread reentrant call.
+    [ThreadStatic]
+    private static T? _capturedPrevious;
+
     private T SetCore(TKey key, T entity, bool validateKeyMatch)
     {
         if (validateKeyMatch)
             EnsureKeyMatches(key, entity);
 
-        // Existing-key fast path (the common Upsert case in a game loop): TryGetValue + indexer
-        // assignment avoids ConcurrentDictionary.AddOrUpdate's dual-factory machinery and the
-        // ThreadStatic capture it needed for Previous. Previous is a best-effort pre-write peek
-        // for the Changed event only - same deliberate trade-off as TryUpdate (exact replaced
-        // value under same-key races would require a per-call closure). ConcurrentDictionary's
-        // indexer set replaces without comparing T by structural equality, so the record-typed
-        // ABA hazard that bars TryUpdate(key, new, comparison) does not apply here.
-        if (_items.TryGetValue(key, out var previous))
-        {
-            _items[key] = entity;
-            BumpAndNotify(key, PlayerDataChangeKind.Upserted, previous, entity);
-            return entity;
-        }
+        _capturedPrevious = null;
+        _items.AddOrUpdate(
+            key,
+            addValueFactory: static (_, e) => e,
+            updateValueFactory: static (_, existing, e) =>
+            {
+                _capturedPrevious = existing;
+                return e;
+            },
+            entity);
 
-        if (_items.TryAdd(key, entity))
-        {
-            BumpAndNotify(key, PlayerDataChangeKind.Upserted, null, entity);
-            return entity;
-        }
+        var previous = _capturedPrevious;
+        _capturedPrevious = null;
 
-        // Lost the add race: another thread inserted the key. Fall through to update; Previous
-        // may still be null if a concurrent Remove won between TryAdd and this peek - the store
-        // ends with entity either way, and Changed's informational Previous trails in that window.
-        _items.TryGetValue(key, out previous);
-        _items[key] = entity;
         BumpAndNotify(key, PlayerDataChangeKind.Upserted, previous, entity);
         return entity;
     }
