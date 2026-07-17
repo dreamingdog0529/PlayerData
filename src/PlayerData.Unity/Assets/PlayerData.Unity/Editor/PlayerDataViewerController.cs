@@ -89,6 +89,27 @@ namespace PlayerData.Unity.Editor
             LoadError = null;
         }
 
+        /// <summary>
+        /// Loads every scanned save with the current schema, for the tree view. Locations whose
+        /// manifest cannot be read are omitted; without a schema no save can be classified, so
+        /// the result is empty. Returns a fresh list on every call.
+        /// </summary>
+        public IReadOnlyList<LoadedSave> LoadScannedSaves()
+        {
+            List<LoadedSave> result = new List<LoadedSave>();
+            if (Schema is null)
+                return result;
+
+            foreach (SaveLocation location in Saves)
+            {
+                LoadedSave? save = SaveDataStore.TryLoad(location, Schema, out _);
+                if (save is not null)
+                    result.Add(save);
+            }
+
+            return result;
+        }
+
         public void SelectSave(SaveLocation location)
         {
             SelectedSave = location ?? throw new ArgumentNullException(nameof(location));
