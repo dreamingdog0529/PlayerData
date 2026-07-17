@@ -16,7 +16,7 @@ PlayerData is for **player save data** (progress the player changes) that outgro
 * **The source generator owns the boilerplate.** `OpenAsync`, typed properties, and `ISaveSession` are generated so call sites stay thin and Unity-friendly (class-level attributes; no partial properties — Unity tops out at C# 12).
 * **Memory is a draft; commit is the write.** Updaters may run under CAS; pure functions only. Validation is fail-fast **before** I/O so a bad commit leaves the previous save intact.
 * **Backends are swappable.** `ISaveBackend` covers directory, slots, Unity paths, encryption wrappers — session code does not hard-code paths.
-* **Adapters stay optional.** R3 / VitalRouter / MessagePipe / VContainer are separate packages; Core stays dependency-light.
+* **Adapters stay optional.** R3 / VitalRouter / MessagePipe are separate packages; VContainer integration ships inside PlayerData.Unity and auto-enables when VContainer is present. Core stays dependency-light.
 
 In short: **types own shape; the session owns the boundary; the backend owns bytes on disk.**
 
@@ -360,8 +360,7 @@ Extension Packages
 | [PlayerData.R3](src/PlayerData.R3/) | Observables |
 | [PlayerData.VitalRouter](src/PlayerData.VitalRouter/) | VitalRouter commands |
 | [PlayerData.MessagePipe](src/PlayerData.MessagePipe/) | MessagePipe publish |
-| [PlayerData.Unity](src/PlayerData.Unity/Assets/PlayerData.Unity/) | `UnitySaveBackend` / `PlayerDataAutoSave` (UPM) |
-| [PlayerData.Unity.VContainer](src/PlayerData.Unity/Assets/External/PlayerData.Unity.VContainer/) | `RegisterPlayerDataSession` (UPM, optional) |
+| [PlayerData.Unity](src/PlayerData.Unity/Assets/PlayerData.Unity/) | `UnitySaveBackend` / `PlayerDataAutoSave` / optional VContainer (UPM) |
 
 ### R3
 
@@ -450,13 +449,12 @@ Safety rules:
 
 ### VContainer
 
-Optional [VContainer](https://github.com/hadashiA/VContainer) integration. If you do not use VContainer, install only `PlayerData.Unity` — do not add this package.
+Optional [VContainer](https://github.com/hadashiA/VContainer) integration ships **inside** `PlayerData.Unity` (Cysharp-style `Runtime/External`). When `jp.hadashikick.vcontainer` is installed, the `PlayerData.Unity.VContainer` assembly is auto-enabled via asmdef version defines — no separate PlayerData package is required. Without VContainer, the assembly is simply not compiled.
 
-Add **both** PlayerData packages (plus VContainer itself) to `Packages/manifest.json`:
+Add PlayerData.Unity (and VContainer itself) to `Packages/manifest.json`:
 
 ```json
 "com.dreamingdog0529.playerdata": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity",
-"com.dreamingdog0529.playerdata.vcontainer": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/External/PlayerData.Unity.VContainer",
 "jp.hadashikick.vcontainer": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer#1.19.0"
 ```
 

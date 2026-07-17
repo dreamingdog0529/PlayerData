@@ -2,7 +2,7 @@
   "name": "com.dreamingdog0529.playerdata",
   "version": "0.3.0",
   "displayName": "PlayerData for Unity",
-  "description": "Unity integration for PlayerData: persistentDataPath backend, auto-save helper and an editor save-data viewer.",
+  "description": "Unity integration for PlayerData: persistentDataPath backend, auto-save helper, editor save-data viewer, and optional VContainer registration (auto-enabled when VContainer is installed).",
   "unity": "6000.0",
   "dependencies": {
     "com.unity.nuget.newtonsoft-json": "3.2.1"
