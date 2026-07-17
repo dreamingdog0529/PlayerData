@@ -29,30 +29,7 @@ namespace PlayerData.Unity.Editor
     /// </summary>
     public sealed class PlayerDataViewerController
     {
-        /// <summary>
-        /// Case-insensitive substring match for the document lists. An empty filter matches
-        /// everything; otherwise the document name (storage key or property name) or its type
-        /// name must contain the filter text.
-        /// </summary>
-        public static bool MatchesFilter(string? filter, string name, string? typeName)
-        {
-            if (string.IsNullOrEmpty(filter))
-                return true;
-            if (name is not null && name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
-            return typeName is not null && typeName.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        /// <summary>
-        /// Directory the "Open Folder" button reveals: the selected save's directory, or the
-        /// scan root while no save is selected.
-        /// </summary>
-        public static string ResolveRevealPath(string rootPath, SaveLocation? selectedSave) =>
-            selectedSave is not null ? selectedSave.Directory : rootPath;
-
         public IReadOnlyList<Type> SessionTypes { get; private set; } = Array.Empty<Type>();
-
-        public Type? SelectedSessionType { get; private set; }
 
         public SessionSchema? Schema { get; private set; }
 
@@ -73,7 +50,6 @@ namespace PlayerData.Unity.Editor
         {
             if (sessionType is null) throw new ArgumentNullException(nameof(sessionType));
 
-            SelectedSessionType = sessionType;
             Schema = SessionSchemaResolver.Resolve(sessionType);
 
             // Classification depends on the schema, so an already-selected save is re-read.

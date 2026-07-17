@@ -5,44 +5,17 @@ namespace PlayerData.Unity.Editor
 {
     /// <summary>
     /// Plain-language labels for the Data Viewer. Keeps technical enum names and FQCNs out of the
-    /// default UI while Advanced mode can still surface them. Pure functions for EditMode tests.
+    /// UI. Pure functions for EditMode tests.
     /// </summary>
     public static class ViewerDisplayNames
     {
-        public const string LookingAtLabel = "Looking at";
         public const string SavedFilesLabel = "Saved files";
-        public const string FindSavesLabel = "Find saves";
-        public const string SaveTypeLabel = "Save type";
-        public const string RootPathLabel = "Folder";
-        public const string SaveLabel = "Save";
-        public const string SearchLabel = "Search";
-        public const string OpenFolderLabel = "Open Folder";
-        public const string ReloadLabel = "Reload";
         public const string ApplyLabel = "Apply";
         public const string RevertLabel = "Revert";
-        public const string AdvancedLabel = "Advanced";
-        public const string AddEntryLabel = "Add Entry";
-        public const string RemoveEntryLabel = "Remove Entry";
-        public const string EntriesLabel = "Entries";
         public const string FieldsTabLabel = "Fields";
         public const string JsonTabLabel = "JSON";
 
-        public const string GuideEmpty =
-            "1. Choose a save type  →  2. Find saves  →  3. Pick a save and a document to edit.";
-
-        public const string GuideLive =
-            "Pick a document (or a collection entry) below. Edits apply to the running game.";
-
-        public const string LiveIndicatorText =
-            "Running game: edits apply immediately to the live session.";
-
-        public const string PlayModeWarningText =
-            "Play mode is active: the running game's next save can overwrite what you edit here.";
-
-        public const string StaleHintText =
-            "Live data changed. Your unapplied edits are kept — Apply or Revert to sync.";
-
-        public const string JsonOnlyHint = "Open Advanced → JSON to edit this value";
+        public const string JsonOnlyHint = "Edit via the JSON view";
 
         public static string StateLabel(DocumentState state)
         {
@@ -88,12 +61,6 @@ namespace PlayerData.Unity.Editor
             return type.Name;
         }
 
-        public static string FullTypeName(Type type)
-        {
-            if (type is null) throw new ArgumentNullException(nameof(type));
-            return type.FullName ?? type.Name;
-        }
-
         /// <summary>Prefer property name, then type name, then storage key for list rows.</summary>
         public static string DocumentDisplayName(string storageKey, string? propertyName, string? typeName)
         {
@@ -118,37 +85,6 @@ namespace PlayerData.Unity.Editor
 
             string typeName = entry.Descriptor?.DocumentType.Name ?? "?";
             return $"{name}  ·  {state}  ·  {typeName}  ·  {entry.StorageKey}  ·  {entry.SizeBytes} B";
-        }
-
-        public static string FormatLiveDocumentLine(LiveDocumentDescriptor descriptor, bool editable, bool includeTechnicalDetails)
-        {
-            if (descriptor is null) throw new ArgumentNullException(nameof(descriptor));
-
-            string kind = descriptor.IsCollection ? "list" : "item";
-            string status = editable ? "Editable" : "View only";
-            if (!includeTechnicalDetails)
-                return $"{descriptor.PropertyName}  ·  {kind}  ·  {status}";
-
-            return $"{descriptor.PropertyName}  ·  {kind}  ·  {descriptor.EntityType.Name}  ·  {status}";
-        }
-
-        public static string FormatDocumentInfo(DocumentEntry entry, string? jsonError)
-        {
-            if (entry is null) throw new ArgumentNullException(nameof(entry));
-
-            string name = DocumentDisplayName(
-                entry.StorageKey,
-                entry.Descriptor?.PropertyName,
-                entry.Descriptor?.DocumentType.Name);
-            string info = $"{name}  ·  {StateLabel(entry.State)}";
-            string description = StateDescription(entry.State);
-            if (!string.IsNullOrEmpty(description))
-                info += $" — {description}";
-            if (!string.IsNullOrEmpty(entry.StateReason) && string.IsNullOrEmpty(description))
-                info += $" — {entry.StateReason}";
-            if (!string.IsNullOrEmpty(jsonError))
-                info += $" — Could not show values: {jsonError}";
-            return info;
         }
 
         /// <summary>
@@ -185,8 +121,8 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Builds a default JSON object for an entity type (empty instance). Used by live Add Entry.
-        /// Fails with a reason when the type cannot be constructed or serialized.
+        /// Builds a default JSON object for an entity type (empty instance). Used when creating
+        /// document assets. Fails with a reason when the type cannot be constructed or serialized.
         /// </summary>
         public static bool TryCreateDefaultJson(Type entityType, out string json, out string? error)
         {

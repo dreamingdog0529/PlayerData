@@ -40,12 +40,9 @@ namespace PlayerData.Unity.Editor.Tests
         }
 
         [Test]
-        public void ShortTypeName_UsesName_FullTypeName_UsesFullName()
+        public void ShortTypeName_UsesName()
         {
             Assert.That(ViewerDisplayNames.ShortTypeName(typeof(SampleEditorSession)), Is.EqualTo("SampleEditorSession"));
-            Assert.That(
-                ViewerDisplayNames.FullTypeName(typeof(SampleEditorSession)),
-                Is.EqualTo(typeof(SampleEditorSession).FullName));
         }
 
         [Test]
@@ -88,18 +85,6 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(line, Does.Contain("items-v1"));
             Assert.That(line, Does.Contain("3 B"));
             Assert.That(line, Does.Not.Contain("Unreadable"));
-        }
-
-        [Test]
-        public void FormatLiveDocumentLine_Default_IsPlain()
-        {
-            LiveDocumentDescriptor descriptor = new LiveDocumentDescriptor(
-                "Items", isCollection: true, typeof(SampleItem), typeof(string));
-
-            string line = ViewerDisplayNames.FormatLiveDocumentLine(descriptor, editable: true, includeTechnicalDetails: false);
-
-            Assert.That(line, Is.EqualTo("Items  ·  list  ·  Editable"));
-            Assert.That(line, Does.Not.Contain("SampleItem"));
         }
 
         [Test]
