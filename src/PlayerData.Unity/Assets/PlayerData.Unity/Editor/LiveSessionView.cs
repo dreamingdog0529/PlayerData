@@ -89,10 +89,13 @@ namespace PlayerData.Unity.Editor
 
         public IReadOnlyList<LiveDocumentDescriptor> Documents => _documents;
 
-        // ---- Single documents ----
+        // ---- Whole documents (singles and collections) ----
 
-        /// <summary>Current Value of a single document as pretty JSON.</summary>
-        public string GetJson(string propertyName) => GetSingle(propertyName).GetJson();
+        /// <summary>
+        /// Current value as pretty JSON: the single document's Value, or for collections the
+        /// whole bag as one JSON object (key → entity), matching the on-disk collection shape.
+        /// </summary>
+        public string GetJson(string propertyName) => GetHandle(propertyName).GetJson();
 
         /// <summary>
         /// Editability gate: the current value must survive bytes → JSON → bytes losslessly,
@@ -100,17 +103,18 @@ namespace PlayerData.Unity.Editor
         /// <paramref name="failureReason"/> says why.
         /// </summary>
         public bool CanEdit(string propertyName, out string? failureReason) =>
-            GetSingle(propertyName).CanEdit(out failureReason);
+            GetHandle(propertyName).CanEdit(out failureReason);
 
         /// <summary>
-        /// Parses JSON and applies it via IDoc.Replace. Returns false with the error message
-        /// (parse error, unknown property name, or view-only reason) without mutating the session.
+        /// Parses JSON and applies it via IDoc.Replace (singles) or an IBag Set/Remove diff
+        /// (collections). Returns false with the error message (parse error, unknown property
+        /// name, or view-only reason); parse and gate failures never mutate the session.
         /// </summary>
         public bool ApplyJson(string propertyName, string json, out string? error)
         {
             if (json is null) throw new ArgumentNullException(nameof(json));
 
-            SingleHandleBase handle = GetSingle(propertyName);
+            Handle handle = GetHandle(propertyName);
             if (!handle.CanEdit(out string? reason))
             {
                 error = reason;
@@ -125,7 +129,9 @@ namespace PlayerData.Unity.Editor
             }
             catch (Exception ex)
             {
-                // Deserialization runs before Replace, so a failure here never mutated the doc.
+                // Deserialization runs before Replace, so a single-doc failure here never
+                // mutated the doc. A collection diff can stop partway on a key mismatch; the
+                // caller re-reads the snapshot to show the actual state.
                 error = ex.Message;
                 return false;
             }
@@ -224,13 +230,6 @@ namespace PlayerData.Unity.Editor
             return (Handle)Activator.CreateInstance(handleType, store, notify);
         }
 
-        private SingleHandleBase GetSingle(string propertyName)
-        {
-            if (GetHandle(propertyName) is SingleHandleBase single)
-                return single;
-            throw new InvalidOperationException($"Document '{propertyName}' is a collection; use the entry APIs.");
-        }
-
         private CollectionHandleBase GetCollection(string propertyName)
         {
             if (GetHandle(propertyName) is CollectionHandleBase collection)
@@ -248,14 +247,10 @@ namespace PlayerData.Unity.Editor
 
         private abstract class Handle : IDisposable
         {
-            public abstract void Dispose();
-        }
-
-        private abstract class SingleHandleBase : Handle
-        {
             public abstract string GetJson();
             public abstract bool CanEdit(out string? failureReason);
             public abstract void ApplyJson(string json);
+            public abstract void Dispose();
         }
 
         private abstract class CollectionHandleBase : Handle
@@ -267,7 +262,7 @@ namespace PlayerData.Unity.Editor
             public abstract bool RemoveEntry(object key);
         }
 
-        private sealed class SingleHandle<T> : SingleHandleBase where T : class
+        private sealed class SingleHandle<T> : Handle where T : class
         {
             private readonly IDoc<T> _doc;
             private readonly Action _notify;
@@ -322,6 +317,49 @@ namespace PlayerData.Unity.Editor
                 _bag.Changed += OnChanged;
             }
 
+            public override string GetJson() =>
+                MemoryPackJsonConverter.ToJson(CopySnapshot(), typeof(Dictionary<TKey, T>));
+
+            public override bool CanEdit(out string? failureReason)
+            {
+                byte[] bytes;
+                try
+                {
+                    bytes = MemoryPackSerializer.Serialize(typeof(Dictionary<TKey, T>), CopySnapshot());
+                }
+                catch (Exception ex)
+                {
+                    failureReason = ex.Message;
+                    return false;
+                }
+
+                return MemoryPackJsonConverter.CanRoundTrip(bytes, typeof(Dictionary<TKey, T>), out failureReason);
+            }
+
+            public override void ApplyJson(string json)
+            {
+                // Parse fully first so JSON errors mutate nothing. Set (not Upsert) so a JSON
+                // key that disagrees with the payload's [PlayerDataKey] member fails loudly
+                // instead of silently landing under a different key.
+                Dictionary<TKey, T>? desired =
+                    (Dictionary<TKey, T>?)MemoryPackJsonConverter.ObjectFromJson(json, typeof(Dictionary<TKey, T>));
+                if (desired is null)
+                    throw new InvalidOperationException("The JSON must be an object with one entry per key.");
+
+                foreach (KeyValuePair<TKey, T> pair in desired)
+                    _bag.Set(pair.Key, pair.Value);
+
+                List<TKey> removed = new List<TKey>();
+                foreach (KeyValuePair<TKey, T> pair in _bag.Snapshot)
+                {
+                    if (!desired.ContainsKey(pair.Key))
+                        removed.Add(pair.Key);
+                }
+
+                foreach (TKey key in removed)
+                    _bag.Remove(key);
+            }
+
             public override IReadOnlyList<object> GetEntryKeys()
             {
                 List<object> keys = new List<object>(_bag.Count);
@@ -348,6 +386,14 @@ namespace PlayerData.Unity.Editor
             public override bool RemoveEntry(object key) => _bag.Remove((TKey)key);
 
             public override void Dispose() => _bag.Changed -= OnChanged;
+
+            private Dictionary<TKey, T> CopySnapshot()
+            {
+                Dictionary<TKey, T> copy = new Dictionary<TKey, T>(_bag.Count);
+                foreach (KeyValuePair<TKey, T> pair in _bag.Snapshot)
+                    copy[pair.Key] = pair.Value;
+                return copy;
+            }
 
             private void OnChanged(BagChange<TKey, T> change) => _notify();
         }

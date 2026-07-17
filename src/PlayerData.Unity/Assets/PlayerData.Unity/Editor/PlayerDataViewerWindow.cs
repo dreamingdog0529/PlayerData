@@ -95,6 +95,11 @@ namespace PlayerData.Unity.Editor
         private readonly Button _revertButton;
         private readonly HelpBox _errorBox;
         private readonly List<TreeViewItemData<SaveTreeNode>> _visibleItems = new List<TreeViewItemData<SaveTreeNode>>();
+        private readonly Dictionary<string, LiveSessionView> _liveViews =
+            new Dictionary<string, LiveSessionView>(StringComparer.Ordinal);
+        private readonly Action _registryChangedHandler;
+        private readonly Action<PlayModeStateChange> _playModeChangedHandler;
+        private bool _disposed;
         private string _rootPath;
         private string _filter = string.Empty;
         private IReadOnlyList<SaveTreeNode> _treeRoots = Array.Empty<SaveTreeNode>();
@@ -249,6 +254,11 @@ namespace PlayerData.Unity.Editor
             _errorBox.style.display = DisplayStyle.None;
             detailPane.Add(_errorBox);
 
+            _registryChangedHandler = OnRegistryChanged;
+            LiveSessionRegistry.Changed += _registryChangedHandler;
+            _playModeChangedHandler = OnPlayModeStateChanged;
+            EditorApplication.playModeStateChanged += _playModeChangedHandler;
+
             if (controller.SessionTypes.Count > 0)
                 controller.SelectSession(controller.SessionTypes[0]);
             Rescan();
@@ -256,8 +266,28 @@ namespace PlayerData.Unity.Editor
 
         public void Dispose()
         {
-            // Nothing to release yet; kept so the window's teardown contract survives the
-            // live-session integration that will subscribe to external events.
+            if (_disposed)
+                return;
+            _disposed = true;
+
+            LiveSessionRegistry.Changed -= _registryChangedHandler;
+            EditorApplication.playModeStateChanged -= _playModeChangedHandler;
+            DisposeLiveViews();
+        }
+
+        private void OnRegistryChanged()
+        {
+            if (_disposed)
+                return;
+            Rescan();
+        }
+
+        private void OnPlayModeStateChanged(PlayModeStateChange change)
+        {
+            // Entered* only: during Exiting* the scene is mid-teardown, and the registry raises
+            // Changed itself when it clears its entries on play-mode exit.
+            if (change == PlayModeStateChange.EnteredPlayMode || change == PlayModeStateChange.EnteredEditMode)
+                Rescan();
         }
 
         private void OnBrowse()
@@ -290,12 +320,47 @@ namespace PlayerData.Unity.Editor
         private void Rescan()
         {
             _controller.Scan(_rootPath);
-            // Live sessions join the tree in a later step; the tree is disk-only until then.
             _treeRoots = SaveTreeModel.Build(
-                _rootPath, _controller.LoadScannedSaves(), Array.Empty<SaveTreeLiveSession>());
+                _rootPath, _controller.LoadScannedSaves(), CollectLiveSessions());
             RebuildTree();
-            // Scanning reloads every save, so a previously shown document may be gone or stale.
+            // Scanning reloads every save (and recreates the live views), so a previously shown
+            // document may be gone or stale.
             ClearDetail();
+        }
+
+        // Recreates the live views from the registry. Session display names are the tree's
+        // lookup key, so duplicates get an index suffix (same rule as the session dropdown).
+        private IReadOnlyList<SaveTreeLiveSession> CollectLiveSessions()
+        {
+            DisposeLiveViews();
+
+            IReadOnlyList<LiveSessionEntry> entries = LiveSessionRegistry.Entries;
+            if (entries.Count == 0)
+                return Array.Empty<SaveTreeLiveSession>();
+
+            Dictionary<string, int> totals = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (LiveSessionEntry entry in entries)
+                totals[entry.Name] = totals.TryGetValue(entry.Name, out int count) ? count + 1 : 1;
+
+            List<SaveTreeLiveSession> sessions = new List<SaveTreeLiveSession>(entries.Count);
+            Dictionary<string, int> seen = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (LiveSessionEntry entry in entries)
+            {
+                seen[entry.Name] = seen.TryGetValue(entry.Name, out int occurrence) ? occurrence + 1 : 1;
+                string name = totals[entry.Name] > 1 ? $"{entry.Name} ({seen[entry.Name]})" : entry.Name;
+                LiveSessionView view = new LiveSessionView(entry.Session);
+                _liveViews.Add(name, view);
+                sessions.Add(new SaveTreeLiveSession(name, view.Documents));
+            }
+
+            return sessions;
+        }
+
+        private void DisposeLiveViews()
+        {
+            foreach (KeyValuePair<string, LiveSessionView> pair in _liveViews)
+                pair.Value.Dispose();
+            _liveViews.Clear();
         }
 
         private void OnSearchChanged(string filter)
@@ -360,20 +425,31 @@ namespace PlayerData.Unity.Editor
         private void ShowNode(SaveTreeNode? node)
         {
             ClearDetail();
-            // Live documents get wired up with the live-session integration step; until then
-            // they leave the pane empty like any other non-document node.
-            if (node is null || node.Kind != SaveTreeNodeKind.Document
-                || node.Location is null || node.StorageKey is null)
-            {
+            if (node is null)
                 return;
-            }
 
-            _controller.SelectSave(node.Location);
-            _selectedNode = node;
-            PopulateDetail();
+            if (node.Kind == SaveTreeNodeKind.Document && node.Location is not null && node.StorageKey is not null)
+            {
+                _controller.SelectSave(node.Location);
+                _selectedNode = node;
+                PopulateDetail();
+            }
+            else if (node.Kind == SaveTreeNodeKind.LiveDocument && node.SessionName is not null && node.PropertyName is not null)
+            {
+                _selectedNode = node;
+                PopulateDetail();
+            }
         }
 
         private void PopulateDetail()
+        {
+            if (_selectedNode!.Kind == SaveTreeNodeKind.LiveDocument)
+                PopulateLiveDetail();
+            else
+                PopulateDiskDetail();
+        }
+
+        private void PopulateDiskDetail()
         {
             SaveTreeNode node = _selectedNode!;
             ClearFieldsSurface();
@@ -402,24 +478,97 @@ namespace PlayerData.Unity.Editor
             _editable = view.CanEdit;
             _isCollection = entry.Descriptor?.IsCollection == true;
             _payloadType = entry.Descriptor?.PayloadType;
-            _jsonField.SetValueWithoutNotify(view.Json ?? string.Empty);
+
+            PresentDocument(view.Json, view.JsonError, FieldsBlockReason(entry, view, stateReason));
+        }
+
+        private void PopulateLiveDetail()
+        {
+            SaveTreeNode node = _selectedNode!;
+            ClearFieldsSurface();
+            HideError();
+
+            if (!_liveViews.TryGetValue(node.SessionName!, out LiveSessionView view))
+            {
+                ClearDetail();
+                ShowError($"Live session '{node.SessionName}' is gone. Refresh the tree.");
+                return;
+            }
+
+            LiveDocumentDescriptor? descriptor = null;
+            foreach (LiveDocumentDescriptor candidate in view.Documents)
+            {
+                if (string.Equals(candidate.PropertyName, node.PropertyName, StringComparison.Ordinal))
+                {
+                    descriptor = candidate;
+                    break;
+                }
+            }
+
+            if (descriptor is null)
+            {
+                ClearDetail();
+                ShowError($"Live document '{node.PropertyName}' is gone. Refresh the tree.");
+                return;
+            }
+
+            string? json = null;
+            string? jsonError = null;
+            try
+            {
+                json = view.GetJson(descriptor.PropertyName);
+            }
+            catch (Exception ex)
+            {
+                jsonError = ex.Message;
+            }
+
+            string? editBlockReason = null;
+            bool editable = json is not null && view.CanEdit(descriptor.PropertyName, out editBlockReason);
+
+            _detailContent.style.display = DisplayStyle.Flex;
+            _detailHeader.text = $"{descriptor.PropertyName} ({node.SessionName})";
+            // Live docs have no on-disk DocumentState; the live round-trip gate maps onto the
+            // same two labels the disk pane uses.
+            _detailStateLabel.text = ViewerDisplayNames.StateLabel(
+                editable ? DocumentState.Editable : DocumentState.ReadOnlyRoundTrip);
+            _detailStateLabel.tooltip = editBlockReason ?? jsonError ?? string.Empty;
+            _detailPathLabel.text = SaveTreeModel.PlayingNowLabel;
+
+            _editable = editable;
+            _isCollection = descriptor.IsCollection;
+            _payloadType = descriptor.IsCollection ? null : descriptor.EntityType;
+
+            string? fieldsBlockReason = null;
+            if (json is null)
+                fieldsBlockReason = jsonError ?? "The current value cannot be shown.";
+            else if (!editable)
+                fieldsBlockReason = editBlockReason ?? "This value can't be edited safely in the viewer.";
+
+            PresentDocument(json, jsonError, fieldsBlockReason);
+        }
+
+        // Shared tail of the disk and live populate paths: fills the JSON field, applies the
+        // Fields gate and restores the preferred view mode.
+        private void PresentDocument(string? json, string? jsonError, string? fieldsBlockReason)
+        {
+            _jsonField.SetValueWithoutNotify(json ?? string.Empty);
             _jsonField.isReadOnly = !_editable;
 
-            string? fieldsBlockReason = FieldsBlockReason(entry, view, stateReason);
             bool fieldsAvailable = fieldsBlockReason is null;
             _fieldsToggle.SetEnabled(fieldsAvailable);
             _fieldsToggle.tooltip = fieldsBlockReason ?? string.Empty;
 
             _jsonViewActive = _preferredJsonView || !fieldsAvailable;
-            if (!_jsonViewActive && !TryBuildFieldsSurface(view.Json ?? string.Empty))
+            if (!_jsonViewActive && !TryBuildFieldsSurface(json ?? string.Empty))
                 _jsonViewActive = true;
 
             SyncViewToggles();
             UpdateEditSurfaceVisibility();
             UpdateApplyState();
 
-            if (view.JsonError is not null)
-                ShowError($"Could not show values: {view.JsonError}");
+            if (jsonError is not null)
+                ShowError($"Could not show values: {jsonError}");
         }
 
         // Fields need a resolved schema, a renderable JSON payload and a JSON round-trip that
@@ -517,7 +666,8 @@ namespace PlayerData.Unity.Editor
 
         private void OnApply()
         {
-            if (_selectedNode?.StorageKey is null)
+            SaveTreeNode? node = _selectedNode;
+            if (node is null)
                 return;
 
             string payload;
@@ -536,10 +686,30 @@ namespace PlayerData.Unity.Editor
                 payload = _jsonField.value;
             }
 
-            if (_controller.ApplyJson(_selectedNode.StorageKey, payload, out string? error))
+            bool applied;
+            string? error;
+            if (node.Kind == SaveTreeNodeKind.LiveDocument)
+            {
+                if (!_liveViews.TryGetValue(node.SessionName!, out LiveSessionView view))
+                {
+                    ShowError($"Live session '{node.SessionName}' is gone. Refresh the tree.");
+                    return;
+                }
+
+                applied = view.ApplyJson(node.PropertyName!, payload, out error);
+            }
+            else
+            {
+                if (node.StorageKey is null)
+                    return;
+                applied = _controller.ApplyJson(node.StorageKey, payload, out error);
+            }
+
+            if (applied)
             {
                 HideError();
-                // ApplyJson reloaded the save from disk; repopulating shows the persisted state.
+                // Disk: ApplyJson reloaded the save; live: the session was mutated in place.
+                // Repopulating shows the state the target actually holds now.
                 PopulateDetail();
             }
             else
@@ -554,7 +724,9 @@ namespace PlayerData.Unity.Editor
                 return;
 
             HideError();
-            _controller.Reload();
+            // Live docs revert by re-reading the live snapshot; disk docs reload from disk.
+            if (_selectedNode.Kind != SaveTreeNodeKind.LiveDocument)
+                _controller.Reload();
             PopulateDetail();
         }
 
