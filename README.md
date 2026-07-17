@@ -406,20 +406,23 @@ auto.Bind(save); // dirty only; concurrent commits gated
 
 ### Save Data Viewer (Editor)
 
-`Window > PlayerData > Data Viewer` opens an editor window aimed at both engineers and non-engineers (planners, QA, designers). **Looking at** chooses the data source: **Saved files** (default) reads on-disk saves; registered live sessions edit the running game.
+`Window > PlayerData > Data Viewer` opens a two-pane window styled after the Project view: a save tree on the left, an editor for the selected document on the right. No play mode is required for on-disk saves.
 
-**Saved files** workflow (no play mode required):
+The toolbar holds everything else:
 
-1. Choose a **Save type** (short name of your `[PlayerDataSession]` class).
-2. Confirm the **Folder** (defaults to `Application.persistentDataPath`) and click **Find saves**.
-3. Pick a **Save** and a document from the list (property names + plain status: Editable / View only / Can't read).
-4. Edit values in **Fields**, then **Apply** or **Revert**.
+- **Root folder** — defaults to `Application.persistentDataPath`; **Browse...** picks another folder, and the choice is remembered per project.
+- **Refresh** — rescans the root. Scanning also runs when the window opens and when the root changes.
+- **Save type** — short name of your `[PlayerDataSession]` class. Save binaries carry no type metadata, so the viewer resolves document types from this schema.
+- **Search** — filters documents by display name (case-insensitive); parents of a match stay visible.
 
-**Open Folder** reveals the selected save's directory (or the scan root) in the OS file browser. An info guide at the top walks through the next step until a document is selected.
+The tree groups everything found under the root:
 
-**Advanced** (collapsed by default) shows technical details: full type names, storage keys, sizes, format version, schema diagnostics, and the raw **JSON** editor. Nested objects, lists, and disk collection payloads still need Advanced → JSON.
+- **Saved files** — every save below the root (up to 3 levels deep, including `slot_N` folders), shown as paths relative to the root (`(root)` for the root itself). Each save expands into its documents (property name + plain status: Editable / View only / Can't read).
+- **Playing now** — appears only during play mode, listing registered live sessions and their documents.
 
-**Live sessions** are opt-in — register your session and it appears under **Looking at** during play mode:
+Click a document and the right pane shows its name, status, and location, a **Fields** ⇔ **JSON** toggle, and **Apply** / **Revert**. Both views share one working copy: switching keeps unapplied edits, and switching from JSON to Fields with invalid JSON stays on JSON with the error shown. The toggle choice is remembered. Selecting another document discards unapplied edits.
+
+**Live sessions** are opt-in — register your session and it appears under **Playing now** during play mode:
 
 ```csharp
 await using var save = await GameSave.OpenAsync(backend);
@@ -432,7 +435,9 @@ IDisposable viewerToken = LiveSessionRegistry.Register("Main Save", save);
 viewerToken.Dispose();
 ```
 
-Live mode lists documents and collection entries. **Add Entry** builds a default Fields form for the entity type (no hand-written JSON required); raw JSON remains under Advanced. All edits go through the session APIs (`IDoc<T>.Replace`, `IBag<TKey,T>.Set/Upsert/Remove`), so the game sees ordinary `Changed` events (`DataChangeCause.UserWrite`). Display auto-refreshes (about twice a second) without overwriting unapplied edits — a stale hint appears until **Apply** or **Revert**. Stopping play mode removes live sources and falls back to **Saved files**.
+Live documents are edited in the same pane; **Apply** goes through the session APIs (`IDoc<T>.Replace`, `IBag<TKey,T>.Set/Upsert/Remove`), so the running game sees ordinary `Changed` events (`DataChangeCause.UserWrite`). Stopping play mode removes the **Playing now** group.
+
+Collection documents (`IBag`) are edited as one JSON object in the **JSON** view — add or remove entries by editing the JSON and applying. There are no per-entry Fields editors.
 
 | Member type | Fields editor |
 | --- | --- |
@@ -440,11 +445,17 @@ Live mode lists documents and collection entries. **Add Entry** builds a default
 | `string` | Text field |
 | Numeric (`int`, `float`, `decimal`, …) | Validated text — invalid input turns red and blocks Apply |
 | Enum | Dropdown |
-| Anything else (nested objects, lists, `DateTime`, nullable, …) | Read-only preview; open Advanced → JSON |
+| Anything else (nested objects, lists, `DateTime`, nullable, …) | Read-only preview; edit via the JSON view |
 
-**Search** filters by storage key / property name / type name (case-insensitive). Unapplied changes show a trailing `*` on the info label; **Apply** / **Revert** enable only while dirty.
+Safety rules:
 
-The on-disk binary format is unchanged: no type metadata is embedded in `manifest.bin` / `docs/*.bin`. The viewer resolves types from the selected session schema.
+- A disk document is editable only when its `bytes → JSON → bytes` round-trip reproduces the payload exactly; otherwise it is **View only**.
+- Encrypted / obfuscated saves cannot be decoded and show as **Can't read**. Unknown keys are preserved on write-back.
+- Saves whose `FormatVersion` differs from the current one are **View only (old format)** — open the game once so migrations can run.
+- Read-only documents show the reason on the status label and keep **Apply** disabled. Live documents that cannot round-trip through JSON are view-only as well.
+- **Applied edits take effect immediately and cannot be undone**.
+
+The on-disk binary format is unchanged: no type metadata is embedded in `manifest.bin` / `docs/*.bin`. The viewer resolves types from the selected save type.
 
 ### Editor Document Assets (fixtures)
 
@@ -456,16 +467,6 @@ For sample / QA fixtures in the Project window (not runtime player saves), creat
 4. Optionally **Export to Save Folder** merges the document into a `DirectorySaveBackend` layout (`manifest.bin` + `docs/*.bin`), preserving any other documents already in that folder.
 
 These assets live in the **Editor** assembly — game runtime code does not load them, and Core binaries stay type-free. They are for authoring fixtures in the Inspector the way you would pick a model or AudioClip, without embedding schema metadata into save files.
-
-Safety rules:
-
-- A disk document is editable only when its `bytes → JSON → bytes` round-trip reproduces the payload exactly; otherwise it is **View only**.
-- Encrypted / obfuscated saves cannot be decoded and show as **Can't read**. Unknown keys are preserved on write-back.
-- Saves whose `FormatVersion` differs from the current one are **View only (old format)** — open the game once so migrations can run.
-- Applying to disk during play mode asks for confirmation; a live session's next commit wins over your edit.
-- **Applied edits take effect immediately and cannot be undone**.
-- Collection entry keys cannot be changed by editing an entry — use **Add Entry** / **Remove Entry**.
-- Live documents that cannot round-trip through JSON are view-only, with the reason shown in the info label.
 
 ### VContainer
 

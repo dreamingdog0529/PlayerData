@@ -406,20 +406,23 @@ auto.Bind(save); // dirty 時のみ。並行コミットはゲート
 
 ### セーブデータビューア（エディタ）
 
-`Window > PlayerData > Data Viewer` で、エンジニアだけでなくプランナー・QA・デザイナー向けにも使えるセーブデータビューアを開きます。**Looking at**（参照元）で **Saved files**（既定・ディスク上のセーブ）と、登録済みライブセッション（実行中のゲーム）を切り替えます。
+`Window > PlayerData > Data Viewer` で、Project ビュー風の 2 ペインウィンドウを開きます。左ペインがセーブのツリー、右ペインが選択したドキュメントの編集画面です。ディスク上のセーブの閲覧・編集に再生は不要です。
 
-**Saved files** の手順（再生不要）:
+その他の操作はツールバーに集約されています:
 
-1. **Save type** で `[PlayerDataSession]` 型を選ぶ（短い型名表示）
-2. **Folder**（既定は `Application.persistentDataPath`）を確認して **Find saves**
-3. **Save** とドキュメントを選ぶ（プロパティ名 + 平易な状態: Editable / View only / Can't read）
-4. **Fields** で値を編集し、**Apply** または **Revert**
+- **ルートフォルダ** — 既定は `Application.persistentDataPath`。**Browse...** で変更でき、選択はプロジェクトごとに記憶されます。
+- **Refresh** — ルートを再スキャンします。ウィンドウを開いたときとルート変更時にも自動でスキャンされます。
+- **Save type** — `[PlayerDataSession]` 型（短い型名表示）。セーブバイナリには型メタデータが入っていないため、ビューアはこのスキーマからドキュメントの型を解決します。
+- **Search** — ドキュメントを表示名の部分一致（大文字小文字無視）で絞り込みます。一致した項目の親ノードは残ります。
 
-**Open Folder** で選択中セーブのディレクトリ（未選択ならスキャンルート）を OS のファイルブラウザで開けます。未選択時は画面上部のガイドが次の操作を案内します。
+ツリーはルート配下の内容をグループ表示します:
 
-**Advanced**（既定は折りたたみ）に技術詳細を集約します: 完全修飾型名、ストレージキー、サイズ、FormatVersion、スキーマ診断、生 **JSON** エディタ。ネストしたオブジェクトや Disk のコレクション全体は Advanced → JSON で編集します。
+- **Saved files** — ルート配下のすべてのセーブ（3 階層まで。`slot_N` フォルダを含む）を、ルートからの相対パス（ルート直下は `(root)`）で表示します。各セーブを展開するとドキュメント（プロパティ名 + 平易な状態: Editable / View only / Can't read）が並びます。
+- **Playing now** — 再生中のみ出現し、登録済みライブセッションとそのドキュメントを表示します。
 
-**ライブセッション**はオプトインです。登録すると再生中に **Looking at** へ現れます:
+ドキュメントをクリックすると右ペインに名前・状態・場所のヘッダ、**Fields** ⇔ **JSON** の切替トグル、**Apply** / **Revert** が表示されます。両ビューは同じ作業コピーを共有するため、切り替えても未 Apply の編集は失われません。不正な JSON のまま Fields へ切り替えようとすると、エラーを表示して JSON ビューに留まります。トグルの選択は記憶されます。別のドキュメントを選択すると未 Apply の編集は破棄されます。
+
+**ライブセッション**はオプトインです。登録すると再生中に **Playing now** へ現れます:
 
 ```csharp
 await using var save = await GameSave.OpenAsync(backend);
@@ -432,7 +435,9 @@ IDisposable viewerToken = LiveSessionRegistry.Register("Main Save", save);
 viewerToken.Dispose();
 ```
 
-ライブモードではドキュメントとコレクションのエントリを一覧します。**Add Entry** はエンティティ型の既定値を Fields フォームで埋めて追加できます（生 JSON は不要。Advanced に JSON 入力も残しています）。編集はすべてセッション自身の API（`IDoc<T>.Replace`、`IBag<TKey,T>.Set/Upsert/Remove`）経由のため、ゲーム側には通常の `Changed`（`DataChangeCause.UserWrite`）として届きます。表示は自動更新（およそ秒 2 回）されますが、未 Apply の編集は上書きされず stale ヒントが出ます。再生停止でライブソースは消え **Saved files** に戻ります。
+ライブドキュメントも同じペインで編集します。**Apply** はセッション自身の API（`IDoc<T>.Replace`、`IBag<TKey,T>.Set/Upsert/Remove`）経由のため、実行中のゲームには通常の `Changed`（`DataChangeCause.UserWrite`）として届きます。再生を停止すると **Playing now** グループは消えます。
+
+コレクションのドキュメント（`IBag`）は **JSON** ビューで 1 つの JSON オブジェクトとして編集します。エントリの追加・削除は JSON を編集して Apply してください（エントリ単位の Fields エディタはありません）。
 
 | メンバー型 | Fields のエディタ |
 | --- | --- |
@@ -440,11 +445,17 @@ viewerToken.Dispose();
 | `string` | テキストフィールド |
 | 数値型（`int`、`float`、`decimal` など） | 検証付きテキスト — 不正入力は赤枠 + Apply ブロック |
 | enum | ドロップダウン |
-| その他（ネスト、リスト、`DateTime`、nullable など） | 読み取り専用プレビュー → Advanced → JSON |
+| その他（ネスト、リスト、`DateTime`、nullable など） | 読み取り専用プレビュー → JSON ビューで編集 |
 
-**Search** はストレージキー / プロパティ名 / 型名の部分一致（大文字小文字無視）。未 Apply 時は情報ラベル末尾に `*`、**Apply** / **Revert** はその間だけ有効です。
+安全のためのルール:
 
-オンディスクのバイナリ形式は変更しません（`manifest.bin` / `docs/*.bin` に型メタは埋め込みません）。型は選択中セッションのスキーマから解決します。
+- Disk ドキュメントは `bytes → JSON → bytes` 往復が一致するときだけ **Editable**。それ以外は **View only**。
+- 暗号化・難読化セーブは復号できず **Can't read**。未知キーは書き戻し時に保全。
+- `FormatVersion` 不一致は **View only (old format)**（先にゲーム側でマイグレーション）。
+- 読み取り専用のドキュメントは状態ラベルに理由を表示し、**Apply** は無効のままです。JSON 往復不能なライブドキュメントも同様に閲覧のみです。
+- **Apply は即時・取り消し不可**。
+
+オンディスクのバイナリ形式は変更しません（`manifest.bin` / `docs/*.bin` に型メタは埋め込みません）。型は選択中の Save type から解決します。
 
 ### エディタ Document アセット（フィクスチャ）
 
@@ -456,16 +467,6 @@ viewerToken.Dispose();
 4. 任意で **Export to Save Folder** により `DirectorySaveBackend` レイアウト（`manifest.bin` + `docs/*.bin`）へマージ書き出し（既存ドキュメントは保全）
 
 このアセットは **Editor** アセンブリ内にあり、ゲームランタイムは読みません。Core バイナリに型メタを埋め込まず、モデルや AudioClip のように Inspector でフィクスチャを編集するためのものです。
-
-安全のためのルール:
-
-- Disk ドキュメントは `bytes → JSON → bytes` 往復が一致するときだけ **Editable**。それ以外は **View only**。
-- 暗号化・難読化セーブは復号できず **Can't read**。未知キーは書き戻し時に保全。
-- `FormatVersion` 不一致は **View only (old format)**（先にゲーム側でマイグレーション）。
-- 再生中の Disk Apply は確認ダイアログ。ライブの次コミットが後勝ち。
-- **Apply は即時・取り消し不可**。
-- エントリのキーは編集では変更不可 — **Add Entry** / **Remove Entry** を使う。
-- JSON 往復不能なライブ値は閲覧のみ（理由を情報ラベルに表示）。
 
 ### VContainer
 

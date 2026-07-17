@@ -1,6 +1,6 @@
 {
   "name": "com.dreamingdog0529.playerdata",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "displayName": "PlayerData for Unity",
   "description": "Unity integration for PlayerData: persistentDataPath backend, auto-save helper, plain-language editor save-data viewer, editor Document Assets, and optional VContainer registration (auto-enabled when VContainer is installed).",
   "unity": "6000.0",
