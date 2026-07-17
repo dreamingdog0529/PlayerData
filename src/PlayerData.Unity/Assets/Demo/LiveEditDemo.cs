@@ -5,9 +5,9 @@ using PlayerData;
 using PlayerData.Unity;
 using UnityEngine;
 
-namespace PlayerData.Unity.Sandbox
+namespace PlayerData.Unity.Demo
 {
-    public enum ManualRank
+    public enum DemoRank
     {
         Novice = 0,
         Veteran = 1,
@@ -15,7 +15,7 @@ namespace PlayerData.Unity.Sandbox
     }
 
     [MemoryPackable(GenerateType.VersionTolerant)]
-    public partial class ManualProfile
+    public partial class DemoProfile
     {
         [MemoryPackOrder(0)]
         public string Name { get; set; } = "Hero";
@@ -30,10 +30,10 @@ namespace PlayerData.Unity.Sandbox
         public bool Invincible { get; set; }
 
         [MemoryPackOrder(4)]
-        public ManualRank Rank { get; set; } = ManualRank.Novice;
+        public DemoRank Rank { get; set; } = DemoRank.Novice;
 
         // updater は CAS 下で再実行されうるため、インプレース変更ではなくコピーを返す。
-        public ManualProfile WithLevel(int level) => new ManualProfile
+        public DemoProfile WithLevel(int level) => new DemoProfile
         {
             Name = Name,
             Level = level,
@@ -44,7 +44,7 @@ namespace PlayerData.Unity.Sandbox
     }
 
     [MemoryPackable(GenerateType.VersionTolerant)]
-    public partial class ManualItem
+    public partial class DemoItem
     {
         [PlayerDataKey]
         [MemoryPackOrder(0)]
@@ -55,49 +55,41 @@ namespace PlayerData.Unity.Sandbox
     }
 
     [PlayerDataSession]
-    [PlayerDataSingle(typeof(ManualProfile))]
-    [PlayerDataCollection(typeof(ManualItem), "Items")]
-    public sealed partial class ManualLiveEditSession
+    [PlayerDataSingle(typeof(DemoProfile))]
+    [PlayerDataCollection(typeof(DemoItem), "Items")]
+    public sealed partial class DemoSession
     {
     }
 
-    // 手動チェック用サンドボックス。シーンも GameObject も用意せず Play を押すだけで動く
-    // (このリポジトリには再生対象のシーンが 1 つも無いため自動生成する)。
-    // 再生したら Window > PlayerData > Data Viewer の Source で「ManualLiveEdit」を選ぶ。
-    public sealed class LiveEditManualTest : MonoBehaviour
+    // ライブ編集のデモ。DemoScene を開いて Play し、
+    // Window > PlayerData > Data Viewer の Source で「Demo」を選ぶ。
+    public sealed class LiveEditDemo : MonoBehaviour
     {
-        ManualLiveEditSession _session;
+        DemoSession _session;
         IDisposable _viewerToken;
         bool _autoMutate;
         float _nextAutoMutateAt;
         int _itemSerial;
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        static void SpawnOnPlay()
-        {
-            var go = new GameObject(nameof(LiveEditManualTest));
-            go.AddComponent<LiveEditManualTest>();
-        }
-
         async void Start()
         {
-            _session = await ManualLiveEditSession.OpenAsync(new UnitySaveBackend("ManualLiveEdit"));
+            _session = await DemoSession.OpenAsync(new UnitySaveBackend("PlayerDataDemo"));
 
-            _session.ManualProfile.Changed += OnProfileChanged;
+            _session.DemoProfile.Changed += OnProfileChanged;
             _session.Items.Changed += OnItemsChanged;
 
-            _viewerToken = LiveSessionRegistry.Register("ManualLiveEdit", _session);
-            Debug.Log("[LiveEditManualTest] session opened and registered");
+            _viewerToken = LiveSessionRegistry.Register("Demo", _session);
+            Debug.Log("[LiveEditDemo] session opened and registered");
         }
 
-        void OnProfileChanged(DocChange<ManualProfile> change)
+        void OnProfileChanged(DocChange<DemoProfile> change)
         {
-            Debug.Log($"[LiveEditManualTest] Profile Changed cause={change.Cause} Level={change.Current.Level} Name={change.Current.Name}");
+            Debug.Log($"[LiveEditDemo] Profile Changed cause={change.Cause} Level={change.Current.Level} Name={change.Current.Name}");
         }
 
-        void OnItemsChanged(BagChange<string, ManualItem> change)
+        void OnItemsChanged(BagChange<string, DemoItem> change)
         {
-            Debug.Log($"[LiveEditManualTest] Items Changed cause={change.Cause} kind={change.Kind} key={change.Key}");
+            Debug.Log($"[LiveEditDemo] Items Changed cause={change.Cause} kind={change.Kind} key={change.Key}");
         }
 
         void Update()
@@ -105,7 +97,7 @@ namespace PlayerData.Unity.Sandbox
             if (_autoMutate && Time.time >= _nextAutoMutateAt)
             {
                 _nextAutoMutateAt = Time.time + 2f;
-                _session?.ManualProfile.Update(p => p.WithLevel(p.Level + 1));
+                _session?.DemoProfile.Update(p => p.WithLevel(p.Level + 1));
             }
         }
 
@@ -117,7 +109,7 @@ namespace PlayerData.Unity.Sandbox
                 return;
             }
 
-            var profile = _session.ManualProfile.Value;
+            var profile = _session.DemoProfile.Value;
             GUILayout.BeginArea(new Rect(10, 10, 340, 240), GUI.skin.box);
             GUILayout.Label($"Name: {profile.Name}  Level: {profile.Level}  Speed: {profile.Speed}");
             GUILayout.Label($"Invincible: {profile.Invincible}  Rank: {profile.Rank}");
@@ -125,13 +117,13 @@ namespace PlayerData.Unity.Sandbox
 
             if (GUILayout.Button("Level +1 (game-side write)"))
             {
-                _session.ManualProfile.Update(p => p.WithLevel(p.Level + 1));
+                _session.DemoProfile.Update(p => p.WithLevel(p.Level + 1));
             }
 
             if (GUILayout.Button("Add Item (game-side write)"))
             {
                 _itemSerial++;
-                _session.Items.Upsert(new ManualItem { ItemId = $"item-{_itemSerial}", Count = 1 });
+                _session.Items.Upsert(new DemoItem { ItemId = $"item-{_itemSerial}", Count = 1 });
             }
 
             _autoMutate = GUILayout.Toggle(_autoMutate, " Auto Level+1 every 2s");
@@ -149,7 +141,7 @@ namespace PlayerData.Unity.Sandbox
             _viewerToken?.Dispose();
             if (_session != null)
             {
-                _session.ManualProfile.Changed -= OnProfileChanged;
+                _session.DemoProfile.Changed -= OnProfileChanged;
                 _session.Items.Changed -= OnItemsChanged;
                 await _session.DisposeAsync();
             }
