@@ -75,6 +75,12 @@ namespace PlayerData.Unity.Editor
         internal const string ApplyButtonName = "apply-button";
         internal const string RevertButtonName = "revert-button";
         internal const string ApplyErrorName = "apply-error";
+        internal const string FieldsTabButtonName = "fields-tab-button";
+        internal const string JsonTabButtonName = "json-tab-button";
+        internal const string FieldsScrollName = "fields-scroll";
+        internal const string JsonScrollName = "json-scroll";
+        internal const string FieldsSectionName = "fields-section";
+        internal const string FieldsHintName = "fields-hint";
 
         internal const string DiskSourceLabel = "Disk";
 
@@ -112,6 +118,12 @@ namespace PlayerData.Unity.Editor
         private readonly Button _applyButton;
         private readonly Button _revertButton;
         private readonly HelpBox _applyError;
+        private readonly Button _fieldsTabButton;
+        private readonly Button _jsonTabButton;
+        private readonly ScrollView _fieldsScroll;
+        private readonly ScrollView _jsonScroll;
+        private readonly VisualElement _fieldsSection;
+        private readonly Label _fieldsHint;
         private readonly List<DocumentEntry> _documents = new List<DocumentEntry>();
         private readonly List<LiveDocumentDescriptor> _liveDocuments = new List<LiveDocumentDescriptor>();
         private readonly List<object> _liveEntryKeys = new List<object>();
@@ -124,6 +136,12 @@ namespace PlayerData.Unity.Editor
         private string? _liveSelectedProperty;
         private object? _liveSelectedEntryKey;
         private string? _lastLoadedLiveJson;
+        private FieldEditorModel? _fieldsModel;
+        private FieldEditorView? _fieldsView;
+        private Type? _fieldsDocType;
+        private bool _fieldsJsonOnly;
+        private bool _surfaceEditable;
+        private bool _fieldsTabActive;
         private bool _pendingLiveChange;
         private double _lastLiveRefreshTime = double.NegativeInfinity;
         private bool _disposed;
@@ -284,12 +302,38 @@ namespace PlayerData.Unity.Editor
             _applyError.style.display = DisplayStyle.None;
             root.Add(_applyError);
 
-            ScrollView jsonScroll = new ScrollView();
-            jsonScroll.style.flexGrow = 1;
+            VisualElement tabRow = new VisualElement();
+            tabRow.style.flexDirection = FlexDirection.Row;
+            _fieldsTabButton = new Button(() => SetActiveTab(showFields: true)) { text = "Fields" };
+            _fieldsTabButton.name = ViewerUI.FieldsTabButtonName;
+            tabRow.Add(_fieldsTabButton);
+            _jsonTabButton = new Button(() => SetActiveTab(showFields: false)) { text = "JSON" };
+            _jsonTabButton.name = ViewerUI.JsonTabButtonName;
+            tabRow.Add(_jsonTabButton);
+            root.Add(tabRow);
+
+            _fieldsScroll = new ScrollView();
+            _fieldsScroll.name = ViewerUI.FieldsScrollName;
+            _fieldsScroll.style.flexGrow = 1;
+            _fieldsHint = new Label();
+            _fieldsHint.name = ViewerUI.FieldsHintName;
+            _fieldsHint.style.display = DisplayStyle.None;
+            _fieldsScroll.Add(_fieldsHint);
+            _fieldsSection = new VisualElement();
+            _fieldsSection.name = ViewerUI.FieldsSectionName;
+            _fieldsScroll.Add(_fieldsSection);
+            root.Add(_fieldsScroll);
+
+            _jsonScroll = new ScrollView();
+            _jsonScroll.name = ViewerUI.JsonScrollName;
+            _jsonScroll.style.flexGrow = 1;
             _documentJson = new TextField { multiline = true, isReadOnly = true };
             _documentJson.name = ViewerUI.DocumentJsonName;
-            jsonScroll.Add(_documentJson);
-            root.Add(jsonScroll);
+            _jsonScroll.Add(_documentJson);
+            root.Add(_jsonScroll);
+
+            // Fields is the default tab: typed editors with validated input are the safer surface.
+            SetActiveTab(showFields: true);
 
             _registryChangedHandler = OnRegistryChanged;
             LiveSessionRegistry.Changed += _registryChangedHandler;
@@ -315,6 +359,112 @@ namespace PlayerData.Unity.Editor
             // does not apply; a lightweight indicator replaces it.
             _playModeWarning.style.display = playing && !live ? DisplayStyle.Flex : DisplayStyle.None;
             _liveIndicator.style.display = live ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        // ---- Fields / JSON tabs ----
+
+        // Each tab keeps its own unapplied edits across switches (nothing is discarded or merged);
+        // Apply always materializes the active tab's content.
+        private void SetActiveTab(bool showFields)
+        {
+            _fieldsTabActive = showFields;
+            // The active tab's button is disabled: it doubles as the "current tab" indicator and
+            // makes re-clicking it a no-op.
+            _fieldsTabButton.SetEnabled(!showFields);
+            _jsonTabButton.SetEnabled(showFields);
+            _fieldsScroll.style.display = showFields ? DisplayStyle.Flex : DisplayStyle.None;
+            _jsonScroll.style.display = showFields ? DisplayStyle.None : DisplayStyle.Flex;
+            UpdateApplyEnabled();
+        }
+
+        private void SetSurfaceEditable(bool editable)
+        {
+            _surfaceEditable = editable;
+            _revertButton.SetEnabled(editable);
+            UpdateApplyEnabled();
+        }
+
+        private void UpdateApplyEnabled()
+        {
+            bool enabled = _surfaceEditable;
+            if (_fieldsTabActive)
+                enabled = enabled && _fieldsModel is not null && !_fieldsModel.HasInvalid;
+            _applyButton.SetEnabled(enabled);
+        }
+
+        private void RebuildFields(string? json, Type? documentType, bool jsonOnly, bool editable)
+        {
+            _fieldsSection.Clear();
+            _fieldsModel = null;
+            _fieldsView = null;
+            _fieldsDocType = jsonOnly ? null : documentType;
+            _fieldsJsonOnly = jsonOnly;
+
+            if (jsonOnly)
+            {
+                ShowFieldsHint($"Collection payload — {FieldEditorModel.JsonOnlyHint}.");
+            }
+            else if (string.IsNullOrEmpty(json) || documentType is null)
+            {
+                HideFieldsHint();
+            }
+            else
+            {
+                try
+                {
+                    _fieldsModel = FieldEditorModel.Create(json, documentType);
+                }
+                catch (Exception ex)
+                {
+                    ShowFieldsHint($"Cannot build field editors ({ex.Message}) — {FieldEditorModel.JsonOnlyHint}.");
+                }
+
+                if (_fieldsModel is not null)
+                {
+                    HideFieldsHint();
+                    _fieldsView = new FieldEditorView(_fieldsModel);
+                    _fieldsView.Changed += OnFieldsEdited;
+                    _fieldsSection.Add(_fieldsView.Root);
+                    _fieldsSection.SetEnabled(editable);
+                }
+            }
+
+            UpdateApplyEnabled();
+        }
+
+        private void OnFieldsEdited() => UpdateApplyEnabled();
+
+        private bool FieldsHasUnappliedEdits => _fieldsModel is not null && _fieldsModel.IsDirty;
+
+        // False only when the Fields tab is active without an applicable model (no document,
+        // collection payload, or invalid numeric input) — Apply is disabled in those states too.
+        private bool TryGetEditedPayload(out string payload)
+        {
+            if (_fieldsTabActive)
+            {
+                if (_fieldsModel is null || _fieldsModel.HasInvalid)
+                {
+                    payload = string.Empty;
+                    return false;
+                }
+
+                payload = _fieldsModel.ToJson();
+                return true;
+            }
+
+            payload = _documentJson.value;
+            return true;
+        }
+
+        private void ShowFieldsHint(string message)
+        {
+            _fieldsHint.text = message;
+            _fieldsHint.style.display = DisplayStyle.Flex;
+        }
+
+        private void HideFieldsHint()
+        {
+            _fieldsHint.style.display = DisplayStyle.None;
         }
 
         // ---- Throttled live refresh ----
@@ -487,7 +637,7 @@ namespace PlayerData.Unity.Editor
             }
 
             _documentInfo.text = info;
-            SetLiveJson(json ?? string.Empty, canEdit);
+            SetLiveJson(json ?? string.Empty, canEdit, descriptor.EntityType);
         }
 
         private void ShowSelectedLiveEntry()
@@ -518,7 +668,7 @@ namespace PlayerData.Unity.Editor
 
             _removeEntryButton.SetEnabled(true);
             _documentInfo.text = $"{_liveSelectedProperty}[{_liveSelectedEntryKey}]";
-            SetLiveJson(json, editable: true);
+            SetLiveJson(json, editable: true, FindLiveDescriptor(_liveSelectedProperty)?.EntityType);
         }
 
         private void OnAddEntry()
@@ -582,8 +732,9 @@ namespace PlayerData.Unity.Editor
             if (descriptor is null)
                 return;
 
-            bool hasUnappliedEdits = !_documentJson.isReadOnly
-                && !string.Equals(_documentJson.value, _lastLoadedLiveJson ?? string.Empty, StringComparison.Ordinal);
+            bool hasUnappliedEdits = (!_documentJson.isReadOnly
+                && !string.Equals(_documentJson.value, _lastLoadedLiveJson ?? string.Empty, StringComparison.Ordinal))
+                || FieldsHasUnappliedEdits;
 
             if (descriptor.IsCollection)
             {
@@ -624,6 +775,7 @@ namespace PlayerData.Unity.Editor
 
             _lastLoadedLiveJson = json;
             _documentJson.SetValueWithoutNotify(json);
+            RebuildFields(json, _fieldsDocType, _fieldsJsonOnly, _surfaceEditable);
             HideStaleHint();
         }
 
@@ -634,6 +786,8 @@ namespace PlayerData.Unity.Editor
             LiveDocumentDescriptor? descriptor = FindLiveDescriptor(_liveSelectedProperty);
             if (descriptor is null)
                 return;
+            if (!TryGetEditedPayload(out string payload))
+                return;
 
             bool applied;
             string? error;
@@ -641,11 +795,11 @@ namespace PlayerData.Unity.Editor
             {
                 if (_liveSelectedEntryKey is null)
                     return;
-                applied = _liveView.ApplyEntryJson(_liveSelectedProperty, _liveSelectedEntryKey, _documentJson.value, out error);
+                applied = _liveView.ApplyEntryJson(_liveSelectedProperty, _liveSelectedEntryKey, payload, out error);
             }
             else
             {
-                applied = _liveView.ApplyJson(_liveSelectedProperty, _documentJson.value, out error);
+                applied = _liveView.ApplyJson(_liveSelectedProperty, payload, out error);
             }
 
             if (applied)
@@ -695,16 +849,16 @@ namespace PlayerData.Unity.Editor
             }
 
             // Reload is only reachable from Apply/Revert, both gated on an editable document.
-            SetLiveJson(json, editable: true);
+            SetLiveJson(json, editable: true, descriptor.EntityType);
         }
 
-        private void SetLiveJson(string json, bool editable)
+        private void SetLiveJson(string json, bool editable, Type? documentType)
         {
             _lastLoadedLiveJson = json;
             _documentJson.SetValueWithoutNotify(json);
             _documentJson.isReadOnly = !editable;
-            _applyButton.SetEnabled(editable);
-            _revertButton.SetEnabled(editable);
+            SetSurfaceEditable(editable);
+            RebuildFields(json, documentType, jsonOnly: false, editable);
         }
 
         private void ClearJsonEditor()
@@ -712,8 +866,8 @@ namespace PlayerData.Unity.Editor
             _lastLoadedLiveJson = null;
             _documentJson.SetValueWithoutNotify(string.Empty);
             _documentJson.isReadOnly = true;
-            _applyButton.SetEnabled(false);
-            _revertButton.SetEnabled(false);
+            SetSurfaceEditable(false);
+            RebuildFields(json: null, documentType: null, jsonOnly: false, editable: false);
         }
 
         private LiveDocumentDescriptor? FindLiveDescriptor(string propertyName)
@@ -772,6 +926,38 @@ namespace PlayerData.Unity.Editor
             _liveEntriesList.SetSelection(index);
             ShowSelectedLiveEntry();
         }
+
+        internal void SelectSessionForTests(int index)
+        {
+            _sessionDropdown.index = index;
+            OnSessionChanged();
+        }
+
+        internal void ScanForTests(string rootPath)
+        {
+            _rootPath.SetValueWithoutNotify(rootPath);
+            OnScan();
+        }
+
+        internal void SelectSaveForTests(int index)
+        {
+            _saveDropdown.index = index;
+            OnSaveChanged();
+        }
+
+        internal void SelectDocumentForTests(int index)
+        {
+            _documentsList.SetSelection(index);
+            ShowSelectedDocument();
+        }
+
+        internal void SelectTabForTests(bool showFields) => SetActiveTab(showFields);
+
+        internal void ApplyForTests() => OnApply();
+
+        internal FieldEditorView? FieldsViewForTests => _fieldsView;
+
+        internal FieldEditorModel? FieldsModelForTests => _fieldsModel;
 
         // ---- Disk mode ----
 
@@ -843,6 +1029,8 @@ namespace PlayerData.Unity.Editor
 
             if (_selectedStorageKey is null)
                 return;
+            if (!TryGetEditedPayload(out string payload))
+                return;
 
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -856,7 +1044,7 @@ namespace PlayerData.Unity.Editor
             }
 
             string storageKey = _selectedStorageKey;
-            if (_controller.ApplyJson(storageKey, _documentJson.value, out string? error))
+            if (_controller.ApplyJson(storageKey, payload, out string? error))
             {
                 HideApplyError();
                 RefreshDocuments(storageKey);
@@ -904,8 +1092,8 @@ namespace PlayerData.Unity.Editor
             _documentInfo.text = string.Empty;
             _documentJson.SetValueWithoutNotify(string.Empty);
             _documentJson.isReadOnly = true;
-            _applyButton.SetEnabled(false);
-            _revertButton.SetEnabled(false);
+            SetSurfaceEditable(false);
+            RebuildFields(json: null, documentType: null, jsonOnly: false, editable: false);
 
             if (preserveSelectedKey is not null)
             {
@@ -942,8 +1130,11 @@ namespace PlayerData.Unity.Editor
 
             _documentJson.SetValueWithoutNotify(view.Json ?? string.Empty);
             _documentJson.isReadOnly = !view.CanEdit;
-            _applyButton.SetEnabled(view.CanEdit);
-            _revertButton.SetEnabled(view.CanEdit);
+            SetSurfaceEditable(view.CanEdit);
+            // Disk collection payloads (dictionaries) have no top-level members to edit;
+            // the Fields tab shows the JSON-only hint for them instead.
+            bool isCollection = view.Entry.Descriptor?.IsCollection == true;
+            RebuildFields(view.Json, isCollection ? null : view.Entry.Descriptor?.PayloadType, jsonOnly: isCollection, editable: view.CanEdit);
         }
 
         private static string SaveLabel(SaveLocation location) =>
