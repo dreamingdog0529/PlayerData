@@ -1,8 +1,10 @@
 {
   "name": "com.dreamingdog0529.playerdata",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "PlayerData for Unity",
-  "description": "Unity integration for PlayerData: persistentDataPath backend and auto-save helper.",
+  "description": "Unity integration for PlayerData: persistentDataPath backend, auto-save helper and an editor save-data viewer.",
   "unity": "6000.0",
-  "dependencies": {}
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  }
 }
