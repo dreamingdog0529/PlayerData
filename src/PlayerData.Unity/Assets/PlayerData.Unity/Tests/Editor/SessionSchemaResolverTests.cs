@@ -30,6 +30,19 @@ namespace PlayerData.Unity.Editor.Tests
         }
 
         [Test]
+        public void Resolve_ValidSession_ExposesPropertyNamesForFriendlyLabels()
+        {
+            SessionSchema schema = SessionSchemaResolver.Resolve(typeof(SampleEditorSession));
+
+            Assert.That(
+                schema.Documents.Select(d => d.PropertyName),
+                Is.EqualTo(new[] { "SampleProfile", "Stats", "Items" }));
+            Assert.That(
+                schema.Documents.Single(d => d.StorageKey == "items-v1").PropertyName,
+                Is.EqualTo("Items"));
+        }
+
+        [Test]
         public void Resolve_SingleDocument_PayloadTypeIsDocumentType()
         {
             SessionSchema schema = SessionSchemaResolver.Resolve(typeof(SampleEditorSession));

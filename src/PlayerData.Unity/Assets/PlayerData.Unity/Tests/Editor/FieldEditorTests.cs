@@ -401,10 +401,11 @@ namespace PlayerData.Unity.Editor.Tests
         }
 
         [Test]
-        public void Tabs_Exist_FieldsIsDefault_AndSwitchingTogglesVisibility()
+        public void Tabs_Exist_FieldsIsDefault_AndSwitchingShowsJson()
         {
             Assert.That(FieldsTab, Is.Not.Null);
             Assert.That(JsonTab, Is.Not.Null);
+            // Fields stay on the primary surface; JSON is under Advanced.
             Assert.That(FieldsScroll.style.display.value, Is.EqualTo(DisplayStyle.Flex));
             Assert.That(JsonScroll.style.display.value, Is.EqualTo(DisplayStyle.None));
             Assert.That(FieldsTab.enabledSelf, Is.False, "active tab button is disabled");
@@ -412,8 +413,9 @@ namespace PlayerData.Unity.Editor.Tests
 
             _panel.SelectTabForTests(showFields: false);
 
-            Assert.That(FieldsScroll.style.display.value, Is.EqualTo(DisplayStyle.None));
+            Assert.That(FieldsScroll.style.display.value, Is.EqualTo(DisplayStyle.Flex));
             Assert.That(JsonScroll.style.display.value, Is.EqualTo(DisplayStyle.Flex));
+            Assert.That(_panel.AdvancedOpenForTests, Is.True);
             Assert.That(FieldsTab.enabledSelf, Is.True);
             Assert.That(JsonTab.enabledSelf, Is.False);
         }

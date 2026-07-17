@@ -83,8 +83,14 @@ namespace PlayerData.Unity.Editor
         internal const string JsonScrollName = "json-scroll";
         internal const string FieldsSectionName = "fields-section";
         internal const string FieldsHintName = "fields-hint";
+        internal const string GuideBoxName = "guide-box";
+        internal const string AdvancedFoldoutName = "advanced-foldout";
+        internal const string TechnicalInfoName = "technical-info";
+        internal const string AddEntryFieldsName = "add-entry-fields";
+        internal const string AddEntryHintName = "add-entry-hint";
 
-        internal const string DiskSourceLabel = "Disk";
+        // Display text for the disk source choice (tests assert against this constant).
+        internal const string DiskSourceLabel = ViewerDisplayNames.SavedFilesLabel;
 
         internal static ViewerPanel BuildInto(VisualElement root, PlayerDataViewerController controller, string defaultRootPath)
         {
@@ -127,6 +133,11 @@ namespace PlayerData.Unity.Editor
         private readonly ScrollView _jsonScroll;
         private readonly VisualElement _fieldsSection;
         private readonly Label _fieldsHint;
+        private readonly HelpBox _guideBox;
+        private readonly Foldout _advancedFoldout;
+        private readonly Label _technicalInfo;
+        private readonly VisualElement _addEntryFieldsSection;
+        private readonly Label _addEntryHint;
         private readonly List<DocumentEntry> _documents = new List<DocumentEntry>();
         private readonly List<LiveDocumentDescriptor> _liveDocuments = new List<LiveDocumentDescriptor>();
         private readonly List<object> _liveEntryKeys = new List<object>();
@@ -143,6 +154,8 @@ namespace PlayerData.Unity.Editor
         private string? _loadedJson;
         private FieldEditorModel? _fieldsModel;
         private FieldEditorView? _fieldsView;
+        private FieldEditorModel? _addEntryModel;
+        private FieldEditorView? _addEntryView;
         private Type? _fieldsDocType;
         private bool _fieldsJsonOnly;
         private bool _surfaceEditable;
@@ -157,23 +170,25 @@ namespace PlayerData.Unity.Editor
             controller.RefreshSessionTypes();
             root.Clear();
 
-            _playModeWarning = new HelpBox(
-                "Play mode is active: a live session's next commit can overwrite what is shown here.",
-                HelpBoxMessageType.Warning);
+            _playModeWarning = new HelpBox(ViewerDisplayNames.PlayModeWarningText, HelpBoxMessageType.Warning);
             _playModeWarning.name = ViewerUI.PlayModeWarningName;
             root.Add(_playModeWarning);
 
-            _liveIndicator = new Label("Live session: edits apply directly to the running game.");
+            _liveIndicator = new Label(ViewerDisplayNames.LiveIndicatorText);
             _liveIndicator.name = ViewerUI.LiveIndicatorName;
             _liveIndicator.style.display = DisplayStyle.None;
             root.Add(_liveIndicator);
 
-            _sourceDropdown = new DropdownField("Source", new List<string> { ViewerUI.DiskSourceLabel }, 0);
+            _guideBox = new HelpBox(ViewerDisplayNames.GuideEmpty, HelpBoxMessageType.Info);
+            _guideBox.name = ViewerUI.GuideBoxName;
+            root.Add(_guideBox);
+
+            _sourceDropdown = new DropdownField(ViewerDisplayNames.LookingAtLabel, new List<string> { ViewerUI.DiskSourceLabel }, 0);
             _sourceDropdown.name = ViewerUI.SourceDropdownName;
             _sourceDropdown.RegisterValueChangedCallback(_ => OnSourceChanged());
             root.Add(_sourceDropdown);
 
-            _searchField = new TextField("Search") { value = string.Empty };
+            _searchField = new TextField(ViewerDisplayNames.SearchLabel) { value = string.Empty };
             _searchField.name = ViewerUI.SearchFieldName;
             _searchField.RegisterValueChangedCallback(evt => OnSearchChanged(evt.newValue));
             root.Add(_searchField);
@@ -182,42 +197,35 @@ namespace PlayerData.Unity.Editor
             _diskSection.name = ViewerUI.DiskSectionName;
             root.Add(_diskSection);
 
-            List<string> sessionNames = new List<string>();
-            foreach (Type type in controller.SessionTypes)
-                sessionNames.Add(type.FullName);
-            _sessionDropdown = new DropdownField("Session", sessionNames, -1);
+            List<string> sessionNames = ViewerDisplayNames.DisambiguatedShortNames(controller.SessionTypes);
+            _sessionDropdown = new DropdownField(ViewerDisplayNames.SaveTypeLabel, sessionNames, -1);
             _sessionDropdown.name = ViewerUI.SessionDropdownName;
             _sessionDropdown.RegisterValueChangedCallback(_ => OnSessionChanged());
             _diskSection.Add(_sessionDropdown);
 
-            _rootPath = new TextField("Root path") { value = defaultRootPath };
+            _rootPath = new TextField(ViewerDisplayNames.RootPathLabel) { value = defaultRootPath };
             _rootPath.name = ViewerUI.RootPathName;
             _diskSection.Add(_rootPath);
 
             VisualElement buttonRow = new VisualElement();
             buttonRow.style.flexDirection = FlexDirection.Row;
-            Button scanButton = new Button(OnScan) { text = "Scan" };
+            Button scanButton = new Button(OnScan) { text = ViewerDisplayNames.FindSavesLabel };
             scanButton.name = ViewerUI.ScanButtonName;
             buttonRow.Add(scanButton);
-            Button reloadButton = new Button(OnReload) { text = "Reload" };
+            Button reloadButton = new Button(OnReload) { text = ViewerDisplayNames.ReloadLabel };
             reloadButton.name = ViewerUI.ReloadButtonName;
             buttonRow.Add(reloadButton);
             // Living inside the disk section, the button disappears with it in live mode
             // (live sessions have no on-disk directory to reveal).
-            Button openFolderButton = new Button(OnOpenFolder) { text = "Open Folder" };
+            Button openFolderButton = new Button(OnOpenFolder) { text = ViewerDisplayNames.OpenFolderLabel };
             openFolderButton.name = ViewerUI.OpenFolderButtonName;
             buttonRow.Add(openFolderButton);
             _diskSection.Add(buttonRow);
 
-            _saveDropdown = new DropdownField("Save", new List<string>(), -1);
+            _saveDropdown = new DropdownField(ViewerDisplayNames.SaveLabel, new List<string>(), -1);
             _saveDropdown.name = ViewerUI.SaveDropdownName;
             _saveDropdown.RegisterValueChangedCallback(_ => OnSaveChanged());
             _diskSection.Add(_saveDropdown);
-
-            _schemaDiagnostics = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
-            _schemaDiagnostics.name = ViewerUI.SchemaDiagnosticsName;
-            _schemaDiagnostics.style.display = DisplayStyle.None;
-            _diskSection.Add(_schemaDiagnostics);
 
             _loadError = new HelpBox(string.Empty, HelpBoxMessageType.Error);
             _loadError.name = ViewerUI.LoadErrorName;
@@ -260,7 +268,7 @@ namespace PlayerData.Unity.Editor
             _liveEntrySection.style.display = DisplayStyle.None;
             _liveSection.Add(_liveEntrySection);
 
-            _liveEntrySection.Add(new Label("Entries"));
+            _liveEntrySection.Add(new Label(ViewerDisplayNames.EntriesLabel));
 
             _liveEntriesList = new ListView
             {
@@ -275,38 +283,40 @@ namespace PlayerData.Unity.Editor
             _liveEntriesList.style.minHeight = 80;
             _liveEntrySection.Add(_liveEntriesList);
 
-            _removeEntryButton = new Button(OnRemoveEntry) { text = "Remove Entry" };
+            _removeEntryButton = new Button(OnRemoveEntry) { text = ViewerDisplayNames.RemoveEntryLabel };
             _removeEntryButton.name = ViewerUI.RemoveEntryButtonName;
             _removeEntryButton.SetEnabled(false);
             _liveEntrySection.Add(_removeEntryButton);
 
-            VisualElement addEntryRow = new VisualElement();
-            addEntryRow.style.flexDirection = FlexDirection.Row;
-            _addEntryJson = new TextField { multiline = true };
-            _addEntryJson.name = ViewerUI.AddEntryJsonName;
-            _addEntryJson.style.flexGrow = 1;
-            addEntryRow.Add(_addEntryJson);
-            Button addEntryButton = new Button(OnAddEntry) { text = "Add Entry" };
+            _addEntryHint = new Label();
+            _addEntryHint.name = ViewerUI.AddEntryHintName;
+            _addEntryHint.style.display = DisplayStyle.None;
+            _liveEntrySection.Add(_addEntryHint);
+
+            _addEntryFieldsSection = new VisualElement();
+            _addEntryFieldsSection.name = ViewerUI.AddEntryFieldsName;
+            _liveEntrySection.Add(_addEntryFieldsSection);
+
+            Button addEntryButton = new Button(OnAddEntry) { text = ViewerDisplayNames.AddEntryLabel };
             addEntryButton.name = ViewerUI.AddEntryButtonName;
-            addEntryRow.Add(addEntryButton);
-            _liveEntrySection.Add(addEntryRow);
+            _liveEntrySection.Add(addEntryButton);
 
             _documentInfo = new Label();
             _documentInfo.name = ViewerUI.DocumentInfoName;
             root.Add(_documentInfo);
 
-            _staleHint = new Label("Live data changed. Unapplied edits are kept; Apply or Revert to sync.");
+            _staleHint = new Label(ViewerDisplayNames.StaleHintText);
             _staleHint.name = ViewerUI.StaleHintName;
             _staleHint.style.display = DisplayStyle.None;
             root.Add(_staleHint);
 
             VisualElement editRow = new VisualElement();
             editRow.style.flexDirection = FlexDirection.Row;
-            _applyButton = new Button(OnApply) { text = "Apply" };
+            _applyButton = new Button(OnApply) { text = ViewerDisplayNames.ApplyLabel };
             _applyButton.name = ViewerUI.ApplyButtonName;
             _applyButton.SetEnabled(false);
             editRow.Add(_applyButton);
-            _revertButton = new Button(OnRevert) { text = "Revert" };
+            _revertButton = new Button(OnRevert) { text = ViewerDisplayNames.RevertLabel };
             _revertButton.name = ViewerUI.RevertButtonName;
             _revertButton.SetEnabled(false);
             editRow.Add(_revertButton);
@@ -317,16 +327,7 @@ namespace PlayerData.Unity.Editor
             _applyError.style.display = DisplayStyle.None;
             root.Add(_applyError);
 
-            VisualElement tabRow = new VisualElement();
-            tabRow.style.flexDirection = FlexDirection.Row;
-            _fieldsTabButton = new Button(() => SetActiveTab(showFields: true)) { text = "Fields" };
-            _fieldsTabButton.name = ViewerUI.FieldsTabButtonName;
-            tabRow.Add(_fieldsTabButton);
-            _jsonTabButton = new Button(() => SetActiveTab(showFields: false)) { text = "JSON" };
-            _jsonTabButton.name = ViewerUI.JsonTabButtonName;
-            tabRow.Add(_jsonTabButton);
-            root.Add(tabRow);
-
+            // Fields is the primary surface for non-engineers; JSON lives under Advanced.
             _fieldsScroll = new ScrollView();
             _fieldsScroll.name = ViewerUI.FieldsScrollName;
             _fieldsScroll.style.flexGrow = 1;
@@ -339,14 +340,45 @@ namespace PlayerData.Unity.Editor
             _fieldsScroll.Add(_fieldsSection);
             root.Add(_fieldsScroll);
 
+            _advancedFoldout = new Foldout { text = ViewerDisplayNames.AdvancedLabel, value = false };
+            _advancedFoldout.name = ViewerUI.AdvancedFoldoutName;
+            _advancedFoldout.RegisterValueChangedCallback(_ => OnAdvancedToggled());
+            root.Add(_advancedFoldout);
+
+            _technicalInfo = new Label();
+            _technicalInfo.name = ViewerUI.TechnicalInfoName;
+            _technicalInfo.style.whiteSpace = WhiteSpace.Normal;
+            _advancedFoldout.Add(_technicalInfo);
+
+            _schemaDiagnostics = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
+            _schemaDiagnostics.name = ViewerUI.SchemaDiagnosticsName;
+            _schemaDiagnostics.style.display = DisplayStyle.None;
+            _advancedFoldout.Add(_schemaDiagnostics);
+
+            VisualElement tabRow = new VisualElement();
+            tabRow.style.flexDirection = FlexDirection.Row;
+            _fieldsTabButton = new Button(() => SetActiveTab(showFields: true)) { text = ViewerDisplayNames.FieldsTabLabel };
+            _fieldsTabButton.name = ViewerUI.FieldsTabButtonName;
+            tabRow.Add(_fieldsTabButton);
+            _jsonTabButton = new Button(() => SetActiveTab(showFields: false)) { text = ViewerDisplayNames.JsonTabLabel };
+            _jsonTabButton.name = ViewerUI.JsonTabButtonName;
+            tabRow.Add(_jsonTabButton);
+            _advancedFoldout.Add(tabRow);
+
             _jsonScroll = new ScrollView();
             _jsonScroll.name = ViewerUI.JsonScrollName;
             _jsonScroll.style.flexGrow = 1;
+            _jsonScroll.style.minHeight = 120;
             _documentJson = new TextField { multiline = true, isReadOnly = true };
             _documentJson.name = ViewerUI.DocumentJsonName;
             _documentJson.RegisterValueChangedCallback(_ => UpdateDirtyState());
             _jsonScroll.Add(_documentJson);
-            root.Add(_jsonScroll);
+            _advancedFoldout.Add(_jsonScroll);
+
+            _addEntryJson = new TextField("Add entry JSON") { multiline = true };
+            _addEntryJson.name = ViewerUI.AddEntryJsonName;
+            _addEntryJson.style.display = DisplayStyle.None;
+            _advancedFoldout.Add(_addEntryJson);
 
             // Fields is the default tab: typed editors with validated input are the safer surface.
             SetActiveTab(showFields: true);
@@ -355,6 +387,7 @@ namespace PlayerData.Unity.Editor
             LiveSessionRegistry.Changed += _registryChangedHandler;
             RebuildSources();
             RefreshPlayModeBanner();
+            UpdateGuide();
         }
 
         public void Dispose()
@@ -380,7 +413,8 @@ namespace PlayerData.Unity.Editor
         // ---- Fields / JSON tabs ----
 
         // Each tab keeps its own unapplied edits across switches (nothing is discarded or merged);
-        // Apply always materializes the active tab's content.
+        // Apply always materializes the active tab's content. JSON lives under Advanced; selecting
+        // it expands the foldout so the editor is visible.
         private void SetActiveTab(bool showFields)
         {
             _fieldsTabActive = showFields;
@@ -388,9 +422,44 @@ namespace PlayerData.Unity.Editor
             // makes re-clicking it a no-op.
             _fieldsTabButton.SetEnabled(!showFields);
             _jsonTabButton.SetEnabled(showFields);
-            _fieldsScroll.style.display = showFields ? DisplayStyle.Flex : DisplayStyle.None;
+            // Fields stay on the primary surface; JSON is only shown when Advanced is open.
+            _fieldsScroll.style.display = DisplayStyle.Flex;
             _jsonScroll.style.display = showFields ? DisplayStyle.None : DisplayStyle.Flex;
+            if (!showFields && !_advancedFoldout.value)
+                _advancedFoldout.SetValueWithoutNotify(true);
             UpdateDirtyState();
+        }
+
+        private void OnAdvancedToggled()
+        {
+            // Collapsing Advanced while on the JSON tab snaps Apply back to Fields so the user
+            // is never silently applying an invisible editor.
+            if (!_advancedFoldout.value && !_fieldsTabActive)
+                SetActiveTab(showFields: true);
+            _documentsList.RefreshItems();
+            _liveDocumentsList.RefreshItems();
+        }
+
+        private bool ShowTechnicalDetails => _advancedFoldout.value;
+
+        private void UpdateGuide()
+        {
+            if (_liveView is not null)
+            {
+                _guideBox.text = ViewerDisplayNames.GuideLive;
+                _guideBox.style.display = _liveSelectedProperty is null ? DisplayStyle.Flex : DisplayStyle.None;
+                return;
+            }
+
+            bool hasDocument = _selectedStorageKey is not null;
+            _guideBox.text = ViewerDisplayNames.GuideEmpty;
+            _guideBox.style.display = hasDocument ? DisplayStyle.None : DisplayStyle.Flex;
+        }
+
+        private void SetTechnicalInfo(string text)
+        {
+            _technicalInfo.text = text ?? string.Empty;
+            _technicalInfo.style.display = string.IsNullOrEmpty(text) ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         private void SetSurfaceEditable(bool editable)
@@ -595,7 +664,10 @@ namespace PlayerData.Unity.Editor
             {
                 foreach (DocumentEntry entry in _controller.CurrentSave.Documents)
                 {
-                    if (PlayerDataViewerController.MatchesFilter(_filter, entry.StorageKey, entry.Descriptor?.DocumentType.Name))
+                    string? propertyName = entry.Descriptor?.PropertyName;
+                    string? typeName = entry.Descriptor?.DocumentType.Name;
+                    if (PlayerDataViewerController.MatchesFilter(_filter, entry.StorageKey, typeName)
+                        || PlayerDataViewerController.MatchesFilter(_filter, propertyName ?? string.Empty, null))
                         _documents.Add(entry);
                 }
             }
@@ -620,11 +692,13 @@ namespace PlayerData.Unity.Editor
             _selectedStorageKey = null;
             HideApplyError();
             SetDocumentInfo(string.Empty);
+            SetTechnicalInfo(string.Empty);
             _loadedJson = null;
             _documentJson.SetValueWithoutNotify(string.Empty);
             _documentJson.isReadOnly = true;
             SetSurfaceEditable(false);
             RebuildFields(json: null, documentType: null, jsonOnly: false, editable: false);
+            UpdateGuide();
         }
 
         private void OnOpenFolder()
@@ -694,10 +768,13 @@ namespace PlayerData.Unity.Editor
             DisposeLiveView();
             _liveSection.style.display = DisplayStyle.None;
             _diskSection.style.display = DisplayStyle.Flex;
+            ClearAddEntryFields();
+            _addEntryJson.style.display = DisplayStyle.None;
             HideStaleHint();
             RefreshDocuments(_diskSelectedStorageKey);
             _diskSelectedStorageKey = null;
             RefreshPlayModeBanner();
+            UpdateGuide();
         }
 
         private void SwitchToLive(LiveSessionEntry entry)
@@ -719,11 +796,14 @@ namespace PlayerData.Unity.Editor
 
             _liveEntrySection.style.display = DisplayStyle.None;
             _addEntryJson.SetValueWithoutNotify(string.Empty);
+            ClearAddEntryFields();
             SetDocumentInfo(string.Empty);
+            SetTechnicalInfo(string.Empty);
             HideApplyError();
             HideStaleHint();
             ClearJsonEditor();
             RefreshPlayModeBanner();
+            UpdateGuide();
         }
 
         private void DisposeLiveView()
@@ -757,17 +837,23 @@ namespace PlayerData.Unity.Editor
             if (descriptor.IsCollection)
             {
                 _liveEntrySection.style.display = DisplayStyle.Flex;
-                SetDocumentInfo($"{descriptor.PropertyName} — collection of {descriptor.EntityType.Name} (key: {descriptor.KeyType!.Name})");
+                SetDocumentInfo($"{descriptor.PropertyName}  ·  list of {ViewerDisplayNames.ShortTypeName(descriptor.EntityType)}");
+                SetTechnicalInfo(
+                    $"Property: {descriptor.PropertyName}\nEntity: {ViewerDisplayNames.FullTypeName(descriptor.EntityType)}\nKey type: {descriptor.KeyType!.Name}");
                 ClearJsonEditor();
+                PrepareAddEntryTemplate(descriptor.EntityType);
                 RefreshLiveEntryKeys(preserveKey: null);
+                UpdateGuide();
                 return;
             }
 
             _liveEntrySection.style.display = DisplayStyle.None;
+            ClearAddEntryFields();
+            _addEntryJson.style.display = DisplayStyle.None;
             bool canEdit = _liveView.CanEdit(descriptor.PropertyName, out string? reason);
-            string info = $"{descriptor.PropertyName} — {descriptor.EntityType.Name}";
+            string info = $"{descriptor.PropertyName}  ·  {ViewerDisplayNames.ShortTypeName(descriptor.EntityType)}";
             if (!canEdit)
-                info += $" — view-only: {reason}";
+                info += $"  ·  View only — {reason}";
 
             string? json = null;
             try
@@ -776,12 +862,15 @@ namespace PlayerData.Unity.Editor
             }
             catch (Exception ex)
             {
-                info += $" — JSON error: {ex.Message}";
+                info += $" — Could not show values: {ex.Message}";
                 canEdit = false;
             }
 
             SetDocumentInfo(info);
+            SetTechnicalInfo(
+                $"Property: {descriptor.PropertyName}\nType: {ViewerDisplayNames.FullTypeName(descriptor.EntityType)}");
             SetLiveJson(json ?? string.Empty, canEdit, descriptor.EntityType);
+            UpdateGuide();
         }
 
         private void ShowSelectedLiveEntry()
@@ -812,7 +901,13 @@ namespace PlayerData.Unity.Editor
 
             _removeEntryButton.SetEnabled(true);
             SetDocumentInfo($"{_liveSelectedProperty}[{_liveSelectedEntryKey}]");
-            SetLiveJson(json, editable: true, FindLiveDescriptor(_liveSelectedProperty)?.EntityType);
+            LiveDocumentDescriptor? entryDescriptor = FindLiveDescriptor(_liveSelectedProperty);
+            SetTechnicalInfo(
+                entryDescriptor is null
+                    ? string.Empty
+                    : $"Property: {_liveSelectedProperty}\nKey: {_liveSelectedEntryKey}\nType: {ViewerDisplayNames.FullTypeName(entryDescriptor.EntityType)}");
+            SetLiveJson(json, editable: true, entryDescriptor?.EntityType);
+            UpdateGuide();
         }
 
         private void OnAddEntry()
@@ -820,16 +915,80 @@ namespace PlayerData.Unity.Editor
             if (_liveView is null || _liveSelectedProperty is null)
                 return;
 
-            if (_liveView.AddEntryJson(_liveSelectedProperty, _addEntryJson.value, out string? error))
+            string payload;
+            if (_addEntryModel is not null)
+            {
+                if (_addEntryModel.HasInvalid)
+                {
+                    ShowApplyError("Fix the highlighted fields before adding the entry.");
+                    return;
+                }
+
+                payload = _addEntryModel.ToJson();
+            }
+            else if (!string.IsNullOrWhiteSpace(_addEntryJson.value))
+            {
+                payload = _addEntryJson.value;
+            }
+            else
+            {
+                ShowApplyError("Fill in the new entry fields (or open Advanced for raw JSON).");
+                return;
+            }
+
+            if (_liveView.AddEntryJson(_liveSelectedProperty, payload, out string? error))
             {
                 HideApplyError();
-                _addEntryJson.SetValueWithoutNotify(string.Empty);
+                LiveDocumentDescriptor? descriptor = FindLiveDescriptor(_liveSelectedProperty);
+                if (descriptor is not null)
+                    PrepareAddEntryTemplate(descriptor.EntityType);
+                else
+                    _addEntryJson.SetValueWithoutNotify(string.Empty);
                 RefreshLiveEntryKeys(_liveSelectedEntryKey);
             }
             else
             {
                 ShowApplyError(error);
             }
+        }
+
+        private void PrepareAddEntryTemplate(Type entityType)
+        {
+            ClearAddEntryFields();
+            _addEntryJson.style.display = DisplayStyle.Flex;
+
+            if (!ViewerDisplayNames.TryCreateDefaultJson(entityType, out string json, out string? error))
+            {
+                _addEntryHint.text = error + " Use Advanced → Add entry JSON instead.";
+                _addEntryHint.style.display = DisplayStyle.Flex;
+                _addEntryJson.SetValueWithoutNotify(string.Empty);
+                return;
+            }
+
+            _addEntryHint.style.display = DisplayStyle.None;
+            _addEntryJson.SetValueWithoutNotify(json);
+            try
+            {
+                _addEntryModel = FieldEditorModel.Create(json, entityType);
+                _addEntryView = new FieldEditorView(_addEntryModel);
+                _addEntryFieldsSection.Add(_addEntryView.Root);
+            }
+            catch (Exception ex)
+            {
+                _addEntryModel = null;
+                _addEntryView = null;
+                _addEntryHint.text = $"Fields unavailable ({ex.Message}). Use Advanced → Add entry JSON.";
+                _addEntryHint.style.display = DisplayStyle.Flex;
+            }
+        }
+
+        private void ClearAddEntryFields()
+        {
+            _addEntryFieldsSection.Clear();
+            _addEntryModel = null;
+            _addEntryView = null;
+            _addEntryHint.style.display = DisplayStyle.None;
+            _addEntryHint.text = string.Empty;
         }
 
         private void OnRemoveEntry()
@@ -1025,10 +1184,9 @@ namespace PlayerData.Unity.Editor
 
         private string DescribeLiveDocument(LiveDocumentDescriptor descriptor)
         {
-            string kind = descriptor.IsCollection ? "collection" : "doc";
             bool editable = descriptor.IsCollection
                 || (_liveView is not null && _liveView.CanEdit(descriptor.PropertyName, out _));
-            return $"{descriptor.PropertyName}  [{kind}]  {descriptor.EntityType.Name}  {(editable ? "editable" : "view-only")}";
+            return ViewerDisplayNames.FormatLiveDocumentLine(descriptor, editable, ShowTechnicalDetails);
         }
 
         private void ShowStaleHint()
@@ -1261,30 +1419,51 @@ namespace PlayerData.Unity.Editor
             _selectedStorageKey = view.Entry.StorageKey;
             HideApplyError();
 
-            string info = $"{view.Entry.StorageKey} — {view.Entry.State}";
+            string info = ViewerDisplayNames.FormatDocumentInfo(view.Entry, view.JsonError);
+            string typeName = view.Entry.Descriptor is null
+                ? "?"
+                : ViewerDisplayNames.FullTypeName(view.Entry.Descriptor.DocumentType);
+            string tech =
+                $"Storage key: {view.Entry.StorageKey}\n" +
+                $"Type: {typeName}\n" +
+                $"Size: {view.Entry.SizeBytes} B\n" +
+                $"Format version: {_controller.CurrentSave?.FormatVersion.ToString() ?? "?"}\n" +
+                $"State: {view.Entry.State}";
             if (view.Entry.StateReason is not null)
-                info += $" — {view.Entry.StateReason}";
-            if (view.JsonError is not null)
-                info += $" — JSON error: {view.JsonError}";
+                tech += $"\nReason: {view.Entry.StateReason}";
 
             _loadedJson = view.Json ?? string.Empty;
             _documentJson.SetValueWithoutNotify(view.Json ?? string.Empty);
             _documentJson.isReadOnly = !view.CanEdit;
             SetDocumentInfo(info);
+            SetTechnicalInfo(tech);
             SetSurfaceEditable(view.CanEdit);
             // Disk collection payloads (dictionaries) have no top-level members to edit;
-            // the Fields tab shows the JSON-only hint for them instead.
+            // the Fields surface shows the JSON-only hint for them instead.
             bool isCollection = view.Entry.Descriptor?.IsCollection == true;
             RebuildFields(view.Json, isCollection ? null : view.Entry.Descriptor?.PayloadType, jsonOnly: isCollection, editable: view.CanEdit);
+            UpdateGuide();
         }
 
         private static string SaveLabel(SaveLocation location) =>
             location.Slot is int slot ? $"{location.Directory} (slot {slot})" : location.Directory;
 
-        private static string DescribeDocument(DocumentEntry entry)
+        private string DescribeDocument(DocumentEntry entry) =>
+            ViewerDisplayNames.FormatDocumentLine(entry, ShowTechnicalDetails);
+
+        // Test hooks for progressive disclosure / add-entry template.
+        internal bool AdvancedOpenForTests
         {
-            string typeName = entry.Descriptor?.DocumentType.Name ?? "?";
-            return $"{entry.StorageKey}  [{entry.State}]  {typeName}  {entry.SizeBytes} B";
+            get => _advancedFoldout.value;
+            set
+            {
+                _advancedFoldout.value = value;
+                OnAdvancedToggled();
+            }
         }
+
+        internal FieldEditorModel? AddEntryModelForTests => _addEntryModel;
+
+        internal void AddEntryForTests() => OnAddEntry();
     }
 }

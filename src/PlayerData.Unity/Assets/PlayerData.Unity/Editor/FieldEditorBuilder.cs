@@ -74,7 +74,7 @@ namespace PlayerData.Unity.Editor
     /// </summary>
     public sealed class FieldEditorModel
     {
-        public const string JsonOnlyHint = "Edit via JSON tab";
+        public const string JsonOnlyHint = ViewerDisplayNames.JsonOnlyHint;
 
         private const int PreviewMaxLength = 120;
 

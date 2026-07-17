@@ -10,15 +10,22 @@ namespace PlayerData.Unity.Editor
     /// <summary>Editor-side schema of one document declared on a [PlayerDataSession] class.</summary>
     public sealed class DocumentDescriptor
     {
-        public DocumentDescriptor(string storageKey, Type documentType, Type payloadType, Type? keyType)
+        public DocumentDescriptor(string storageKey, Type documentType, Type payloadType, Type? keyType, string propertyName)
         {
             StorageKey = storageKey;
             DocumentType = documentType;
             PayloadType = payloadType;
             KeyType = keyType;
+            PropertyName = propertyName;
         }
 
         public string StorageKey { get; }
+
+        /// <summary>
+        /// Generated property name (attribute PropertyName, or DocumentType.Name when omitted).
+        /// Used for friendly list labels; storage key resolution still uses Key ?? propertyName.
+        /// </summary>
+        public string PropertyName { get; }
 
         /// <summary>Declared entity type (the T of IDoc&lt;T&gt; / IBag&lt;TKey, T&gt;).</summary>
         public Type DocumentType { get; }
@@ -162,7 +169,7 @@ namespace PlayerData.Unity.Editor
                     }
 
                     Type payloadType = typeof(ConcurrentDictionary<,>).MakeGenericType(keyType!, documentType);
-                    documents.Add(new DocumentDescriptor(storageKey, documentType, payloadType, keyType));
+                    documents.Add(new DocumentDescriptor(storageKey, documentType, payloadType, keyType, propertyName));
                 }
                 else
                 {
@@ -174,7 +181,7 @@ namespace PlayerData.Unity.Editor
                         continue;
                     }
 
-                    documents.Add(new DocumentDescriptor(storageKey, documentType, documentType, keyType: null));
+                    documents.Add(new DocumentDescriptor(storageKey, documentType, documentType, keyType: null, propertyName));
                 }
             }
 
