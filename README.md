@@ -405,6 +405,18 @@ auto.CommitOnPause = auto.CommitOnQuit = true;
 auto.Bind(save); // dirty only; concurrent commits gated
 ```
 
+### Save Data Viewer (Editor)
+
+`Window > PlayerData > Data Viewer` opens an editor window for inspecting and editing saved data (`DirectorySaveBackend` layout, `slot_{n}` included) without entering play mode: pick your `[PlayerDataSession]` type, set the root path (defaults to `Application.persistentDataPath`), **Scan**, then select a save and a document to view it as JSON. Edit the JSON and press **Apply** to write it back.
+
+Safety rules:
+
+- A document is editable only when its `bytes → JSON → bytes` round-trip reproduces the payload exactly; documents that JSON cannot represent losslessly (e.g. written by a newer schema) are view-only.
+- Encrypted / obfuscated saves cannot be decoded by the viewer and show as *unreadable*. Unknown keys are preserved untouched on write-back.
+- Saves whose `FormatVersion` differs from the current one are view-only — run your migrations in game code first.
+- Applying during play mode asks for confirmation; a live session's next commit wins over your edit.
+- **Applied edits overwrite the save file immediately and cannot be undone.**
+
 ### VContainer
 
 Optional [VContainer](https://github.com/hadashiA/VContainer) integration. If you do not use VContainer, install only `PlayerData.Unity` — do not add this package.
@@ -414,7 +426,7 @@ Add **both** PlayerData packages (plus VContainer itself) to `Packages/manifest.
 ```json
 "com.dreamingdog0529.playerdata": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity",
 "com.dreamingdog0529.playerdata.vcontainer": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/External/PlayerData.Unity.VContainer",
-"jp.hadashikick.vcontainer": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer#1.16.8"
+"jp.hadashikick.vcontainer": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer#1.19.0"
 ```
 
 ```csharp
@@ -504,6 +516,16 @@ dotnet test PlayerData.slnx
 ```
 
 Integration tests consume the packed Core nupkg from `../.local-feed` (see `nuget.config`), so build Core once before restoring the full solution.
+
+The Unity project (`src/PlayerData.Unity`) restores its precompiled DLLs via NuGetForUnity; the binaries under `Assets/Packages/` are not committed. Restore them once before opening the project:
+
+```bash
+dotnet build src/PlayerData.Core/PlayerData.Core.csproj   # pack Core into the local feed first
+dotnet tool install --global NuGetForUnity.Cli
+nugetforunity restore src/PlayerData.Unity
+```
+
+Unity EditMode tests run from the Test Runner window, or headless via `Unity.exe -batchmode -projectPath src/PlayerData.Unity -runTests -testPlatform EditMode -testResults <xml> -logFile <log>`.
 
 License
 ---

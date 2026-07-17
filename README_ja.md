@@ -405,6 +405,18 @@ auto.CommitOnPause = auto.CommitOnQuit = true;
 auto.Bind(save); // dirty 時のみ。並行コミットはゲート
 ```
 
+### セーブデータビューア（エディタ）
+
+`Window > PlayerData > Data Viewer` で、再生せずに保存済みデータ（`DirectorySaveBackend` レイアウト、`slot_{n}` 含む）を閲覧・編集できます。`[PlayerDataSession]` 型を選び、ルートパス（既定は `Application.persistentDataPath`）を指定して **Scan** → セーブとドキュメントを選ぶと JSON で表示されます。JSON を編集して **Apply** で書き戻します。
+
+安全のためのルール:
+
+- 編集できるのは `bytes → JSON → bytes` の往復がバイト一致するドキュメントのみです。JSON で無損失に表現できないもの（例: より新しいスキーマで書かれたデータ）は閲覧のみになります。
+- 暗号化・難読化されたセーブは復号できず *unreadable* と表示されます。未知のキーは書き戻し時にそのまま保全されます。
+- `FormatVersion` が現行と異なるセーブは閲覧のみです（先にゲームコード側でマイグレーションを実行してください）。
+- 再生中の Apply は確認ダイアログが出ます。ライブセッションの次のコミットが編集を上書きします（後勝ち）。
+- **Apply した編集は即座にセーブファイルを上書きし、元に戻せません。**
+
 ### VContainer
 
 任意の [VContainer](https://github.com/hadashiA/VContainer) 統合です。VContainer を使わない場合はこのパッケージを入れないでください（`PlayerData.Unity` のみで可）。
@@ -414,7 +426,7 @@ auto.Bind(save); // dirty 時のみ。並行コミットはゲート
 ```json
 "com.dreamingdog0529.playerdata": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity",
 "com.dreamingdog0529.playerdata.vcontainer": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/External/PlayerData.Unity.VContainer",
-"jp.hadashikick.vcontainer": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer#1.16.8"
+"jp.hadashikick.vcontainer": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer#1.19.0"
 ```
 
 ```csharp
@@ -504,6 +516,16 @@ dotnet test PlayerData.slnx
 ```
 
 統合テストは `../.local-feed` の pack 済み Core nupkg を参照します（`nuget.config` 参照）。ソリューション全体を restore する前に Core を一度ビルドしてください。
+
+Unity プロジェクト（`src/PlayerData.Unity`）のプリコンパイル DLL は NuGetForUnity で復元します（`Assets/Packages/` のバイナリはコミットされていません）。プロジェクトを開く前に一度復元してください:
+
+```bash
+dotnet build src/PlayerData.Core/PlayerData.Core.csproj   # 先に Core をローカルフィードへ pack
+dotnet tool install --global NuGetForUnity.Cli
+nugetforunity restore src/PlayerData.Unity
+```
+
+Unity の EditMode テストは Test Runner ウィンドウ、またはヘッドレスで `Unity.exe -batchmode -projectPath src/PlayerData.Unity -runTests -testPlatform EditMode -testResults <xml> -logFile <log>` で実行できます。
 
 License
 ---
