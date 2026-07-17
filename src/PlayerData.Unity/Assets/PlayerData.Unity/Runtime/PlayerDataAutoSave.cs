@@ -1,90 +1,91 @@
-using System;
+﻿using System;
 using System.Threading;
 using UnityEngine;
 
-namespace PlayerData.Unity;
-
-// Commits a dirty ISaveSession on pause/quit and optionally on an interval.
-// Attach to a bootstrap GameObject after constructing the session.
-[DisallowMultipleComponent]
-public sealed class PlayerDataAutoSave : MonoBehaviour
+namespace PlayerData.Unity
 {
-    [SerializeField] private float _intervalSeconds;
-    [SerializeField] private bool _commitOnPause = true;
-    [SerializeField] private bool _commitOnQuit = true;
-
-    private ISaveSession? _session;
-    private float _elapsed;
-    private int _commitGate;
-
-    public float IntervalSeconds
+    // Commits a dirty ISaveSession on pause/quit and optionally on an interval.
+    // Attach to a bootstrap GameObject after constructing the session.
+    [DisallowMultipleComponent]
+    public sealed class PlayerDataAutoSave : MonoBehaviour
     {
-        get => _intervalSeconds;
-        set => _intervalSeconds = value;
-    }
+        [SerializeField] private float _intervalSeconds;
+        [SerializeField] private bool _commitOnPause = true;
+        [SerializeField] private bool _commitOnQuit = true;
 
-    public bool CommitOnPause
-    {
-        get => _commitOnPause;
-        set => _commitOnPause = value;
-    }
+        private ISaveSession? _session;
+        private float _elapsed;
+        private int _commitGate;
 
-    public bool CommitOnQuit
-    {
-        get => _commitOnQuit;
-        set => _commitOnQuit = value;
-    }
-
-    public void Bind(ISaveSession session)
-    {
-        _session = session ?? throw new ArgumentNullException(nameof(session));
-    }
-
-    private void Update()
-    {
-        if (_session is null || _intervalSeconds <= 0f) return;
-        if (!_session.IsDirty) return;
-
-        _elapsed += Time.unscaledDeltaTime;
-        if (_elapsed < _intervalSeconds) return;
-        _elapsed = 0f;
-        CommitFireAndForget();
-    }
-
-    private void OnApplicationPause(bool pauseStatus)
-    {
-        if (pauseStatus && _commitOnPause)
-            CommitFireAndForget();
-    }
-
-    private void OnApplicationQuit()
-    {
-        if (_commitOnQuit)
-            CommitFireAndForget();
-    }
-
-    private void CommitFireAndForget()
-    {
-        if (_session is null || !_session.IsDirty) return;
-        if (Interlocked.CompareExchange(ref _commitGate, 1, 0) != 0) return;
-
-        var session = _session;
-        _ = CommitAsync(session);
-    }
-
-    private async System.Threading.Tasks.Task CommitAsync(ISaveSession session)
-    {
-        try
+        public float IntervalSeconds
         {
-            await session.CommitAsync().ConfigureAwait(true);
+            get => _intervalSeconds;
+            set => _intervalSeconds = value;
         }
-        catch (Exception ex)
+
+        public bool CommitOnPause
         {
-            Debug.LogException(ex);
+            get => _commitOnPause;
+            set => _commitOnPause = value;
         }
-        finally
+
+        public bool CommitOnQuit
         {
-            Interlocked.Exchange(ref _commitGate, 0);
+            get => _commitOnQuit;
+            set => _commitOnQuit = value;
+        }
+
+        public void Bind(ISaveSession session)
+        {
+            _session = session ?? throw new ArgumentNullException(nameof(session));
+        }
+
+        private void Update()
+        {
+            if (_session is null || _intervalSeconds <= 0f) return;
+            if (!_session.IsDirty) return;
+
+            _elapsed += Time.unscaledDeltaTime;
+            if (_elapsed < _intervalSeconds) return;
+            _elapsed = 0f;
+            CommitFireAndForget();
+        }
+
+        private void OnApplicationPause(bool pauseStatus)
+        {
+            if (pauseStatus && _commitOnPause)
+                CommitFireAndForget();
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (_commitOnQuit)
+                CommitFireAndForget();
+        }
+
+        private void CommitFireAndForget()
+        {
+            if (_session is null || !_session.IsDirty) return;
+            if (Interlocked.CompareExchange(ref _commitGate, 1, 0) != 0) return;
+
+            var session = _session;
+            _ = CommitAsync(session);
+        }
+
+        private async System.Threading.Tasks.Task CommitAsync(ISaveSession session)
+        {
+            try
+            {
+                await session.CommitAsync().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _commitGate, 0);
+            }
         }
     }
 }
