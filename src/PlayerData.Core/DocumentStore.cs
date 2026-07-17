@@ -70,7 +70,15 @@ public sealed class DocumentStore<T> : IDoc<T> where T : class
     public T Replace(T value)
     {
         if (value is null) throw new ArgumentNullException(nameof(value));
-        return Update(value, static (v, _) => v);
+
+        // Unconditional swap: Replace does not need the CAS retry loop Update uses for
+        // read-modify-write updaters. Interlocked.Exchange publishes the new reference and
+        // returns the previous one for the Changed event in a single atomic step.
+        var before = Interlocked.Exchange(ref _current, value)!;
+        Interlocked.Increment(ref _version);
+        var suppressed = _onMutated?.Invoke() ?? false;
+        RaiseChanged(new DocChange<T>(before, value, DataChangeCause.UserWrite), suppressed);
+        return value;
     }
 
     // Used by SaveSession.LoadAsync - does not raise Changed and marks the store clean.

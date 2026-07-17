@@ -317,19 +317,29 @@ public sealed class SaveSession : ISaveSession
     // suppression state exactly once per mutation and hands the answer back to the store (which
     // reuses it for its own Changed-coalescing decision instead of querying separately), while
     // also driving the dirty-notification path here when not suppressed.
+    //
+    // A mutation always dirties its own store, so the session is necessarily dirty after this
+    // returns. That lets us notify DirtyChanged on the clean→dirty edge without scanning every
+    // participant (PublishDirty/IsDirty), which was the previous per-mutation cost once the
+    // session was already dirty - the steady state for any game loop that mutates between
+    // autosaves. Clean transitions (Load/Commit/EndSuppress) still go through PublishDirty with
+    // force:true and recompute IsDirty from the participants.
     private bool OnMutated()
     {
         var suppressed = IsNotificationSuppressed();
-        if (!suppressed)
-            PublishDirty(force: false);
+        if (!suppressed && !Volatile.Read(ref _lastDirtyNotified))
+        {
+            Volatile.Write(ref _lastDirtyNotified, true);
+            DirtyChanged?.Invoke(true);
+        }
         return suppressed;
     }
 
     private void PublishDirty(bool force)
     {
         var dirty = IsDirty;
-        if (!force && dirty == _lastDirtyNotified) return;
-        _lastDirtyNotified = dirty;
+        if (!force && dirty == Volatile.Read(ref _lastDirtyNotified)) return;
+        Volatile.Write(ref _lastDirtyNotified, dirty);
         DirtyChanged?.Invoke(dirty);
     }
 

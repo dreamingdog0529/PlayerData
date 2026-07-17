@@ -16,6 +16,7 @@ namespace PlayerData.Benchmarks;
 //   - CommitAsync on a clean session: the autosave-tick no-op, which must not pay for the
 //     save it doesn't perform.
 [MemoryDiagnoser]
+[DisassemblyDiagnoser(maxDepth: 3, printSource: true)]
 [SimpleJob(launchCount: 1, warmupCount: 3, iterationCount: 5)]
 public class ZeroAllocationBenchmarks
 {
