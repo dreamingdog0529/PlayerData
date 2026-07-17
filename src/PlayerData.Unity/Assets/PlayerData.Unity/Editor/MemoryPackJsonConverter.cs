@@ -45,6 +45,27 @@ namespace PlayerData.Unity.Editor
             return MemoryPackSerializer.Serialize(documentType, value);
         }
 
+        /// <summary>Serializes a live object with the same settings as the byte-level APIs.</summary>
+        public static string ToJson(object value, Type documentType)
+        {
+            if (value is null) throw new ArgumentNullException(nameof(value));
+            if (documentType is null) throw new ArgumentNullException(nameof(documentType));
+
+            return JsonConvert.SerializeObject(value, documentType, Settings);
+        }
+
+        /// <summary>Deserializes JSON to a live object with the same settings as the byte-level APIs.</summary>
+        public static object ObjectFromJson(string json, Type documentType)
+        {
+            if (json is null) throw new ArgumentNullException(nameof(json));
+            if (documentType is null) throw new ArgumentNullException(nameof(documentType));
+
+            object? value = JsonConvert.DeserializeObject(json, documentType, Settings);
+            if (value is null)
+                throw new JsonSerializationException($"JSON deserialized to null for document type '{documentType.Name}'.");
+            return value;
+        }
+
         /// <summary>
         /// True when bytes → object → JSON → object → bytes reproduces the payload exactly,
         /// i.e. JSON editing cannot silently lose data for this document.
