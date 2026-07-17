@@ -319,7 +319,7 @@ GameObject:
   - component: {fileID: 1594888355}
   - component: {fileID: 1594888354}
   m_Layer: 0
-  m_Name: LiveEditDemo
+  m_Name: Demo
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
