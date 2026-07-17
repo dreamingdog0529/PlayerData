@@ -53,6 +53,8 @@ namespace PlayerData.Unity.Editor
         internal const string PlayModeWarningName = "playmode-warning";
         internal const string LiveIndicatorName = "live-indicator";
         internal const string SourceDropdownName = "source-dropdown";
+        internal const string SearchFieldName = "search-field";
+        internal const string OpenFolderButtonName = "open-folder-button";
         internal const string DiskSectionName = "disk-section";
         internal const string SessionDropdownName = "session-dropdown";
         internal const string RootPathName = "root-path";
@@ -99,6 +101,7 @@ namespace PlayerData.Unity.Editor
         private readonly HelpBox _playModeWarning;
         private readonly Label _liveIndicator;
         private readonly DropdownField _sourceDropdown;
+        private readonly TextField _searchField;
         private readonly VisualElement _diskSection;
         private readonly DropdownField _sessionDropdown;
         private readonly TextField _rootPath;
@@ -129,13 +132,15 @@ namespace PlayerData.Unity.Editor
         private readonly List<object> _liveEntryKeys = new List<object>();
         private readonly List<LiveSessionEntry> _liveSources = new List<LiveSessionEntry>();
         private readonly Action _registryChangedHandler;
+        private string _filter = string.Empty;
+        private string _documentInfoBase = string.Empty;
         private string? _selectedStorageKey;
         private string? _diskSelectedStorageKey;
         private LiveSessionView? _liveView;
         private ISaveSession? _liveSession;
         private string? _liveSelectedProperty;
         private object? _liveSelectedEntryKey;
-        private string? _lastLoadedLiveJson;
+        private string? _loadedJson;
         private FieldEditorModel? _fieldsModel;
         private FieldEditorView? _fieldsView;
         private Type? _fieldsDocType;
@@ -168,6 +173,11 @@ namespace PlayerData.Unity.Editor
             _sourceDropdown.RegisterValueChangedCallback(_ => OnSourceChanged());
             root.Add(_sourceDropdown);
 
+            _searchField = new TextField("Search") { value = string.Empty };
+            _searchField.name = ViewerUI.SearchFieldName;
+            _searchField.RegisterValueChangedCallback(evt => OnSearchChanged(evt.newValue));
+            root.Add(_searchField);
+
             _diskSection = new VisualElement();
             _diskSection.name = ViewerUI.DiskSectionName;
             root.Add(_diskSection);
@@ -192,6 +202,11 @@ namespace PlayerData.Unity.Editor
             Button reloadButton = new Button(OnReload) { text = "Reload" };
             reloadButton.name = ViewerUI.ReloadButtonName;
             buttonRow.Add(reloadButton);
+            // Living inside the disk section, the button disappears with it in live mode
+            // (live sessions have no on-disk directory to reveal).
+            Button openFolderButton = new Button(OnOpenFolder) { text = "Open Folder" };
+            openFolderButton.name = ViewerUI.OpenFolderButtonName;
+            buttonRow.Add(openFolderButton);
             _diskSection.Add(buttonRow);
 
             _saveDropdown = new DropdownField("Save", new List<string>(), -1);
@@ -329,6 +344,7 @@ namespace PlayerData.Unity.Editor
             _jsonScroll.style.flexGrow = 1;
             _documentJson = new TextField { multiline = true, isReadOnly = true };
             _documentJson.name = ViewerUI.DocumentJsonName;
+            _documentJson.RegisterValueChangedCallback(_ => UpdateDirtyState());
             _jsonScroll.Add(_documentJson);
             root.Add(_jsonScroll);
 
@@ -374,22 +390,37 @@ namespace PlayerData.Unity.Editor
             _jsonTabButton.SetEnabled(showFields);
             _fieldsScroll.style.display = showFields ? DisplayStyle.Flex : DisplayStyle.None;
             _jsonScroll.style.display = showFields ? DisplayStyle.None : DisplayStyle.Flex;
-            UpdateApplyEnabled();
+            UpdateDirtyState();
         }
 
         private void SetSurfaceEditable(bool editable)
         {
             _surfaceEditable = editable;
-            _revertButton.SetEnabled(editable);
-            UpdateApplyEnabled();
+            UpdateDirtyState();
         }
 
-        private void UpdateApplyEnabled()
+        private bool HasUnappliedEdits =>
+            (!_documentJson.isReadOnly
+                && !string.Equals(_documentJson.value, _loadedJson ?? string.Empty, StringComparison.Ordinal))
+            || FieldsHasUnappliedEdits;
+
+        // Apply/Revert are enabled only while the edit surface differs from the loaded snapshot;
+        // the info label carries a trailing "*" as the unapplied-change indicator.
+        private void UpdateDirtyState()
         {
-            bool enabled = _surfaceEditable;
+            bool dirty = HasUnappliedEdits;
+            bool applyEnabled = _surfaceEditable && dirty;
             if (_fieldsTabActive)
-                enabled = enabled && _fieldsModel is not null && !_fieldsModel.HasInvalid;
-            _applyButton.SetEnabled(enabled);
+                applyEnabled = applyEnabled && _fieldsModel is not null && !_fieldsModel.HasInvalid;
+            _applyButton.SetEnabled(applyEnabled);
+            _revertButton.SetEnabled(_surfaceEditable && dirty);
+            _documentInfo.text = dirty ? _documentInfoBase + " *" : _documentInfoBase;
+        }
+
+        private void SetDocumentInfo(string text)
+        {
+            _documentInfoBase = text;
+            UpdateDirtyState();
         }
 
         private void RebuildFields(string? json, Type? documentType, bool jsonOnly, bool editable)
@@ -429,10 +460,10 @@ namespace PlayerData.Unity.Editor
                 }
             }
 
-            UpdateApplyEnabled();
+            UpdateDirtyState();
         }
 
-        private void OnFieldsEdited() => UpdateApplyEnabled();
+        private void OnFieldsEdited() => UpdateDirtyState();
 
         private bool FieldsHasUnappliedEdits => _fieldsModel is not null && _fieldsModel.IsDirty;
 
@@ -484,6 +515,121 @@ namespace PlayerData.Unity.Editor
             _pendingLiveChange = false;
             _lastLiveRefreshTime = now;
             RefreshLiveData();
+        }
+
+        // ---- Search filter / open folder ----
+
+        // Filters documents only; live collection entry keys are typed key objects, not names,
+        // so they stay outside the name-based filter.
+        private void OnSearchChanged(string filter)
+        {
+            _filter = filter ?? string.Empty;
+            if (_liveView is not null)
+            {
+                ApplyLiveDocumentFilter();
+                return;
+            }
+
+            FillFilteredDocuments();
+            if (_selectedStorageKey is null)
+                return;
+
+            int index = IndexOfDocument(_selectedStorageKey);
+            if (index >= 0)
+            {
+                // Without-notify: the surviving selection must not reload the editor (it may hold edits).
+                _documentsList.SetSelectionWithoutNotify(new[] { index });
+            }
+            else
+            {
+                ClearDiskEditSurface();
+            }
+        }
+
+        private void ApplyLiveDocumentFilter()
+        {
+            if (_liveView is null)
+                return;
+
+            _liveDocuments.Clear();
+            foreach (LiveDocumentDescriptor descriptor in _liveView.Documents)
+            {
+                if (PlayerDataViewerController.MatchesFilter(_filter, descriptor.PropertyName, descriptor.EntityType.Name))
+                    _liveDocuments.Add(descriptor);
+            }
+
+            _liveDocumentsList.RefreshItems();
+            if (_liveSelectedProperty is null)
+                return;
+
+            int index = -1;
+            for (int i = 0; i < _liveDocuments.Count; i++)
+            {
+                if (string.Equals(_liveDocuments[i].PropertyName, _liveSelectedProperty, StringComparison.Ordinal))
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index >= 0)
+            {
+                _liveDocumentsList.SetSelectionWithoutNotify(new[] { index });
+                return;
+            }
+
+            _liveSelectedProperty = null;
+            _liveSelectedEntryKey = null;
+            _liveDocumentsList.ClearSelection();
+            _liveEntrySection.style.display = DisplayStyle.None;
+            SetDocumentInfo(string.Empty);
+            HideApplyError();
+            HideStaleHint();
+            ClearJsonEditor();
+        }
+
+        private void FillFilteredDocuments()
+        {
+            _documents.Clear();
+            if (_controller.CurrentSave is not null)
+            {
+                foreach (DocumentEntry entry in _controller.CurrentSave.Documents)
+                {
+                    if (PlayerDataViewerController.MatchesFilter(_filter, entry.StorageKey, entry.Descriptor?.DocumentType.Name))
+                        _documents.Add(entry);
+                }
+            }
+
+            _documentsList.RefreshItems();
+        }
+
+        private int IndexOfDocument(string storageKey)
+        {
+            for (int i = 0; i < _documents.Count; i++)
+            {
+                if (string.Equals(_documents[i].StorageKey, storageKey, StringComparison.Ordinal))
+                    return i;
+            }
+
+            return -1;
+        }
+
+        private void ClearDiskEditSurface()
+        {
+            _documentsList.ClearSelection();
+            _selectedStorageKey = null;
+            HideApplyError();
+            SetDocumentInfo(string.Empty);
+            _loadedJson = null;
+            _documentJson.SetValueWithoutNotify(string.Empty);
+            _documentJson.isReadOnly = true;
+            SetSurfaceEditable(false);
+            RebuildFields(json: null, documentType: null, jsonOnly: false, editable: false);
+        }
+
+        private void OnOpenFolder()
+        {
+            EditorUtility.RevealInFinder(PlayerDataViewerController.ResolveRevealPath(_rootPath.value, _controller.SelectedSave));
         }
 
         // ---- Source selection ----
@@ -568,14 +714,12 @@ namespace PlayerData.Unity.Editor
             _diskSection.style.display = DisplayStyle.None;
             _liveSection.style.display = DisplayStyle.Flex;
 
-            _liveDocuments.Clear();
-            _liveDocuments.AddRange(_liveView.Documents);
+            ApplyLiveDocumentFilter();
             _liveDocumentsList.ClearSelection();
-            _liveDocumentsList.RefreshItems();
 
             _liveEntrySection.style.display = DisplayStyle.None;
             _addEntryJson.SetValueWithoutNotify(string.Empty);
-            _documentInfo.text = string.Empty;
+            SetDocumentInfo(string.Empty);
             HideApplyError();
             HideStaleHint();
             ClearJsonEditor();
@@ -589,7 +733,7 @@ namespace PlayerData.Unity.Editor
             _liveSession = null;
             _liveSelectedProperty = null;
             _liveSelectedEntryKey = null;
-            _lastLoadedLiveJson = null;
+            _loadedJson = null;
             _pendingLiveChange = false;
             _lastLiveRefreshTime = double.NegativeInfinity;
         }
@@ -613,7 +757,7 @@ namespace PlayerData.Unity.Editor
             if (descriptor.IsCollection)
             {
                 _liveEntrySection.style.display = DisplayStyle.Flex;
-                _documentInfo.text = $"{descriptor.PropertyName} — collection of {descriptor.EntityType.Name} (key: {descriptor.KeyType!.Name})";
+                SetDocumentInfo($"{descriptor.PropertyName} — collection of {descriptor.EntityType.Name} (key: {descriptor.KeyType!.Name})");
                 ClearJsonEditor();
                 RefreshLiveEntryKeys(preserveKey: null);
                 return;
@@ -636,7 +780,7 @@ namespace PlayerData.Unity.Editor
                 canEdit = false;
             }
 
-            _documentInfo.text = info;
+            SetDocumentInfo(info);
             SetLiveJson(json ?? string.Empty, canEdit, descriptor.EntityType);
         }
 
@@ -667,7 +811,7 @@ namespace PlayerData.Unity.Editor
             }
 
             _removeEntryButton.SetEnabled(true);
-            _documentInfo.text = $"{_liveSelectedProperty}[{_liveSelectedEntryKey}]";
+            SetDocumentInfo($"{_liveSelectedProperty}[{_liveSelectedEntryKey}]");
             SetLiveJson(json, editable: true, FindLiveDescriptor(_liveSelectedProperty)?.EntityType);
         }
 
@@ -732,9 +876,7 @@ namespace PlayerData.Unity.Editor
             if (descriptor is null)
                 return;
 
-            bool hasUnappliedEdits = (!_documentJson.isReadOnly
-                && !string.Equals(_documentJson.value, _lastLoadedLiveJson ?? string.Empty, StringComparison.Ordinal))
-                || FieldsHasUnappliedEdits;
+            bool hasUnappliedEdits = HasUnappliedEdits;
 
             if (descriptor.IsCollection)
             {
@@ -764,7 +906,7 @@ namespace PlayerData.Unity.Editor
 
         private void ApplyRefreshedJson(string json, bool hasUnappliedEdits)
         {
-            if (string.Equals(json, _lastLoadedLiveJson, StringComparison.Ordinal))
+            if (string.Equals(json, _loadedJson, StringComparison.Ordinal))
                 return; // The visible document did not change (the flag covers the whole session).
 
             if (hasUnappliedEdits)
@@ -773,7 +915,7 @@ namespace PlayerData.Unity.Editor
                 return;
             }
 
-            _lastLoadedLiveJson = json;
+            _loadedJson = json;
             _documentJson.SetValueWithoutNotify(json);
             RebuildFields(json, _fieldsDocType, _fieldsJsonOnly, _surfaceEditable);
             HideStaleHint();
@@ -854,7 +996,7 @@ namespace PlayerData.Unity.Editor
 
         private void SetLiveJson(string json, bool editable, Type? documentType)
         {
-            _lastLoadedLiveJson = json;
+            _loadedJson = json;
             _documentJson.SetValueWithoutNotify(json);
             _documentJson.isReadOnly = !editable;
             SetSurfaceEditable(editable);
@@ -863,7 +1005,7 @@ namespace PlayerData.Unity.Editor
 
         private void ClearJsonEditor()
         {
-            _lastLoadedLiveJson = null;
+            _loadedJson = null;
             _documentJson.SetValueWithoutNotify(string.Empty);
             _documentJson.isReadOnly = true;
             SetSurfaceEditable(false);
@@ -954,6 +1096,20 @@ namespace PlayerData.Unity.Editor
         internal void SelectTabForTests(bool showFields) => SetActiveTab(showFields);
 
         internal void ApplyForTests() => OnApply();
+
+        internal void RevertForTests() => OnRevert();
+
+        internal void SetSearchFilterForTests(string filter)
+        {
+            _searchField.SetValueWithoutNotify(filter);
+            OnSearchChanged(filter);
+        }
+
+        internal void SetJsonTextForTests(string json)
+        {
+            _documentJson.SetValueWithoutNotify(json);
+            UpdateDirtyState();
+        }
 
         internal FieldEditorView? FieldsViewForTests => _fieldsView;
 
@@ -1077,34 +1233,18 @@ namespace PlayerData.Unity.Editor
 
         private void RefreshDocuments(string? preserveSelectedKey = null)
         {
-            _documents.Clear();
-            if (_controller.CurrentSave is not null)
-                _documents.AddRange(_controller.CurrentSave.Documents);
-
             string? loadError = _controller.LoadError;
             _loadError.text = loadError ?? string.Empty;
             _loadError.style.display = loadError is null ? DisplayStyle.None : DisplayStyle.Flex;
 
-            HideApplyError();
-            _documentsList.ClearSelection();
-            _documentsList.RefreshItems();
-            _selectedStorageKey = null;
-            _documentInfo.text = string.Empty;
-            _documentJson.SetValueWithoutNotify(string.Empty);
-            _documentJson.isReadOnly = true;
-            SetSurfaceEditable(false);
-            RebuildFields(json: null, documentType: null, jsonOnly: false, editable: false);
+            FillFilteredDocuments();
+            ClearDiskEditSurface();
 
             if (preserveSelectedKey is not null)
             {
-                for (int i = 0; i < _documents.Count; i++)
-                {
-                    if (string.Equals(_documents[i].StorageKey, preserveSelectedKey, StringComparison.Ordinal))
-                    {
-                        _documentsList.SetSelection(i);
-                        break;
-                    }
-                }
+                int index = IndexOfDocument(preserveSelectedKey);
+                if (index >= 0)
+                    _documentsList.SetSelection(index);
             }
         }
 
@@ -1126,10 +1266,11 @@ namespace PlayerData.Unity.Editor
                 info += $" — {view.Entry.StateReason}";
             if (view.JsonError is not null)
                 info += $" — JSON error: {view.JsonError}";
-            _documentInfo.text = info;
 
+            _loadedJson = view.Json ?? string.Empty;
             _documentJson.SetValueWithoutNotify(view.Json ?? string.Empty);
             _documentJson.isReadOnly = !view.CanEdit;
+            SetDocumentInfo(info);
             SetSurfaceEditable(view.CanEdit);
             // Disk collection payloads (dictionaries) have no top-level members to edit;
             // the Fields tab shows the JSON-only hint for them instead.

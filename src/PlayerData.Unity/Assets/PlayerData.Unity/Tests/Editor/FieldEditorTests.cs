@@ -424,9 +424,10 @@ namespace PlayerData.Unity.Editor.Tests
             SelectDiskDocument("SampleProfile");
             FieldEditorView view = _panel.FieldsViewForTests;
             Assert.That(view, Is.Not.Null);
-            Assert.That(ApplyButton.enabledSelf, Is.True);
+            Assert.That(ApplyButton.enabledSelf, Is.False, "Apply stays disabled until an edit is made");
 
             view.SetTextForTests("Name", "edited-name");
+            Assert.That(ApplyButton.enabledSelf, Is.True);
             _panel.ApplyForTests();
 
             DocumentView reloaded = _controller.GetDocumentView("SampleProfile");
@@ -460,6 +461,8 @@ namespace PlayerData.Unity.Editor.Tests
 
             _panel.SelectTabForTests(showFields: false);
 
+            Assert.That(ApplyButton.enabledSelf, Is.False, "no edit yet: Apply stays disabled on the JSON tab too");
+            _panel.SetJsonTextForTests(Json.value + " ");
             Assert.That(ApplyButton.enabledSelf, Is.True, "the JSON tab still edits collection payloads");
         }
 
