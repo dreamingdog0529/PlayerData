@@ -59,19 +59,9 @@ namespace PlayerData.Unity.Editor.Tests
             return saveRoot;
         }
 
-        private void SelectSampleSession()
-        {
-            for (int i = 0; i < _controller.SessionTypes.Count; i++)
-            {
-                if (_controller.SessionTypes[i] == typeof(SampleEditorSession))
-                {
-                    _panel.SelectSessionForTests(i);
-                    return;
-                }
-            }
-
-            Assert.Fail($"Session type '{nameof(SampleEditorSession)}' not found.");
-        }
+        // SampleEditorSession is a test fixture and is filtered out of the dropdown, so it is
+        // selected directly rather than by dropdown index.
+        private void SelectSampleSession() => _panel.SelectSessionByTypeForTests(typeof(SampleEditorSession));
 
         private static void Flatten(IEnumerable<TreeViewItemData<SaveTreeNode>> items, List<SaveTreeNode> into)
         {

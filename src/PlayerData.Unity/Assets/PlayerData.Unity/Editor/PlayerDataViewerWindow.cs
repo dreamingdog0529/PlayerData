@@ -963,6 +963,14 @@ namespace PlayerData.Unity.Editor
             OnSessionChanged();
         }
 
+        // Selects a session that is not offered in the dropdown (e.g. a test-only fixture filtered
+        // out of the session list), mirroring OnSessionChanged without the dropdown round-trip.
+        internal void SelectSessionByTypeForTests(Type sessionType)
+        {
+            _controller.SelectSession(sessionType);
+            Rescan();
+        }
+
         internal void SetRootForTests(string rootPath) => SetRoot(rootPath, persist: false);
 
         internal void RefreshForTests() => Rescan();

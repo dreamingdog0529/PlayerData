@@ -38,19 +38,9 @@ namespace PlayerData.Unity.Editor.Tests
 
         private TreeView Tree => _rootElement.Q<TreeView>(ViewerUI.TreeViewName);
 
-        private void SelectSampleSession()
-        {
-            for (int i = 0; i < _controller.SessionTypes.Count; i++)
-            {
-                if (_controller.SessionTypes[i] == typeof(SampleEditorSession))
-                {
-                    _panel.SelectSessionForTests(i);
-                    return;
-                }
-            }
-
-            Assert.Fail($"Session type '{nameof(SampleEditorSession)}' not found.");
-        }
+        // SampleEditorSession is a test fixture and is filtered out of the dropdown, so it is
+        // selected directly rather than by dropdown index.
+        private void SelectSampleSession() => _panel.SelectSessionByTypeForTests(typeof(SampleEditorSession));
 
         private static void Flatten(IEnumerable<TreeViewItemData<SaveTreeNode>> items, List<SaveTreeNode> into)
         {
@@ -111,7 +101,8 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(_rootElement.Q<VisualElement>(ViewerUI.SplitViewName), Is.Not.Null);
             Assert.That(Tree, Is.Not.Null);
             Assert.That(_rootElement.Q<VisualElement>(ViewerUI.DetailPaneName), Is.Not.Null);
-            Assert.That(_controller.SessionTypes, Has.Member(typeof(SampleEditorSession)));
+            // Test-only session fixtures are filtered out of the viewer's session dropdown.
+            Assert.That(_controller.SessionTypes, Has.No.Member(typeof(SampleEditorSession)));
         }
 
         [Test]

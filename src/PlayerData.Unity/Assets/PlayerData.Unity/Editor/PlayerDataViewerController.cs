@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace PlayerData.Unity.Editor
 {
@@ -43,7 +44,31 @@ namespace PlayerData.Unity.Editor
 
         public void RefreshSessionTypes()
         {
-            SessionTypes = SessionSchemaResolver.FindSessionTypes();
+            List<Type> discovered = SessionSchemaResolver.FindSessionTypes();
+            List<Type> result = new List<Type>(discovered.Count);
+            foreach (Type type in discovered)
+            {
+                // Test-only session fixtures (compiled under UNITY_INCLUDE_TESTS) would otherwise
+                // clutter this package's own dev-project dropdown. A package consumer never sees
+                // them — their test assembly is not compiled — so this only affects development.
+                if (!IsFromTestAssembly(type))
+                    result.Add(type);
+            }
+
+            SessionTypes = result;
+        }
+
+        // Every Unity EditMode/PlayMode test assembly references the NUnit framework and no
+        // production assembly does, which makes it a reliable "is a test type" marker.
+        private static bool IsFromTestAssembly(Type type)
+        {
+            foreach (AssemblyName referenced in type.Assembly.GetReferencedAssemblies())
+            {
+                if (string.Equals(referenced.Name, "nunit.framework", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
 
         public void SelectSession(Type sessionType)
