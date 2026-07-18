@@ -589,7 +589,7 @@ These assets live in the **Editor** assembly — game runtime code does not load
 
 #### VContainer
 
-Optional [VContainer](https://github.com/hadashiA/VContainer) integration ships **inside** `PlayerData.Unity` (Cysharp-style `Runtime/External`). When `jp.hadashikick.vcontainer` is installed, the `PlayerData.Unity.VContainer` assembly is auto-enabled via asmdef version defines — no separate PlayerData package is required. Without VContainer, the assembly is simply not compiled.
+Optional [VContainer](https://github.com/hadashiA/VContainer) integration ships **inside** `PlayerData.Unity`. When `jp.hadashikick.vcontainer` is installed, the `PlayerData.Unity.VContainer` assembly is auto-enabled via asmdef version defines — no separate PlayerData package is required. Without VContainer, the assembly is simply not compiled.
 
 Add PlayerData.Unity (and VContainer itself) to `Packages/manifest.json`:
 
