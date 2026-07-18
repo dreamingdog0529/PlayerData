@@ -6,7 +6,7 @@
   </PropertyGroup>
   <PropertyGroup>
     <PackageId>PlayerData.VitalRouter</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Description>Publishes PlayerData store changes as VitalRouter commands.</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>

@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
+using System.IO;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -10,6 +11,7 @@ namespace PlayerData.Unity.Editor
     public sealed class PlayerDataViewerWindow : EditorWindow
     {
         private readonly PlayerDataViewerController _controller = new PlayerDataViewerController();
+        private ViewerPanel? _panel;
 
         [MenuItem(PlayerDataEditorMenu.WindowMenuPath)]
         public static void Open()
@@ -20,18 +22,14 @@ namespace PlayerData.Unity.Editor
 
         public void CreateGUI()
         {
-            ViewerUI.BuildInto(rootVisualElement, _controller, Application.persistentDataPath);
-            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            string rootPath = EditorPrefs.GetString(ViewerUI.RootPathPrefsKey, Application.persistentDataPath);
+            _panel = ViewerUI.BuildInto(rootVisualElement, _controller, rootPath);
         }
 
         private void OnDisable()
         {
-            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
-        }
-
-        private void OnPlayModeStateChanged(PlayModeStateChange change)
-        {
-            ViewerUI.UpdatePlayModeWarning(rootVisualElement);
+            _panel?.Dispose();
+            _panel = null;
         }
     }
 
@@ -40,147 +38,410 @@ namespace PlayerData.Unity.Editor
     // guaranteed to run in batch mode).
     internal static class ViewerUI
     {
-        internal const string PlayModeWarningName = "playmode-warning";
+        internal const string RootMenuName = "root-menu";
+        internal const string RefreshButtonName = "refresh-button";
         internal const string SessionDropdownName = "session-dropdown";
-        internal const string RootPathName = "root-path";
-        internal const string ScanButtonName = "scan-button";
-        internal const string ReloadButtonName = "reload-button";
-        internal const string SaveDropdownName = "save-dropdown";
-        internal const string SchemaDiagnosticsName = "schema-diagnostics";
-        internal const string LoadErrorName = "load-error";
-        internal const string DocumentsListName = "documents-list";
-        internal const string DocumentInfoName = "document-info";
-        internal const string DocumentJsonName = "document-json";
+        internal const string SearchFieldName = "search-field";
+        internal const string SplitViewName = "split-view";
+        internal const string TreeViewName = "save-tree";
+        internal const string DetailPaneName = "detail-pane";
+        internal const string DetailContentName = "detail-content";
+        internal const string DetailHeaderName = "detail-header";
+        internal const string DetailStateLabelName = "detail-state-label";
+        internal const string DetailPathLabelName = "detail-path-label";
+        internal const string FieldsToggleName = "fields-toggle";
+        internal const string JsonToggleName = "json-toggle";
+        internal const string FieldsSectionName = "fields-section";
+        internal const string JsonTextFieldName = "json-text-field";
         internal const string ApplyButtonName = "apply-button";
         internal const string RevertButtonName = "revert-button";
-        internal const string ApplyErrorName = "apply-error";
+        internal const string ErrorBoxName = "error-box";
+        internal const string EmptyStateName = "empty-state";
 
-        internal static ViewerPanel BuildInto(VisualElement root, PlayerDataViewerController controller, string defaultRootPath)
-        {
-            return new ViewerPanel(root, controller, defaultRootPath);
-        }
+        // Per-project key so projects sharing this machine keep independent viewer roots.
+        internal static string RootPathPrefsKey => "PlayerData.Viewer.RootPath." + PlayerSettings.productGUID;
 
-        internal static void UpdatePlayModeWarning(VisualElement root)
+        // One viewer-wide preference (not per document): true = JSON view.
+        internal static string JsonViewPrefsKey => "PlayerData.Viewer.JsonView." + PlayerSettings.productGUID;
+
+        internal static ViewerPanel BuildInto(VisualElement root, PlayerDataViewerController controller, string initialRootPath)
         {
-            HelpBox warning = root.Q<HelpBox>(PlayModeWarningName);
-            if (warning is not null)
-            {
-                warning.style.display = EditorApplication.isPlayingOrWillChangePlaymode
-                    ? DisplayStyle.Flex
-                    : DisplayStyle.None;
-            }
+            return new ViewerPanel(root, controller, initialRootPath);
         }
     }
 
-    internal sealed class ViewerPanel
+    internal sealed class ViewerPanel : IDisposable
     {
         private readonly PlayerDataViewerController _controller;
+        private readonly ToolbarMenu _rootMenu;
         private readonly DropdownField _sessionDropdown;
-        private readonly TextField _rootPath;
-        private readonly DropdownField _saveDropdown;
-        private readonly HelpBox _schemaDiagnostics;
-        private readonly HelpBox _loadError;
-        private readonly ListView _documentsList;
-        private readonly Label _documentInfo;
-        private readonly TextField _documentJson;
+        private readonly ToolbarSearchField _searchField;
+        private readonly TreeView _treeView;
+        private readonly VisualElement _detailContent;
+        private readonly Label _detailHeader;
+        private readonly Label _detailStateLabel;
+        private readonly Label _detailPathLabel;
+        private readonly ToolbarToggle _fieldsToggle;
+        private readonly ToolbarToggle _jsonToggle;
+        private readonly ScrollView _fieldsScroll;
+        private readonly VisualElement _fieldsSection;
+        private readonly ScrollView _jsonScroll;
+        private readonly TextField _jsonField;
         private readonly Button _applyButton;
         private readonly Button _revertButton;
-        private readonly HelpBox _applyError;
-        private readonly List<DocumentEntry> _documents = new List<DocumentEntry>();
-        private string? _selectedStorageKey;
+        private readonly HelpBox _errorBox;
+        private readonly VisualElement _emptyState;
+        private readonly List<TreeViewItemData<SaveTreeNode>> _visibleItems = new List<TreeViewItemData<SaveTreeNode>>();
+        private readonly Dictionary<string, LiveSessionView> _liveViews =
+            new Dictionary<string, LiveSessionView>(StringComparer.Ordinal);
+        private readonly Action _registryChangedHandler;
+        private readonly Action<PlayModeStateChange> _playModeChangedHandler;
+        private bool _disposed;
+        private string _rootPath;
+        private string _filter = string.Empty;
+        private IReadOnlyList<SaveTreeNode> _treeRoots = Array.Empty<SaveTreeNode>();
+        private SaveTreeNode? _selectedNode;
+        private Type? _payloadType;
+        private Type? _entityType;
+        private Type? _keyType;
+        private bool _isCollection;
+        private bool _editable;
+        private bool _jsonViewActive;
+        private bool _preferredJsonView;
+        private string? _originalJson;
+        private IFieldsEditor? _fields;
 
-        internal ViewerPanel(VisualElement root, PlayerDataViewerController controller, string defaultRootPath)
+        internal ViewerPanel(VisualElement root, PlayerDataViewerController controller, string initialRootPath)
         {
             _controller = controller;
+            _rootPath = initialRootPath;
+            _preferredJsonView = EditorPrefs.GetBool(ViewerUI.JsonViewPrefsKey, false);
             controller.RefreshSessionTypes();
             root.Clear();
 
-            HelpBox playModeWarning = new HelpBox(
-                "Play mode is active: a live session's next commit can overwrite what is shown here.",
-                HelpBoxMessageType.Warning);
-            playModeWarning.name = ViewerUI.PlayModeWarningName;
-            root.Add(playModeWarning);
+            // Located by search, not a literal path, so it resolves both when the package lives
+            // under Assets/ (this repo) and when consumed from Packages/ via UPM.
+            string[] styleGuids = AssetDatabase.FindAssets("PlayerDataViewerWindow t:StyleSheet");
+            if (styleGuids.Length > 0)
+                root.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(AssetDatabase.GUIDToAssetPath(styleGuids[0])));
+            else
+                Debug.LogWarning("PlayerDataViewerWindow.uss was not found; the split divider will render unstyled.");
 
-            List<string> sessionNames = new List<string>();
-            foreach (Type type in controller.SessionTypes)
-                sessionNames.Add(type.FullName);
-            _sessionDropdown = new DropdownField("Session", sessionNames, -1);
+            Toolbar toolbar = new Toolbar();
+            root.Add(toolbar);
+
+            _rootMenu = new ToolbarMenu();
+            _rootMenu.name = ViewerUI.RootMenuName;
+            // Long custom paths must not push the other toolbar controls out of view.
+            _rootMenu.style.flexShrink = 1;
+            _rootMenu.style.overflow = Overflow.Hidden;
+            toolbar.Add(_rootMenu);
+            UpdateRootMenu();
+
+            ToolbarButton refreshButton = new ToolbarButton(Rescan) { text = "Refresh" };
+            refreshButton.name = ViewerUI.RefreshButtonName;
+            toolbar.Add(refreshButton);
+
+            List<string> sessionNames = ViewerDisplayNames.DisambiguatedShortNames(controller.SessionTypes);
+            _sessionDropdown = new DropdownField(sessionNames, controller.SessionTypes.Count > 0 ? 0 : -1);
             _sessionDropdown.name = ViewerUI.SessionDropdownName;
+            _sessionDropdown.style.minWidth = 120;
             _sessionDropdown.RegisterValueChangedCallback(_ => OnSessionChanged());
-            root.Add(_sessionDropdown);
+            toolbar.Add(_sessionDropdown);
 
-            _rootPath = new TextField("Root path") { value = defaultRootPath };
-            _rootPath.name = ViewerUI.RootPathName;
-            root.Add(_rootPath);
+            _searchField = new ToolbarSearchField();
+            _searchField.name = ViewerUI.SearchFieldName;
+            _searchField.style.flexGrow = 1;
+            _searchField.RegisterValueChangedCallback(evt => OnSearchChanged(evt.newValue));
+            toolbar.Add(_searchField);
 
-            VisualElement buttonRow = new VisualElement();
-            buttonRow.style.flexDirection = FlexDirection.Row;
-            Button scanButton = new Button(OnScan) { text = "Scan" };
-            scanButton.name = ViewerUI.ScanButtonName;
-            buttonRow.Add(scanButton);
-            Button reloadButton = new Button(OnReload) { text = "Reload" };
-            reloadButton.name = ViewerUI.ReloadButtonName;
-            buttonRow.Add(reloadButton);
-            root.Add(buttonRow);
+            // Plain flex row + a hand-rolled drag handle instead of TwoPaneSplitView: in a
+            // code-built editor window that control collapsed its fixed pane to 0 width on the
+            // first zero-size layout pass and its dragger stopped resizing the panes, so the
+            // split is laid out and dragged explicitly here.
+            VisualElement splitView = new VisualElement();
+            splitView.name = ViewerUI.SplitViewName;
+            splitView.style.flexGrow = 1;
+            splitView.style.flexDirection = FlexDirection.Row;
+            root.Add(splitView);
 
-            _saveDropdown = new DropdownField("Save", new List<string>(), -1);
-            _saveDropdown.name = ViewerUI.SaveDropdownName;
-            _saveDropdown.RegisterValueChangedCallback(_ => OnSaveChanged());
-            root.Add(_saveDropdown);
-
-            _schemaDiagnostics = new HelpBox(string.Empty, HelpBoxMessageType.Warning);
-            _schemaDiagnostics.name = ViewerUI.SchemaDiagnosticsName;
-            _schemaDiagnostics.style.display = DisplayStyle.None;
-            root.Add(_schemaDiagnostics);
-
-            _loadError = new HelpBox(string.Empty, HelpBoxMessageType.Error);
-            _loadError.name = ViewerUI.LoadErrorName;
-            _loadError.style.display = DisplayStyle.None;
-            root.Add(_loadError);
-
-            _documentsList = new ListView
+            _treeView = new TreeView
             {
-                fixedItemHeight = 20,
+                fixedItemHeight = 18,
                 selectionType = SelectionType.Single,
-                itemsSource = _documents,
+                autoExpand = true,
             };
-            _documentsList.name = ViewerUI.DocumentsListName;
-            _documentsList.makeItem = static () => new Label();
-            _documentsList.bindItem = (element, index) => ((Label)element).text = DescribeDocument(_documents[index]);
-            _documentsList.selectionChanged += _ => ShowSelectedDocument();
-            _documentsList.style.minHeight = 120;
-            root.Add(_documentsList);
+            _treeView.name = ViewerUI.TreeViewName;
+            // flexBasis, not width: TreeView's own stylesheet sets flex-grow/flex-basis, which
+            // wins over an inline width on the flex main axis (both panes end up ~equal halves).
+            _treeView.style.flexBasis = 260;
+            _treeView.style.flexGrow = 0;
+            _treeView.style.flexShrink = 0;
+            _treeView.style.minWidth = 120;
+            // A row is icon + name + status dot: the icon distinguishes the node kind and the dot
+            // flags the document's state at a glance (its tooltip carries the state text).
+            _treeView.makeItem = static () =>
+            {
+                VisualElement row = new VisualElement();
+                row.AddToClassList("playerdata-viewer__tree-row");
 
-            _documentInfo = new Label();
-            _documentInfo.name = ViewerUI.DocumentInfoName;
-            root.Add(_documentInfo);
+                VisualElement icon = new VisualElement { name = "tree-icon" };
+                icon.AddToClassList("playerdata-viewer__tree-icon");
+                row.Add(icon);
 
-            VisualElement editRow = new VisualElement();
-            editRow.style.flexDirection = FlexDirection.Row;
-            _applyButton = new Button(OnApply) { text = "Apply" };
+                Label label = new Label { name = "tree-label" };
+                label.AddToClassList("playerdata-viewer__tree-label");
+                row.Add(label);
+
+                VisualElement dot = new VisualElement { name = "tree-dot" };
+                dot.AddToClassList("playerdata-viewer__tree-dot");
+                row.Add(dot);
+
+                // Right-click a folder or file row to open its location; the menu reads the bound
+                // node from the row's userData (refreshed on each bind).
+                row.AddManipulator(new ContextualMenuManipulator(PopulateTreeContextMenu));
+                return row;
+            };
+            _treeView.bindItem = (element, index) =>
+            {
+                SaveTreeNode node = _treeView.GetItemDataForIndex<SaveTreeNode>(index);
+                element.userData = node;
+                element.Q<Label>("tree-label").text = node.DisplayName;
+                BindTreeIcon(element.Q<VisualElement>("tree-icon"), node.Kind);
+                BindTreeDot(element.Q<VisualElement>("tree-dot"), node);
+            };
+            _treeView.selectionChanged += OnTreeSelectionChanged;
+            splitView.Add(_treeView);
+
+            splitView.Add(BuildSplitDivider(splitView));
+
+            VisualElement detailPane = new VisualElement();
+            detailPane.name = ViewerUI.DetailPaneName;
+            detailPane.style.flexGrow = 1;
+            detailPane.style.minWidth = 160;
+            splitView.Add(detailPane);
+
+            _detailContent = new VisualElement();
+            _detailContent.name = ViewerUI.DetailContentName;
+            _detailContent.AddToClassList("playerdata-viewer__detail");
+            _detailContent.style.flexGrow = 1;
+            _detailContent.style.display = DisplayStyle.None;
+            detailPane.Add(_detailContent);
+
+            // Header row: the document name, with its status badge pinned alongside.
+            VisualElement headerRow = new VisualElement();
+            headerRow.AddToClassList("playerdata-viewer__detail-headerrow");
+            _detailHeader = new Label();
+            _detailHeader.name = ViewerUI.DetailHeaderName;
+            _detailHeader.AddToClassList("playerdata-viewer__detail-header");
+            headerRow.Add(_detailHeader);
+
+            _detailStateLabel = new Label();
+            _detailStateLabel.name = ViewerUI.DetailStateLabelName;
+            _detailStateLabel.AddToClassList("playerdata-viewer__status-badge");
+            headerRow.Add(_detailStateLabel);
+            _detailContent.Add(headerRow);
+
+            _detailPathLabel = new Label();
+            _detailPathLabel.name = ViewerUI.DetailPathLabelName;
+            _detailPathLabel.AddToClassList("playerdata-viewer__path");
+            _detailPathLabel.style.overflow = Overflow.Hidden;
+            _detailContent.Add(_detailPathLabel);
+
+            Toolbar viewModeBar = new Toolbar();
+            _fieldsToggle = new ToolbarToggle { text = ViewerDisplayNames.FieldsTabLabel };
+            _fieldsToggle.name = ViewerUI.FieldsToggleName;
+            _fieldsToggle.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue)
+                    SetViewMode(json: false, persist: true);
+                else
+                    SyncViewToggles(); // clicking the active toggle is a no-op
+            });
+            viewModeBar.Add(_fieldsToggle);
+            _jsonToggle = new ToolbarToggle { text = ViewerDisplayNames.JsonTabLabel };
+            _jsonToggle.name = ViewerUI.JsonToggleName;
+            _jsonToggle.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue)
+                    SetViewMode(json: true, persist: true);
+                else
+                    SyncViewToggles();
+            });
+            viewModeBar.Add(_jsonToggle);
+
+            // Apply/Revert live in this top bar (right-aligned) so they stay reachable without
+            // scrolling past a long document.
+            VisualElement viewModeSpacer = new VisualElement();
+            viewModeSpacer.style.flexGrow = 1;
+            viewModeBar.Add(viewModeSpacer);
+            _applyButton = new Button(OnApply) { text = ViewerDisplayNames.ApplyLabel };
             _applyButton.name = ViewerUI.ApplyButtonName;
             _applyButton.SetEnabled(false);
-            editRow.Add(_applyButton);
-            _revertButton = new Button(OnRevert) { text = "Revert" };
+            viewModeBar.Add(_applyButton);
+            _revertButton = new Button(OnRevert) { text = ViewerDisplayNames.RevertLabel };
             _revertButton.name = ViewerUI.RevertButtonName;
             _revertButton.SetEnabled(false);
-            editRow.Add(_revertButton);
-            root.Add(editRow);
+            viewModeBar.Add(_revertButton);
+            _detailContent.Add(viewModeBar);
 
-            _applyError = new HelpBox(string.Empty, HelpBoxMessageType.Error);
-            _applyError.name = ViewerUI.ApplyErrorName;
-            _applyError.style.display = DisplayStyle.None;
-            root.Add(_applyError);
+            _fieldsScroll = new ScrollView();
+            _fieldsScroll.AddToClassList("playerdata-viewer__edit-surface");
+            _fieldsScroll.style.flexGrow = 1;
+            _fieldsSection = new VisualElement();
+            _fieldsSection.name = ViewerUI.FieldsSectionName;
+            _fieldsScroll.Add(_fieldsSection);
+            _detailContent.Add(_fieldsScroll);
 
-            ScrollView jsonScroll = new ScrollView();
-            jsonScroll.style.flexGrow = 1;
-            _documentJson = new TextField { multiline = true, isReadOnly = true };
-            _documentJson.name = ViewerUI.DocumentJsonName;
-            jsonScroll.Add(_documentJson);
-            root.Add(jsonScroll);
+            _jsonScroll = new ScrollView();
+            _jsonScroll.AddToClassList("playerdata-viewer__edit-surface");
+            _jsonScroll.style.flexGrow = 1;
+            _jsonField = new TextField { multiline = true, isReadOnly = true };
+            _jsonField.name = ViewerUI.JsonTextFieldName;
+            _jsonField.RegisterValueChangedCallback(_ => UpdateApplyState());
+            _jsonScroll.Add(_jsonField);
+            _detailContent.Add(_jsonScroll);
 
-            ViewerUI.UpdatePlayModeWarning(root);
+            // Outside the content block so load failures are visible while the pane is empty.
+            _errorBox = new HelpBox(string.Empty, HelpBoxMessageType.Error);
+            _errorBox.name = ViewerUI.ErrorBoxName;
+            _errorBox.style.display = DisplayStyle.None;
+            detailPane.Add(_errorBox);
+
+            // Fills the pane while nothing is selected (and no error is showing) so it guides
+            // instead of sitting blank.
+            _emptyState = new VisualElement();
+            _emptyState.name = ViewerUI.EmptyStateName;
+            _emptyState.AddToClassList("playerdata-viewer__empty");
+            Label emptyTitle = new Label(ViewerDisplayNames.NoDocumentSelectedTitle);
+            emptyTitle.AddToClassList("playerdata-viewer__empty-title");
+            _emptyState.Add(emptyTitle);
+            Label emptyHint = new Label(ViewerDisplayNames.NoDocumentSelectedHint);
+            emptyHint.AddToClassList("playerdata-viewer__empty-hint");
+            _emptyState.Add(emptyHint);
+            detailPane.Add(_emptyState);
+
+            _registryChangedHandler = OnRegistryChanged;
+            LiveSessionRegistry.Changed += _registryChangedHandler;
+            _playModeChangedHandler = OnPlayModeStateChanged;
+            EditorApplication.playModeStateChanged += _playModeChangedHandler;
+
+            if (controller.SessionTypes.Count > 0)
+                controller.SelectSession(controller.SessionTypes[0]);
+            Rescan();
         }
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+
+            LiveSessionRegistry.Changed -= _registryChangedHandler;
+            EditorApplication.playModeStateChanged -= _playModeChangedHandler;
+            DisposeLiveViews();
+        }
+
+        private void OnRegistryChanged()
+        {
+            if (_disposed)
+                return;
+            Rescan();
+        }
+
+        private void OnPlayModeStateChanged(PlayModeStateChange change)
+        {
+            // Entered* only: during Exiting* the scene is mid-teardown, and the registry raises
+            // Changed itself when it clears its entries on play-mode exit.
+            if (change == PlayModeStateChange.EnteredPlayMode || change == PlayModeStateChange.EnteredEditMode)
+                Rescan();
+        }
+
+        // Dragging the divider resizes the tree; the detail pane flexes to take the rest.
+        // Look and hover cursor come from PlayerDataViewerWindow.uss (inline styles cannot set
+        // the built-in resize cursor).
+        private VisualElement BuildSplitDivider(VisualElement splitContainer)
+        {
+            VisualElement divider = new VisualElement();
+            divider.AddToClassList("playerdata-viewer__split-divider");
+            VisualElement line = new VisualElement();
+            line.AddToClassList("playerdata-viewer__split-divider-line");
+            divider.Add(line);
+            float dragStartX = 0f;
+            float dragStartWidth = 0f;
+            divider.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                divider.CapturePointer(evt.pointerId);
+                dragStartX = evt.position.x;
+                dragStartWidth = _treeView.resolvedStyle.width;
+                evt.StopPropagation();
+            });
+            divider.RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                if (!divider.HasPointerCapture(evt.pointerId))
+                    return;
+                // Keeps the detail pane's minWidth (160) plus the divider itself (5) reachable.
+                float max = Mathf.Max(120f, splitContainer.resolvedStyle.width - 165f);
+                _treeView.style.flexBasis = Mathf.Clamp(dragStartWidth + evt.position.x - dragStartX, 120f, max);
+            });
+            divider.RegisterCallback<PointerUpEvent>(evt => divider.ReleasePointer(evt.pointerId));
+            return divider;
+        }
+
+        private void OnChooseFolder()
+        {
+            string picked = EditorUtility.OpenFolderPanel("Select save data folder", _rootPath, string.Empty);
+            if (string.IsNullOrEmpty(picked))
+                return;
+            SetRoot(picked, persist: true);
+        }
+
+        private void SetRoot(string rootPath, bool persist)
+        {
+            _rootPath = rootPath;
+            UpdateRootMenu();
+            if (persist)
+                EditorPrefs.SetString(ViewerUI.RootPathPrefsKey, rootPath);
+            Rescan();
+        }
+
+        // The dropdown's face answers "which folder am I looking at?" without exposing a raw
+        // path in the common case: the game's own save folder reads as a plain-language label,
+        // anything else shows the path itself. The tooltip always carries the resolved path.
+        private void UpdateRootMenu()
+        {
+            bool isDefault = string.Equals(
+                NormalizePathForComparison(_rootPath),
+                NormalizePathForComparison(Application.persistentDataPath),
+                StringComparison.Ordinal);
+
+            _rootMenu.text = isDefault ? ViewerDisplayNames.DefaultRootLabel : _rootPath;
+            _rootMenu.tooltip = _rootPath;
+
+            _rootMenu.menu.MenuItems().Clear();
+            _rootMenu.menu.AppendAction(
+                ViewerDisplayNames.DefaultRootLabel,
+                _ => SetRoot(Application.persistentDataPath, persist: true),
+                isDefault ? DropdownMenuAction.Status.Checked : DropdownMenuAction.Status.Normal);
+            if (!isDefault)
+            {
+                // DropdownMenu treats '/' in an item name as a submenu separator, so the
+                // active custom path is shown with backslashes to stay a single item.
+                _rootMenu.menu.AppendAction(
+                    _rootPath.Replace('/', '\\'),
+                    _ => { }, // already active; selecting it keeps the current root
+                    DropdownMenuAction.Status.Checked);
+            }
+
+            _rootMenu.menu.AppendAction(
+                ViewerDisplayNames.ChooseFolderLabel,
+                _ => OnChooseFolder(),
+                DropdownMenuAction.Status.Normal);
+        }
+
+        // Forward slashes, no trailing separator: "C:\X\" and "C:/X" name the same folder.
+        private static string NormalizePathForComparison(string path) =>
+            path.Replace('\\', '/').TrimEnd('/');
 
         private void OnSessionChanged()
         {
@@ -189,162 +450,757 @@ namespace PlayerData.Unity.Editor
                 return;
 
             _controller.SelectSession(_controller.SessionTypes[index]);
-            RefreshSchemaDiagnostics();
-            RefreshDocuments();
+            Rescan();
         }
 
-        private void OnScan()
+        private void Rescan()
         {
-            _controller.Scan(_rootPath.value);
-
-            List<string> labels = new List<string>();
-            foreach (SaveLocation location in _controller.Saves)
-                labels.Add(SaveLabel(location));
-            _saveDropdown.choices = labels;
-            _saveDropdown.SetValueWithoutNotify(string.Empty);
-
-            RefreshDocuments();
+            SaveTreeNode? previous = _selectedNode;
+            _controller.Scan(_rootPath);
+            _treeRoots = SaveTreeModel.Build(
+                _rootPath, _controller.LoadScannedSaves(), CollectLiveSessions());
+            RebuildTree();
+            // Scanning reloads every save (and recreates the live views), so the shown document
+            // is re-resolved by identity: still present → re-shown freshly loaded (pending edits
+            // are discarded, same as selecting another node), gone → the detail stays cleared.
+            ClearDetail();
+            if (previous is not null && TryFindSameDocument(_visibleItems, previous, out SaveTreeNode match))
+            {
+                _treeView.SetSelectionByIdWithoutNotify(new[] { match.Id });
+                ShowNode(match);
+            }
         }
 
-        private void OnReload()
+        // Identity, not tree id: ids are positional and shift when saves appear or disappear.
+        private static bool TryFindSameDocument(
+            IEnumerable<TreeViewItemData<SaveTreeNode>> items, SaveTreeNode previous, out SaveTreeNode match)
         {
-            _controller.Reload();
-            RefreshDocuments();
+            foreach (TreeViewItemData<SaveTreeNode> item in items)
+            {
+                SaveTreeNode node = item.data;
+                if (node.Kind == previous.Kind && node.IsSelectableForDetail && IsSameDocument(node, previous))
+                {
+                    match = node;
+                    return true;
+                }
+
+                if (TryFindSameDocument(item.children, previous, out match))
+                    return true;
+            }
+
+            match = null!;
+            return false;
         }
 
-        private void OnSaveChanged()
+        private static bool IsSameDocument(SaveTreeNode left, SaveTreeNode right)
         {
-            int index = _saveDropdown.index;
-            if (index < 0 || index >= _controller.Saves.Count)
+            if (left.Kind == SaveTreeNodeKind.Document)
+                return left.Location is not null && right.Location is not null
+                    && string.Equals(left.Location.Directory, right.Location.Directory, StringComparison.Ordinal)
+                    && string.Equals(left.StorageKey, right.StorageKey, StringComparison.Ordinal);
+
+            return string.Equals(left.SessionName, right.SessionName, StringComparison.Ordinal)
+                && string.Equals(left.StorageKey, right.StorageKey, StringComparison.Ordinal)
+                && string.Equals(left.PropertyName, right.PropertyName, StringComparison.Ordinal);
+        }
+
+        // Recreates the live views from the registry. Session display names are the tree's
+        // lookup key, so duplicates get an index suffix (same rule as the session dropdown).
+        private IReadOnlyList<SaveTreeLiveSession> CollectLiveSessions()
+        {
+            DisposeLiveViews();
+
+            IReadOnlyList<LiveSessionEntry> entries = LiveSessionRegistry.Entries;
+            if (entries.Count == 0)
+                return Array.Empty<SaveTreeLiveSession>();
+
+            Dictionary<string, int> totals = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (LiveSessionEntry entry in entries)
+                totals[entry.Name] = totals.TryGetValue(entry.Name, out int count) ? count + 1 : 1;
+
+            List<SaveTreeLiveSession> sessions = new List<SaveTreeLiveSession>(entries.Count);
+            Dictionary<string, int> seen = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (LiveSessionEntry entry in entries)
+            {
+                seen[entry.Name] = seen.TryGetValue(entry.Name, out int occurrence) ? occurrence + 1 : 1;
+                string name = totals[entry.Name] > 1 ? $"{entry.Name} ({seen[entry.Name]})" : entry.Name;
+                LiveSessionView view = new LiveSessionView(entry.Session);
+                _liveViews.Add(name, view);
+                sessions.Add(new SaveTreeLiveSession(name, view.Documents));
+            }
+
+            return sessions;
+        }
+
+        private void DisposeLiveViews()
+        {
+            foreach (KeyValuePair<string, LiveSessionView> pair in _liveViews)
+                pair.Value.Dispose();
+            _liveViews.Clear();
+        }
+
+        private void OnSearchChanged(string filter)
+        {
+            _filter = filter ?? string.Empty;
+            RebuildTree();
+        }
+
+        private void RebuildTree()
+        {
+            _visibleItems.Clear();
+            foreach (SaveTreeNode node in _treeRoots)
+            {
+                if (TryBuildItem(node, out TreeViewItemData<SaveTreeNode> item))
+                    _visibleItems.Add(item);
+            }
+
+            _treeView.SetRootItems(_visibleItems);
+            _treeView.Rebuild();
+        }
+
+        // The filter matches document leaves by display-name substring; every ancestor of a
+        // match stays visible so the leaf keeps its context.
+        private bool TryBuildItem(SaveTreeNode node, out TreeViewItemData<SaveTreeNode> item)
+        {
+            List<TreeViewItemData<SaveTreeNode>> children = new List<TreeViewItemData<SaveTreeNode>>();
+            foreach (SaveTreeNode child in node.Children)
+            {
+                if (TryBuildItem(child, out TreeViewItemData<SaveTreeNode> childItem))
+                    children.Add(childItem);
+            }
+
+            bool keep;
+            if (string.IsNullOrEmpty(_filter))
+                keep = true;
+            else if (node.IsSelectableForDetail)
+                keep = node.DisplayName.IndexOf(_filter, StringComparison.OrdinalIgnoreCase) >= 0;
+            else
+                keep = children.Count > 0;
+
+            item = keep ? new TreeViewItemData<SaveTreeNode>(node.Id, node, children) : default;
+            return keep;
+        }
+
+        // ---- Detail pane ----
+
+        private void OnTreeSelectionChanged(IEnumerable<object> selection)
+        {
+            SaveTreeNode? node = null;
+            foreach (object item in selection)
+            {
+                node = item as SaveTreeNode;
+                break;
+            }
+
+            ShowNode(node);
+        }
+
+        // Changing selection discards unapplied edits on purpose: this UI has no confirmation
+        // dialogs, and the rule is pinned by
+        // SwitchingDocumentSelection_DiscardsUnappliedEdits_ByDesign.
+        private void ShowNode(SaveTreeNode? node)
+        {
+            ClearDetail();
+            if (node is null)
                 return;
 
-            _controller.SelectSave(_controller.Saves[index]);
-            RefreshDocuments();
+            if (node.Kind == SaveTreeNodeKind.Document && node.Location is not null && node.StorageKey is not null)
+            {
+                _controller.SelectSave(node.Location);
+                _selectedNode = node;
+                PopulateDetail();
+            }
+            else if (node.Kind == SaveTreeNodeKind.LiveDocument && node.SessionName is not null && node.PropertyName is not null)
+            {
+                _selectedNode = node;
+                PopulateDetail();
+            }
         }
 
-        private void RefreshSchemaDiagnostics()
+        private void PopulateDetail()
         {
-            IReadOnlyList<string> diagnostics = _controller.Schema?.Diagnostics ?? Array.Empty<string>();
-            if (diagnostics.Count == 0)
+            if (_selectedNode!.Kind == SaveTreeNodeKind.LiveDocument)
+                PopulateLiveDetail();
+            else
+                PopulateDiskDetail();
+        }
+
+        private void PopulateDiskDetail()
+        {
+            SaveTreeNode node = _selectedNode!;
+            ClearFieldsSurface();
+            HideError();
+
+            DocumentView? view = _controller.GetDocumentView(node.StorageKey!);
+            if (view is null)
             {
-                _schemaDiagnostics.style.display = DisplayStyle.None;
+                string error = _controller.LoadError ?? $"Document '{node.StorageKey}' no longer exists. Refresh the tree.";
+                ClearDetail();
+                ShowError(error);
                 return;
             }
 
-            StringBuilder text = new StringBuilder("Skipped document declarations:");
-            foreach (string diagnostic in diagnostics)
-                text.Append('\n').Append("- ").Append(diagnostic);
-            _schemaDiagnostics.text = text.ToString();
-            _schemaDiagnostics.style.display = DisplayStyle.Flex;
+            DocumentEntry entry = view.Entry;
+            ShowDetailContent();
+            _detailHeader.text = ViewerDisplayNames.DocumentDisplayName(
+                entry.StorageKey, entry.Descriptor?.PropertyName, entry.Descriptor?.DocumentType.Name);
+            string stateReason = ViewerDisplayNames.StateDescription(entry.State);
+            if (string.IsNullOrEmpty(stateReason))
+                stateReason = entry.StateReason ?? string.Empty;
+            SetStatusBadge(entry.State, stateReason);
+            _detailPathLabel.text = node.Location!.Directory;
+
+            _editable = view.CanEdit;
+            _isCollection = entry.Descriptor?.IsCollection == true;
+            _payloadType = entry.Descriptor?.PayloadType;
+            // Entity T of the collection (each entry's value type); the payload itself is the
+            // ConcurrentDictionary wrapper, which the collection Fields surface never reflects on.
+            _entityType = entry.Descriptor?.DocumentType;
+            _keyType = entry.Descriptor?.KeyType;
+
+            PresentDocument(view.Json, view.JsonError, FieldsBlockReason(entry, view, stateReason));
+        }
+
+        private void PopulateLiveDetail()
+        {
+            SaveTreeNode node = _selectedNode!;
+            ClearFieldsSurface();
+            HideError();
+
+            if (!_liveViews.TryGetValue(node.SessionName!, out LiveSessionView view))
+            {
+                ClearDetail();
+                ShowError($"Live session '{node.SessionName}' is gone. Refresh the tree.");
+                return;
+            }
+
+            LiveDocumentDescriptor? descriptor = null;
+            foreach (LiveDocumentDescriptor candidate in view.Documents)
+            {
+                if (string.Equals(candidate.PropertyName, node.PropertyName, StringComparison.Ordinal))
+                {
+                    descriptor = candidate;
+                    break;
+                }
+            }
+
+            if (descriptor is null)
+            {
+                ClearDetail();
+                ShowError($"Live document '{node.PropertyName}' is gone. Refresh the tree.");
+                return;
+            }
+
+            string? json = null;
+            string? jsonError = null;
+            try
+            {
+                json = view.GetJson(descriptor.PropertyName);
+            }
+            catch (Exception ex)
+            {
+                jsonError = ex.Message;
+            }
+
+            string? editBlockReason = null;
+            bool editable = json is not null && view.CanEdit(descriptor.PropertyName, out editBlockReason);
+
+            ShowDetailContent();
+            _detailHeader.text = $"{descriptor.PropertyName} ({node.SessionName})";
+            // Live docs have no on-disk DocumentState; the live round-trip gate maps onto the
+            // same two states (and colours) the disk pane uses.
+            SetStatusBadge(
+                editable ? DocumentState.Editable : DocumentState.ReadOnlyRoundTrip,
+                editBlockReason ?? jsonError ?? string.Empty);
+            _detailPathLabel.text = SaveTreeModel.PlayingNowLabel;
+
+            _editable = editable;
+            _isCollection = descriptor.IsCollection;
+            _payloadType = descriptor.IsCollection ? null : descriptor.EntityType;
+            _entityType = descriptor.EntityType;
+            _keyType = descriptor.KeyType;
+
+            string? fieldsBlockReason = null;
+            if (json is null)
+                fieldsBlockReason = jsonError ?? "The current value cannot be shown.";
+            else if (!editable)
+                fieldsBlockReason = editBlockReason ?? "This value can't be edited safely in the viewer.";
+
+            PresentDocument(json, jsonError, fieldsBlockReason);
+        }
+
+        // Shared tail of the disk and live populate paths: fills the JSON field, applies the
+        // Fields gate and restores the preferred view mode.
+        private void PresentDocument(string? json, string? jsonError, string? fieldsBlockReason)
+        {
+            _originalJson = json;
+            _jsonField.SetValueWithoutNotify(json ?? string.Empty);
+            _jsonField.isReadOnly = !_editable;
+
+            bool fieldsAvailable = fieldsBlockReason is null;
+            _fieldsToggle.SetEnabled(fieldsAvailable);
+            _fieldsToggle.tooltip = fieldsBlockReason ?? string.Empty;
+
+            _jsonViewActive = _preferredJsonView || !fieldsAvailable;
+            if (!_jsonViewActive && !TryBuildFieldsSurface(json ?? string.Empty))
+                _jsonViewActive = true;
+
+            SyncViewToggles();
+            UpdateEditSurfaceVisibility();
+            UpdateApplyState();
+
+            if (jsonError is not null)
+                ShowError($"Could not show values: {jsonError}");
+        }
+
+        // Fields need a resolved schema, a renderable JSON payload and a JSON round-trip that
+        // preserves the bytes; anything else is JSON-view-only (read-only unless Editable).
+        private static string? FieldsBlockReason(DocumentEntry entry, DocumentView view, string stateReason)
+        {
+            if (entry.Descriptor is null)
+                return string.IsNullOrEmpty(stateReason) ? "Not part of the selected save type." : stateReason;
+            if (view.Json is null)
+                return view.JsonError ?? (string.IsNullOrEmpty(stateReason) ? "The stored values cannot be shown." : stateReason);
+            if (entry.State == DocumentState.ReadOnlyRoundTrip)
+                return string.IsNullOrEmpty(stateReason) ? entry.StateReason ?? "View only" : stateReason;
+            return null;
+        }
+
+        private void SetViewMode(bool json, bool persist)
+        {
+            _preferredJsonView = json;
+            if (persist)
+                EditorPrefs.SetBool(ViewerUI.JsonViewPrefsKey, json);
+
+            if (_selectedNode is null || json == _jsonViewActive)
+            {
+                SyncViewToggles();
+                return;
+            }
+
+            if (!json && !_fieldsToggle.enabledSelf)
+            {
+                SyncViewToggles();
+                return;
+            }
+
+            if (json)
+            {
+                // Fields -> JSON: the shared working copy is serialized into the text field,
+                // so nothing edited mid-switch is lost.
+                if (_fields is not null)
+                    _jsonField.SetValueWithoutNotify(_fields.ToJson());
+                ClearFieldsSurface();
+                HideError();
+                _jsonViewActive = true;
+            }
+            else
+            {
+                // JSON -> Fields: parse the text back into the model; on error stay on JSON
+                // with the error shown (no silent fallback).
+                if (!TryBuildFieldsSurface(_jsonField.value))
+                {
+                    SyncViewToggles();
+                    UpdateApplyState();
+                    return;
+                }
+
+                _jsonViewActive = false;
+            }
+
+            SyncViewToggles();
+            UpdateEditSurfaceVisibility();
+            UpdateApplyState();
+        }
+
+        private bool TryBuildFieldsSurface(string json)
+        {
+            ClearFieldsSurface();
+
+            // A collection reflects on its entity T per entry; a single document on its payload
+            // type. Both need a resolved type — without one the Fields toggle should not have been
+            // reachable, so this is a defensive guard.
+            Type? surfaceType = _isCollection ? _entityType : _payloadType;
+            if (surfaceType is null)
+                return false;
+
+            try
+            {
+                _fields = _isCollection
+                    ? new CollectionFieldsEditor(json, surfaceType, _keyType)
+                    : (IFieldsEditor)new FieldEditorView(FieldEditorModel.Create(json, surfaceType));
+            }
+            catch (Exception ex)
+            {
+                _fields = null;
+                ShowError($"JSON error: {ex.Message}");
+                return false;
+            }
+
+            HideError();
+            _fields.Changed += UpdateApplyState;
+            _fieldsSection.Add(_fields.Root);
+            _fieldsSection.SetEnabled(_editable);
+            return true;
         }
 
         private void OnApply()
         {
-            if (_selectedStorageKey is null)
+            SaveTreeNode? node = _selectedNode;
+            if (node is null)
                 return;
 
-            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            string payload;
+            if (!_jsonViewActive && _fields is not null)
             {
-                bool proceed = EditorUtility.DisplayDialog(
-                    "Apply during play mode?",
-                    "Play mode is active. A live session's next commit can overwrite this edit (last write wins). Apply anyway?",
-                    "Apply",
-                    "Cancel");
-                if (!proceed)
+                if (_fields.HasInvalid)
+                {
+                    ShowError("Fix the highlighted fields before applying.");
                     return;
-            }
+                }
 
-            string storageKey = _selectedStorageKey;
-            if (_controller.ApplyJson(storageKey, _documentJson.value, out string? error))
-            {
-                HideApplyError();
-                RefreshDocuments(storageKey);
+                payload = _fields.ToJson();
             }
             else
             {
-                _applyError.text = error ?? "Apply failed.";
-                _applyError.style.display = DisplayStyle.Flex;
+                payload = _jsonField.value;
+            }
+
+            bool applied;
+            string? error;
+            if (node.Kind == SaveTreeNodeKind.LiveDocument)
+            {
+                if (!_liveViews.TryGetValue(node.SessionName!, out LiveSessionView view))
+                {
+                    ShowError($"Live session '{node.SessionName}' is gone. Refresh the tree.");
+                    return;
+                }
+
+                applied = view.ApplyJson(node.PropertyName!, payload, out error);
+            }
+            else
+            {
+                if (node.StorageKey is null)
+                    return;
+                applied = _controller.ApplyJson(node.StorageKey, payload, out error);
+            }
+
+            if (applied)
+            {
+                HideError();
+                // Disk: ApplyJson reloaded the save; live: the session was mutated in place.
+                // Repopulating shows the state the target actually holds now.
+                PopulateDetail();
+            }
+            else
+            {
+                ShowError(error ?? "Apply failed.");
             }
         }
 
         private void OnRevert()
         {
-            HideApplyError();
-            ShowSelectedDocument();
+            if (_selectedNode is null)
+                return;
+
+            HideError();
+            // Live docs revert by re-reading the live snapshot; disk docs reload from disk.
+            if (_selectedNode.Kind != SaveTreeNodeKind.LiveDocument)
+                _controller.Reload();
+            PopulateDetail();
         }
 
-        private void HideApplyError()
+        private void UpdateApplyState()
         {
-            _applyError.text = string.Empty;
-            _applyError.style.display = DisplayStyle.None;
+            bool editable = _selectedNode is not null && _editable;
+            bool dirty = editable && IsDirty();
+            bool canApply = dirty;
+            if (canApply && !_jsonViewActive && _fields is not null && _fields.HasInvalid)
+                canApply = false;
+            _applyButton.SetEnabled(canApply);
+            _revertButton.SetEnabled(dirty);
         }
 
-        private void RefreshDocuments(string? preserveSelectedKey = null)
+        // "Changed from the original" is compared on canonical (parse + compact re-serialize)
+        // JSON so formatting drift between the converter output, the field editor's working
+        // copy and hand-typed text never counts as an edit. Unparseable typed JSON counts as
+        // dirty (Apply will surface the parse error), as do invalid field values (Revert must
+        // stay available to escape them).
+        private bool IsDirty()
         {
-            _documents.Clear();
-            if (_controller.CurrentSave is not null)
-                _documents.AddRange(_controller.CurrentSave.Documents);
+            if (_originalJson is null)
+                return false;
 
-            string? loadError = _controller.LoadError;
-            _loadError.text = loadError ?? string.Empty;
-            _loadError.style.display = loadError is null ? DisplayStyle.None : DisplayStyle.Flex;
+            if (!_jsonViewActive && _fields is not null)
+                return _fields.HasInvalid
+                    || !string.Equals(CanonicalJson(_fields.ToJson()), CanonicalJson(_originalJson), StringComparison.Ordinal);
 
-            HideApplyError();
-            _documentsList.ClearSelection();
-            _documentsList.RefreshItems();
-            _selectedStorageKey = null;
-            _documentInfo.text = string.Empty;
-            _documentJson.SetValueWithoutNotify(string.Empty);
-            _documentJson.isReadOnly = true;
-            _applyButton.SetEnabled(false);
-            _revertButton.SetEnabled(false);
+            return !string.Equals(CanonicalJson(_jsonField.value), CanonicalJson(_originalJson), StringComparison.Ordinal);
+        }
 
-            if (preserveSelectedKey is not null)
+        private static string CanonicalJson(string json)
+        {
+            try
             {
-                for (int i = 0; i < _documents.Count; i++)
-                {
-                    if (string.Equals(_documents[i].StorageKey, preserveSelectedKey, StringComparison.Ordinal))
-                    {
-                        _documentsList.SetSelection(i);
-                        break;
-                    }
-                }
+                return Newtonsoft.Json.Linq.JToken.Parse(json).ToString(Newtonsoft.Json.Formatting.None);
+            }
+            catch (Newtonsoft.Json.JsonException)
+            {
+                return json;
             }
         }
 
-        private void ShowSelectedDocument()
+        private void UpdateEditSurfaceVisibility()
         {
-            int index = _documentsList.selectedIndex;
-            if (index < 0 || index >= _documents.Count)
-                return;
-
-            DocumentView? view = _controller.GetDocumentView(_documents[index].StorageKey);
-            if (view is null)
-                return;
-
-            _selectedStorageKey = view.Entry.StorageKey;
-            HideApplyError();
-
-            string info = $"{view.Entry.StorageKey} — {view.Entry.State}";
-            if (view.Entry.StateReason is not null)
-                info += $" — {view.Entry.StateReason}";
-            if (view.JsonError is not null)
-                info += $" — JSON error: {view.JsonError}";
-            _documentInfo.text = info;
-
-            _documentJson.SetValueWithoutNotify(view.Json ?? string.Empty);
-            _documentJson.isReadOnly = !view.CanEdit;
-            _applyButton.SetEnabled(view.CanEdit);
-            _revertButton.SetEnabled(view.CanEdit);
+            _fieldsScroll.style.display = _jsonViewActive ? DisplayStyle.None : DisplayStyle.Flex;
+            _jsonScroll.style.display = _jsonViewActive ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
-        private static string SaveLabel(SaveLocation location) =>
-            location.Slot is int slot ? $"{location.Directory} (slot {slot})" : location.Directory;
-
-        private static string DescribeDocument(DocumentEntry entry)
+        private void SyncViewToggles()
         {
-            string typeName = entry.Descriptor?.DocumentType.Name ?? "?";
-            return $"{entry.StorageKey}  [{entry.State}]  {typeName}  {entry.SizeBytes} B";
+            _fieldsToggle.SetValueWithoutNotify(!_jsonViewActive);
+            _jsonToggle.SetValueWithoutNotify(_jsonViewActive);
         }
+
+        private void ClearDetail()
+        {
+            _selectedNode = null;
+            _originalJson = null;
+            _payloadType = null;
+            _entityType = null;
+            _keyType = null;
+            _isCollection = false;
+            _editable = false;
+            _jsonViewActive = _preferredJsonView;
+            _detailContent.style.display = DisplayStyle.None;
+            ClearCardAccent();
+            _emptyState.style.display = DisplayStyle.Flex;
+            ClearFieldsSurface();
+            _jsonField.SetValueWithoutNotify(string.Empty);
+            _jsonField.isReadOnly = true;
+            HideError();
+            UpdateApplyState();
+        }
+
+        private void ClearFieldsSurface()
+        {
+            _fieldsSection.Clear();
+            _fields = null;
+        }
+
+        private void ShowError(string message)
+        {
+            _emptyState.style.display = DisplayStyle.None;
+            _errorBox.text = message;
+            _errorBox.style.display = DisplayStyle.Flex;
+        }
+
+        private void HideError()
+        {
+            _errorBox.text = string.Empty;
+            _errorBox.style.display = DisplayStyle.None;
+        }
+
+        // Right-click menu for a tree row: reveal a disk node's folder in the OS file browser
+        // (Explorer / Finder / file manager), and for a document, open its file in the default app.
+        // Groups and live nodes have no disk backing, so they get no entries.
+        private static void PopulateTreeContextMenu(ContextualMenuPopulateEvent evt)
+        {
+            VisualElement element = evt.target as VisualElement;
+            while (element != null && element.userData is not SaveTreeNode)
+                element = element.parent;
+
+            if (element?.userData is not SaveTreeNode node)
+                return;
+
+            string directory = RevealableDirectory(node);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                evt.menu.AppendAction(
+                    ViewerDisplayNames.RevealLabel(Application.platform),
+                    _ => EditorUtility.RevealInFinder(directory));
+            }
+
+            string filePath = DocumentFilePath(node);
+            if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+            {
+                evt.menu.AppendAction(
+                    ViewerDisplayNames.OpenFileLabel,
+                    _ => EditorUtility.OpenWithDefaultApp(filePath));
+            }
+        }
+
+        // The on-disk folder to reveal for a node, or null for nodes with no disk location
+        // (groups and live session/documents).
+        internal static string RevealableDirectory(SaveTreeNode node) => node?.Location?.Directory;
+
+        // A disk document's own file, or null for anything that is not a disk document. The path
+        // follows DirectorySaveBackend's layout so the name matches what was written.
+        internal static string DocumentFilePath(SaveTreeNode node)
+        {
+            if (node is null || node.Kind != SaveTreeNodeKind.Document
+                || node.Location is null || string.IsNullOrEmpty(node.StorageKey))
+                return null;
+
+            return DirectorySaveBackend.DocumentFilePath(node.Location.Directory, node.StorageKey);
+        }
+
+        // Reveals the document detail and takes down the empty-state placeholder.
+        private void ShowDetailContent()
+        {
+            _detailContent.style.display = DisplayStyle.Flex;
+            _emptyState.style.display = DisplayStyle.None;
+        }
+
+        // Paints the status badge and the card's left accent from the shared status palette, so a
+        // document's state reads the same here as its dot in the tree.
+        private void SetStatusBadge(DocumentState state, string tooltip)
+        {
+            Color accent = ViewerStatusVisuals.AccentColor(state);
+            _detailStateLabel.text = ViewerDisplayNames.StateLabel(state);
+            _detailStateLabel.tooltip = tooltip ?? string.Empty;
+            _detailStateLabel.style.color = accent;
+            _detailStateLabel.style.backgroundColor = ViewerStatusVisuals.BadgeBackground(accent);
+            SetBadgeBorderColor(_detailStateLabel, ViewerStatusVisuals.BadgeBorder(accent));
+            _detailContent.style.borderLeftWidth = 3;
+            _detailContent.style.borderLeftColor = accent;
+        }
+
+        private void ClearCardAccent()
+        {
+            _detailContent.style.borderLeftWidth = 0;
+            _detailContent.style.borderLeftColor = StyleKeyword.Null;
+        }
+
+        private static void SetBadgeBorderColor(VisualElement badge, Color color)
+        {
+            badge.style.borderTopColor = color;
+            badge.style.borderBottomColor = color;
+            badge.style.borderLeftColor = color;
+            badge.style.borderRightColor = color;
+        }
+
+        private static void BindTreeIcon(VisualElement icon, SaveTreeNodeKind kind)
+        {
+            Texture2D texture = TreeIcon(kind);
+            if (texture is null)
+            {
+                icon.style.display = DisplayStyle.None;
+                return;
+            }
+
+            icon.style.display = DisplayStyle.Flex;
+            icon.style.backgroundImage = new StyleBackground(texture);
+        }
+
+        // Only attention states get a dot: a healthy Editable document stays quiet so the ones
+        // that need a second look stand out. Live leaves get a "live" dot (their on-disk state is
+        // undefined until opened). The dot's tooltip explains the state, so hovering it answers
+        // "what's going on with this document?".
+        private static void BindTreeDot(VisualElement dot, SaveTreeNode node)
+        {
+            if (node.Kind == SaveTreeNodeKind.Document && node.State.HasValue
+                && node.State.Value != DocumentState.Editable)
+            {
+                DocumentState state = node.State.Value;
+                dot.style.display = DisplayStyle.Flex;
+                dot.style.backgroundColor = ViewerStatusVisuals.AccentColor(state);
+                dot.tooltip = DotTooltip(state);
+            }
+            else if (node.Kind == SaveTreeNodeKind.LiveDocument)
+            {
+                dot.style.display = DisplayStyle.Flex;
+                dot.style.backgroundColor = ViewerStatusVisuals.LiveAccentColor();
+                dot.tooltip = SaveTreeModel.PlayingNowLabel;
+            }
+            else
+            {
+                dot.style.display = DisplayStyle.None;
+                dot.tooltip = string.Empty;
+            }
+        }
+
+        // Short state label plus its plain-language explanation, e.g.
+        // "View only — This value can't be edited safely in the viewer."
+        private static string DotTooltip(DocumentState state)
+        {
+            string label = ViewerDisplayNames.StateLabel(state);
+            string description = ViewerDisplayNames.StateDescription(state);
+            return string.IsNullOrEmpty(description) ? label : $"{label} — {description}";
+        }
+
+        private static Texture2D TreeIcon(SaveTreeNodeKind kind)
+        {
+            string iconName;
+            switch (kind)
+            {
+                case SaveTreeNodeKind.Save:
+                case SaveTreeNodeKind.LiveSession:
+                    iconName = "Folder Icon";
+                    break;
+                case SaveTreeNodeKind.Document:
+                case SaveTreeNodeKind.LiveDocument:
+                    iconName = "TextAsset Icon";
+                    break;
+                default:
+                    return null; // Group rows lean on the foldout arrow alone.
+            }
+
+            return EditorGUIUtility.IconContent(iconName)?.image as Texture2D;
+        }
+
+        // ---- Test hooks ----
+        // Detached elements (no panel) do not dispatch ChangeEvent/ClickEvent, so EditMode tests
+        // drive the same handlers the controls are wired to.
+
+        internal IReadOnlyList<TreeViewItemData<SaveTreeNode>> VisibleTreeItemsForTests => _visibleItems;
+
+        internal void SelectSessionForTests(int index)
+        {
+            _sessionDropdown.index = index;
+            OnSessionChanged();
+        }
+
+        // Selects a session that is not offered in the dropdown (e.g. a test-only fixture filtered
+        // out of the session list), mirroring OnSessionChanged without the dropdown round-trip.
+        internal void SelectSessionByTypeForTests(Type sessionType)
+        {
+            _controller.SelectSession(sessionType);
+            Rescan();
+        }
+
+        internal void SetRootForTests(string rootPath) => SetRoot(rootPath, persist: false);
+
+        internal void RefreshForTests() => Rescan();
+
+        internal void SetSearchFilterForTests(string filter)
+        {
+            _searchField.SetValueWithoutNotify(filter);
+            OnSearchChanged(filter);
+        }
+
+        internal void SelectTreeNodeForTests(SaveTreeNode? node) => ShowNode(node);
+
+        internal void SetViewModeForTests(bool json) => SetViewMode(json, persist: false);
+
+        internal void SetJsonTextForTests(string json)
+        {
+            // Mirrors the runtime path (typing raises a change event → UpdateApplyState); the
+            // event is not dispatched reliably on an unattached panel, so the update is direct.
+            _jsonField.SetValueWithoutNotify(json);
+            UpdateApplyState();
+        }
+
+        internal void ApplyForTests() => OnApply();
+
+        internal void RevertForTests() => OnRevert();
+
+        internal bool IsJsonViewActiveForTests => _jsonViewActive;
+
+        internal FieldEditorModel? FieldsModelForTests => (_fields as FieldEditorView)?.Model;
+
+        internal FieldEditorView? FieldsViewForTests => _fields as FieldEditorView;
+
+        internal CollectionFieldsEditor? CollectionFieldsForTests => _fields as CollectionFieldsEditor;
     }
 }

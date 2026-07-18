@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
 
 namespace PlayerData.Unity.Editor
 {
@@ -31,8 +32,6 @@ namespace PlayerData.Unity.Editor
     {
         public IReadOnlyList<Type> SessionTypes { get; private set; } = Array.Empty<Type>();
 
-        public Type? SelectedSessionType { get; private set; }
-
         public SessionSchema? Schema { get; private set; }
 
         public IReadOnlyList<SaveLocation> Saves { get; private set; } = Array.Empty<SaveLocation>();
@@ -45,14 +44,37 @@ namespace PlayerData.Unity.Editor
 
         public void RefreshSessionTypes()
         {
-            SessionTypes = SessionSchemaResolver.FindSessionTypes();
+            List<Type> discovered = SessionSchemaResolver.FindSessionTypes();
+            List<Type> result = new List<Type>(discovered.Count);
+            foreach (Type type in discovered)
+            {
+                // Test-only session fixtures (compiled under UNITY_INCLUDE_TESTS) would otherwise
+                // clutter this package's own dev-project dropdown. A package consumer never sees
+                // them — their test assembly is not compiled — so this only affects development.
+                if (!IsFromTestAssembly(type))
+                    result.Add(type);
+            }
+
+            SessionTypes = result;
+        }
+
+        // Every Unity EditMode/PlayMode test assembly references the NUnit framework and no
+        // production assembly does, which makes it a reliable "is a test type" marker.
+        private static bool IsFromTestAssembly(Type type)
+        {
+            foreach (AssemblyName referenced in type.Assembly.GetReferencedAssemblies())
+            {
+                if (string.Equals(referenced.Name, "nunit.framework", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
 
         public void SelectSession(Type sessionType)
         {
             if (sessionType is null) throw new ArgumentNullException(nameof(sessionType));
 
-            SelectedSessionType = sessionType;
             Schema = SessionSchemaResolver.Resolve(sessionType);
 
             // Classification depends on the schema, so an already-selected save is re-read.
@@ -66,6 +88,27 @@ namespace PlayerData.Unity.Editor
             SelectedSave = null;
             CurrentSave = null;
             LoadError = null;
+        }
+
+        /// <summary>
+        /// Loads every scanned save with the current schema, for the tree view. Locations whose
+        /// manifest cannot be read are omitted; without a schema no save can be classified, so
+        /// the result is empty. Returns a fresh list on every call.
+        /// </summary>
+        public IReadOnlyList<LoadedSave> LoadScannedSaves()
+        {
+            List<LoadedSave> result = new List<LoadedSave>();
+            if (Schema is null)
+                return result;
+
+            foreach (SaveLocation location in Saves)
+            {
+                LoadedSave? save = SaveDataStore.TryLoad(location, Schema, out _);
+                if (save is not null)
+                    result.Add(save);
+            }
+
+            return result;
         }
 
         public void SelectSave(SaveLocation location)

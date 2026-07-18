@@ -15,9 +15,13 @@ namespace PlayerData.Unity.Editor
     /// </summary>
     public static class MemoryPackJsonConverter
     {
+        // Shared instance: DefaultContractResolver caches contracts per instance, and
+        // ResolveObjectContract below must observe the exact same member-selection rule.
+        private static readonly MemoryPackContractResolver Resolver = new MemoryPackContractResolver();
+
         private static readonly JsonSerializerSettings Settings = new JsonSerializerSettings
         {
-            ContractResolver = new MemoryPackContractResolver(),
+            ContractResolver = Resolver,
             Formatting = Formatting.Indented,
             // Keep string members verbatim; date-looking strings must not be re-formatted.
             DateParseHandling = DateParseHandling.None,
@@ -45,6 +49,27 @@ namespace PlayerData.Unity.Editor
             return MemoryPackSerializer.Serialize(documentType, value);
         }
 
+        /// <summary>Serializes a live object with the same settings as the byte-level APIs.</summary>
+        public static string ToJson(object value, Type documentType)
+        {
+            if (value is null) throw new ArgumentNullException(nameof(value));
+            if (documentType is null) throw new ArgumentNullException(nameof(documentType));
+
+            return JsonConvert.SerializeObject(value, documentType, Settings);
+        }
+
+        /// <summary>Deserializes JSON to a live object with the same settings as the byte-level APIs.</summary>
+        public static object ObjectFromJson(string json, Type documentType)
+        {
+            if (json is null) throw new ArgumentNullException(nameof(json));
+            if (documentType is null) throw new ArgumentNullException(nameof(documentType));
+
+            object? value = JsonConvert.DeserializeObject(json, documentType, Settings);
+            if (value is null)
+                throw new JsonSerializationException($"JSON deserialized to null for document type '{documentType.Name}'.");
+            return value;
+        }
+
         /// <summary>
         /// True when bytes → object → JSON → object → bytes reproduces the payload exactly,
         /// i.e. JSON editing cannot silently lose data for this document.
@@ -69,6 +94,21 @@ namespace PlayerData.Unity.Editor
                 failureReason = ex.Message;
                 return false;
             }
+        }
+
+        /// <summary>
+        /// The member-selection rule as a resolved contract, for the field editor. Exposed from
+        /// here (instead of re-implementing the rule) so JSON editing and per-field editing can
+        /// never diverge on which members a document exposes.
+        /// </summary>
+        internal static JsonObjectContract ResolveObjectContract(Type documentType)
+        {
+            if (documentType is null) throw new ArgumentNullException(nameof(documentType));
+
+            if (Resolver.ResolveContract(documentType) is JsonObjectContract contract)
+                return contract;
+            throw new InvalidOperationException(
+                $"Type '{documentType.Name}' does not resolve to an object contract; per-field editing applies to document objects only.");
         }
 
         /// <summary>

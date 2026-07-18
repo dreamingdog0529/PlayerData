@@ -6,7 +6,7 @@
   </PropertyGroup>
   <PropertyGroup>
     <PackageId>PlayerData.R3</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Description>Exposes PlayerData document-store changes as R3 Observable&lt;T&gt;.</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>

@@ -16,8 +16,15 @@
         "System.Collections.Immutable.dll"
     ],
     "autoReferenced": true,
-    "defineConstraints": [],
+    "defineConstraints": [
+        "PLAYERDATA_VCONTAINER_SUPPORT"
+    ],
     "versionDefines": [
+        {
+            "name": "jp.hadashikick.vcontainer",
+            "expression": "",
+            "define": "PLAYERDATA_VCONTAINER_SUPPORT"
+        },
         {
             "name": "com.cysharp.unitask",
             "expression": "",

@@ -16,7 +16,7 @@ PlayerData is for **player save data** (progress the player changes) that outgro
 * **The source generator owns the boilerplate.** `OpenAsync`, typed properties, and `ISaveSession` are generated so call sites stay thin and Unity-friendly (class-level attributes; no partial properties — Unity tops out at C# 12).
 * **Memory is a draft; commit is the write.** Updaters may run under CAS; pure functions only. Validation is fail-fast **before** I/O so a bad commit leaves the previous save intact.
 * **Backends are swappable.** `ISaveBackend` covers directory, slots, Unity paths, encryption wrappers — session code does not hard-code paths.
-* **Adapters stay optional.** R3 / VitalRouter / MessagePipe / VContainer are separate packages; Core stays dependency-light.
+* **Adapters stay optional.** R3 / VitalRouter / MessagePipe are separate packages; VContainer integration ships inside PlayerData.Unity and auto-enables when VContainer is present. Core stays dependency-light.
 
 In short: **types own shape; the session owns the boundary; the backend owns bytes on disk.**
 
@@ -360,8 +360,7 @@ Extension Packages
 | [PlayerData.R3](src/PlayerData.R3/) | Observables |
 | [PlayerData.VitalRouter](src/PlayerData.VitalRouter/) | VitalRouter commands |
 | [PlayerData.MessagePipe](src/PlayerData.MessagePipe/) | MessagePipe publish |
-| [PlayerData.Unity](src/PlayerData.Unity/Assets/PlayerData.Unity/) | `UnitySaveBackend` / `PlayerDataAutoSave` (UPM) |
-| [PlayerData.Unity.VContainer](src/PlayerData.Unity/Assets/External/PlayerData.Unity.VContainer/) | `RegisterPlayerDataSession` (UPM, optional) |
+| [PlayerData.Unity](src/PlayerData.Unity/Assets/PlayerData.Unity/) | `UnitySaveBackend` / `PlayerDataAutoSave` / optional VContainer (UPM) |
 
 ### R3
 
@@ -393,6 +392,8 @@ Minimum supported Unity version is 6000.0. Install `PlayerData.Core` (and Memory
 https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity
 ```
 
+NuGet restores Roslyn source generators (`PlayerData.SourceGenerator`, `MemoryPack.Generator`) under `Assets/Packages/**/analyzers/**`. Unity may log *Unable to resolve reference 'Microsoft.CodeAnalysis'* for those DLLs — they are analyzers, not runtime plugins. After the UPM package is imported, PlayerData disables **Validate References** on them automatically; you can also uncheck it in the Plugin Inspector.
+
 ```csharp
 var backend = UnitySaveBackend.Create();
 var slot1   = UnitySaveBackend.Create(slot: 1);
@@ -407,25 +408,76 @@ auto.Bind(save); // dirty only; concurrent commits gated
 
 ### Save Data Viewer (Editor)
 
-`Window > PlayerData > Data Viewer` opens an editor window for inspecting and editing saved data (`DirectorySaveBackend` layout, `slot_{n}` included) without entering play mode: pick your `[PlayerDataSession]` type, set the root path (defaults to `Application.persistentDataPath`), **Scan**, then select a save and a document to view it as JSON. Edit the JSON and press **Apply** to write it back.
+`Window > PlayerData > Data Viewer` opens a two-pane window styled after the Project view: a save tree on the left, an editor for the selected document on the right. No play mode is required for on-disk saves.
+
+The toolbar holds everything else:
+
+- **Location dropdown** — the default entry, **This game's save folder** (`Application.persistentDataPath`, where Unity games store their save data), normally needs no change. Pick **Choose folder...** to point the viewer elsewhere; the choice is remembered per project, and the tooltip always shows the full path.
+- **Refresh** — rescans the root. Scanning also runs when the window opens and when the root changes.
+- **Save type** — short name of your `[PlayerDataSession]` class. Save binaries carry no type metadata, so the viewer resolves document types from this schema.
+- **Search** — filters documents by display name (case-insensitive); parents of a match stay visible.
+
+The tree groups everything found under the root:
+
+- **Saved files** — every save below the root (up to 3 levels deep, including `slot_N` folders), shown as paths relative to the root (`(root)` for the root itself). Each save expands into its documents (property name + plain status: Editable / View only / Can't read).
+- **Playing now** — appears only during play mode, listing registered live sessions and their documents.
+
+Click a document and the right pane shows its name, status, and location, a **Fields** ⇔ **JSON** toggle, and **Apply** / **Revert**. Both views share one working copy: switching keeps unapplied edits, and switching from JSON to Fields with invalid JSON stays on JSON with the error shown. The toggle choice is remembered. Selecting another document discards unapplied edits.
+
+**Live sessions** are opt-in — register your session and it appears under **Playing now** during play mode:
+
+```csharp
+await using var save = await GameSave.OpenAsync(backend);
+
+// Safe without #if UNITY_EDITOR: in player builds Register stores nothing and
+// returns a shared no-op token, so game code pays zero overhead.
+IDisposable viewerToken = LiveSessionRegistry.Register("Main Save", save);
+
+// On teardown, alongside closing the session:
+viewerToken.Dispose();
+```
+
+Live documents are edited in the same pane; **Apply** goes through the session APIs (`IDoc<T>.Replace`, `IBag<TKey,T>.Set/Upsert/Remove`), so the running game sees ordinary `Changed` events (`DataChangeCause.UserWrite`). Stopping play mode removes the **Playing now** group.
+
+Collection documents (`IBag`) are edited Inspector-style in the **Fields** view: one sub-form per entry, an **Add entry** button at the bottom, and a **Remove** button on each entry. An entry's key *is* the entity's `[PlayerDataKey]` member value, so editing that field renames the entry (duplicate keys are flagged in red and block Apply). You can still edit the whole object directly in the **JSON** view.
+
+| Member type | Fields editor |
+| --- | --- |
+| `bool` | Toggle |
+| `string` | Text field |
+| Numeric (`int`, `float`, `decimal`, …) | Validated text — invalid input turns red and blocks Apply |
+| Enum | Dropdown |
+| Anything else (nested objects, lists, `DateTime`, nullable, …) | Read-only preview; edit via the JSON view |
 
 Safety rules:
 
-- A document is editable only when its `bytes → JSON → bytes` round-trip reproduces the payload exactly; documents that JSON cannot represent losslessly (e.g. written by a newer schema) are view-only.
-- Encrypted / obfuscated saves cannot be decoded by the viewer and show as *unreadable*. Unknown keys are preserved untouched on write-back.
-- Saves whose `FormatVersion` differs from the current one are view-only — run your migrations in game code first.
-- Applying during play mode asks for confirmation; a live session's next commit wins over your edit.
-- **Applied edits overwrite the save file immediately and cannot be undone.**
+- A disk document is editable only when its `bytes → JSON → bytes` round-trip reproduces the payload exactly; otherwise it is **View only**.
+- Encrypted / obfuscated saves cannot be decoded and show as **Can't read**. Unknown keys are preserved on write-back.
+- Saves whose `FormatVersion` differs from the current one are **View only (old format)** — open the game once so migrations can run.
+- Read-only documents show the reason on the status label and keep **Apply** disabled. Live documents that cannot round-trip through JSON are view-only as well.
+- **Applied edits take effect immediately and cannot be undone**.
+
+The on-disk binary format is unchanged: no type metadata is embedded in `manifest.bin` / `docs/*.bin`. The viewer resolves types from the selected save type.
+
+### Editor Document Assets (fixtures)
+
+For sample / QA fixtures in the Project window (not runtime player saves), create **Assets > Create > PlayerData > Document Asset**.
+
+1. Pick the **Save type** (`[PlayerDataSession]` class) and **Document** (storage key).
+2. Edit with **Fields** (single documents) or **JSON** (lists / nested values).
+3. **Apply to Asset** stores the payload as JSON on the ScriptableObject.
+4. Optionally **Export to Save Folder** merges the document into a `DirectorySaveBackend` layout (`manifest.bin` + `docs/*.bin`), preserving any other documents already in that folder.
+
+These assets live in the **Editor** assembly — game runtime code does not load them, and Core binaries stay type-free. They are for authoring fixtures in the Inspector the way you would pick a model or AudioClip, without embedding schema metadata into save files.
 
 ### VContainer
 
-Optional [VContainer](https://github.com/hadashiA/VContainer) integration. If you do not use VContainer, install only `PlayerData.Unity` — do not add this package.
+Optional [VContainer](https://github.com/hadashiA/VContainer) integration ships **inside** `PlayerData.Unity` (Cysharp-style `Runtime/External`). When `jp.hadashikick.vcontainer` is installed, the `PlayerData.Unity.VContainer` assembly is auto-enabled via asmdef version defines — no separate PlayerData package is required. Without VContainer, the assembly is simply not compiled.
 
-Add **both** PlayerData packages (plus VContainer itself) to `Packages/manifest.json`:
+Add PlayerData.Unity (and VContainer itself) to `Packages/manifest.json`:
 
 ```json
 "com.dreamingdog0529.playerdata": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity",
-"com.dreamingdog0529.playerdata.vcontainer": "https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/External/PlayerData.Unity.VContainer",
 "jp.hadashikick.vcontainer": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer#1.19.0"
 ```
 

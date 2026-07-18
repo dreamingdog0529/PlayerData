@@ -1,4 +1,6 @@
-﻿using System;
+﻿#if PLAYERDATA_VCONTAINER_SUPPORT
+
+using System;
 using System.Collections.Generic;
 using System.Threading;
 #if VCONTAINER_UNITASK_INTEGRATION
@@ -66,3 +68,5 @@ namespace PlayerData.Unity
         }
     }
 }
+
+#endif

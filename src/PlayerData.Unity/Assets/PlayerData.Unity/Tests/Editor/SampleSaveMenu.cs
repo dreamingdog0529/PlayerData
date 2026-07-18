@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using MemoryPack;
-using UnityEditor;
-using UnityEngine;
 
 namespace PlayerData.Unity.Editor.Tests
 {
@@ -15,16 +13,6 @@ namespace PlayerData.Unity.Editor.Tests
     public static class SampleSaveMenu
     {
         public const string SampleFolderName = "PlayerData-EditorSample";
-
-        [MenuItem("PlayerData/Tests/Create Sample Save")]
-        public static void CreateSampleSaveMenuItem()
-        {
-            string root = Create(Application.persistentDataPath);
-            Debug.Log(
-                $"[PlayerData] Sample saves created under: {root} (direct + slot_1). " +
-                $"Open '{PlayerData.Unity.Editor.PlayerDataEditorMenu.WindowMenuPath}', select session type " +
-                $"'{typeof(SampleEditorSession).FullName}', set the root path to persistentDataPath and press Scan.");
-        }
 
         public static string Create(string baseDirectory)
         {
