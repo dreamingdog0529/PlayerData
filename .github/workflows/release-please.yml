@@ -6,9 +6,7 @@ on:
       - main
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: release-please-${{ github.ref }}
@@ -18,6 +16,11 @@ jobs:
   release-please:
     name: Open or merge release PR
     runs-on: ubuntu-latest
+    # release-please-action creates/updates the release PR, tags, and release.
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
