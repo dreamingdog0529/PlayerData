@@ -53,5 +53,5 @@ echo "  feat: add config file support" >&2
 echo "  chore: update dependencies" >&2
 echo "  ci: tighten release workflow" >&2
 echo "" >&2
-echo "See CONTRIBUTING.md. Format: type(optional-scope): description" >&2
+echo "See .github/CONTRIBUTING.md. Format: type(optional-scope): description" >&2
 exit 1

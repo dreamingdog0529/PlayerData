@@ -51,7 +51,7 @@ task setup
 - Sign off every commit: `git commit -s`
 - Squash-merge only; the PR title becomes the commit on the default branch
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full workflow.
+See [CONTRIBUTING.md](../.github/CONTRIBUTING.md) for the full workflow.
 
 ## Releases
 

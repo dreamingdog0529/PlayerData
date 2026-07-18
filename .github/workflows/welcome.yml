@@ -22,7 +22,7 @@ jobs:
 
             A maintainer will review this soon. In the meantime:
             - Check our [documentation](https://github.com/${{ github.repository }}/blob/main/docs/development.md) for common solutions
-            - Read [SUPPORT.md](https://github.com/${{ github.repository }}/blob/main/SUPPORT.md)
+            - Read [SUPPORT.md](https://github.com/${{ github.repository }}/blob/main/.github/SUPPORT.md)
             - Search [existing issues](https://github.com/${{ github.repository }}/issues) for similar reports
 
             If this is a question rather than a bug report, consider posting in [GitHub Discussions](https://github.com/${{ github.repository }}/discussions) instead.
@@ -36,4 +36,4 @@ jobs:
             - [ ] Commits are signed off (DCO) — `git commit -s`
             - [ ] PR title follows [Conventional Commits](https://www.conventionalcommits.org/)
 
-            Check out our [Contributing Guide](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md) for more details.
+            Check out our [Contributing Guide](https://github.com/${{ github.repository }}/blob/main/.github/CONTRIBUTING.md) for more details.

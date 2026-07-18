@@ -8,7 +8,7 @@ contact_links:
     url: https://github.com/dreamingdog0529/PlayerData/blob/main/docs/development.md
     about: Check our documentation for build, install, and development guides
   - name: Support
-    url: https://github.com/dreamingdog0529/PlayerData/blob/main/SUPPORT.md
+    url: https://github.com/dreamingdog0529/PlayerData/blob/main/.github/SUPPORT.md
     about: How to get help
   - name: Security Vulnerability
     url: https://github.com/dreamingdog0529/PlayerData/security/advisories/new

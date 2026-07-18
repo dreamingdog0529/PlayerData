@@ -19,13 +19,13 @@ Participation is governed by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Getting help
 
-See [SUPPORT.md](SUPPORT.md). Roadmap notes: [ROADMAP.md](ROADMAP.md).
+See [SUPPORT.md](SUPPORT.md). Roadmap notes: [ROADMAP.md](../ROADMAP.md).
 
 ## Development environment
 
 | Requirement | Notes |
 |-------------|--------|
-| Toolchain | See [docs/development.md](docs/development.md) |
+| Toolchain | See [docs/development.md](../docs/development.md) |
 | Optional | [typos](https://github.com/crate-ci/typos), [lefthook](https://github.com/evilmartians/lefthook), [Task](https://taskfile.dev/) |
 | Git hooks | `pwsh ./scripts/install-git-hooks.ps1` or `task setup` |
 
@@ -44,7 +44,7 @@ task test
 task check
 ```
 
-See [docs/development.md](docs/development.md) for full details.
+See [docs/development.md](../docs/development.md) for full details.
 
 ### Project layout
 
@@ -165,4 +165,4 @@ Do not file public issues for vulnerabilities. See [SECURITY.md](SECURITY.md).
 
 ## License
 
-By contributing, you agree that your contributions are licensed under the project [MIT License](LICENSE) and that you have the right to submit them under the DCO.
+By contributing, you agree that your contributions are licensed under the project [MIT License](../LICENSE) and that you have the right to submit them under the DCO.

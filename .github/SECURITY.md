@@ -11,7 +11,7 @@ Report security issues as soon as they are discovered using one of the following
 
 This project limits its runtime dependencies where practical in order to reduce the total cost of ownership, but all consumers should remain vigilant and have their security stakeholders review third-party products (3PP) like this one and their dependencies.
 
-Maintainers: see [docs/security-hardening.md](docs/security-hardening.md) for supply-chain hardening guidance (action pinning, dependency auditing, secret rotation, AI agent vetting).
+Maintainers: see [docs/security-hardening.md](../docs/security-hardening.md) for supply-chain hardening guidance (action pinning, dependency auditing, secret rotation, AI agent vetting).
 
 ### What to include
 

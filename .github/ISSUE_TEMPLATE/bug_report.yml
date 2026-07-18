@@ -10,7 +10,7 @@ body:
 
         **Before submitting**, please search [existing issues](https://github.com/dreamingdog0529/PlayerData/issues) to avoid duplicates.
 
-        For security issues, see [SECURITY.md](https://github.com/dreamingdog0529/PlayerData/blob/main/SECURITY.md) instead of filing a public issue.
+        For security issues, see [SECURITY.md](https://github.com/dreamingdog0529/PlayerData/blob/main/.github/SECURITY.md) instead of filing a public issue.
 
   - type: textarea
     id: description

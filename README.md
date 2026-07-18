@@ -715,7 +715,7 @@ nugetforunity restore src/PlayerData.Unity
 Unity EditMode tests run from the Test Runner window, or headless via `Unity.exe -batchmode -projectPath src/PlayerData.Unity -runTests -testPlatform EditMode -testResults <xml> -logFile <log>`.
 
 Full development and build instructions: **[docs/development.md](docs/development.md)**
-How to contribute: **[CONTRIBUTING.md](CONTRIBUTING.md)**
+How to contribute: **[CONTRIBUTING.md](.github/CONTRIBUTING.md)**
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -732,9 +732,9 @@ See the [open issues](https://github.com/dreamingdog0529/PlayerData/issues) and
 
 ## Contributing
 
-Contributions are welcome. Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for the
+Contributions are welcome. Please read **[CONTRIBUTING.md](.github/CONTRIBUTING.md)** for the
 workflow (Conventional Commits, DCO sign-off, PR process) and our
-[Code of Conduct](CODE_OF_CONDUCT.md).
+[Code of Conduct](.github/CODE_OF_CONDUCT.md).
 
 Thanks to everyone who has contributed to PlayerData. This list is updated automatically from git history.
 
@@ -762,11 +762,11 @@ Thanks to everyone who has contributed to PlayerData. This list is updated autom
 
 | Document | Purpose |
 |----------|---------|
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Develop, test, PRs, DCO, CI/CD, releases |
-| [SUPPORT.md](SUPPORT.md) | How to get help |
+| [CONTRIBUTING.md](.github/CONTRIBUTING.md) | Develop, test, PRs, DCO, CI/CD, releases |
+| [SUPPORT.md](.github/SUPPORT.md) | How to get help |
 | [ROADMAP.md](ROADMAP.md) | Direction and how to propose work |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
-| [SECURITY.md](SECURITY.md) | Private vulnerability reporting |
+| [CODE_OF_CONDUCT.md](.github/CODE_OF_CONDUCT.md) | Community standards |
+| [SECURITY.md](.github/SECURITY.md) | Private vulnerability reporting |
 | [CODEOWNERS](CODEOWNERS) | Default code review owners |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [LICENSE](LICENSE) | MIT license text |

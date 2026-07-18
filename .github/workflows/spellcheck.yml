@@ -35,10 +35,9 @@ jobs:
           files: |
             README.md
             README_ja.md
-            CONTRIBUTING.md
-            CODE_OF_CONDUCT.md
-            SECURITY.md
-            SUPPORT.md
             ROADMAP.md
-            CHECKLIST.md
+            .github/CONTRIBUTING.md
+            .github/CODE_OF_CONDUCT.md
+            .github/SECURITY.md
+            .github/SUPPORT.md
             docs
