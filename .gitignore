@@ -14,6 +14,13 @@ plans/
 # ST-1 feasibility spike (throwaway; removed at the start of ST-5)
 spike/
 
+# Local tool caches (lefthook / Task)
+.lefthook/
+.task/
+
+# NuGet packages produced during release packing
+nupkgs/
+
 # IDE
 .vs/
 .idea/
