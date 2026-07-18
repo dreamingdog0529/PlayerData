@@ -45,7 +45,6 @@ namespace PlayerData.Unity.Editor.Tests
         private Button ApplyButton => _rootElement.Q<Button>(ViewerUI.ApplyButtonName);
         private Button RevertButton => _rootElement.Q<Button>(ViewerUI.RevertButtonName);
         private HelpBox ErrorBox => _rootElement.Q<HelpBox>(ViewerUI.ErrorBoxName);
-        private Label FieldsHint => _rootElement.Q<Label>(ViewerUI.FieldsHintName);
 
         private static bool IsShown(VisualElement element) => element.style.display.value == DisplayStyle.Flex;
 
@@ -133,6 +132,23 @@ namespace PlayerData.Unity.Editor.Tests
             }
 
             Assert.Fail("SampleProfile document not found on disk.");
+            throw new InvalidOperationException("unreachable");
+        }
+
+        private static System.Collections.Concurrent.ConcurrentDictionary<string, SampleItem> ReadItemsFromDisk(SaveLocation location)
+        {
+            SessionSchema schema = SessionSchemaResolver.Resolve(typeof(SampleEditorSession));
+            LoadedSave? save = SaveDataStore.TryLoad(location, schema, out string? error);
+            Assert.That(save, Is.Not.Null, error);
+            foreach (DocumentEntry entry in save!.Documents)
+            {
+                if (entry.StorageKey == "items-v1")
+                {
+                    return MemoryPackSerializer.Deserialize<System.Collections.Concurrent.ConcurrentDictionary<string, SampleItem>>(entry.Bytes)!;
+                }
+            }
+
+            Assert.Fail("Items document not found on disk.");
             throw new InvalidOperationException("unreachable");
         }
 
@@ -403,22 +419,53 @@ namespace PlayerData.Unity.Editor.Tests
         // ---- collections ----
 
         [Test]
-        public void CollectionDocument_FieldsViewShowsJsonOnlyHint_JsonViewEditable()
+        public void CollectionDocument_FieldsView_ShowsOneSubFormPerEntry()
         {
             ShowSampleSaves();
             _panel.SelectTreeNodeForTests(FindDocument("Items"));
             _panel.SetViewModeForTests(json: false);
 
-            Assert.That(IsShown(FieldsHint), Is.True);
-            Assert.That(FieldsHint.text, Is.EqualTo(ViewerUI.CollectionFieldsHint));
-            Assert.That(_panel.FieldsViewForTests, Is.Null, "no per-field editors for collections");
+            CollectionFieldsEditor collection = _panel.CollectionFieldsForTests;
+            Assert.That(collection, Is.Not.Null, "collection documents get one field sub-form per entry");
+            Assert.That(collection!.EntryKeysForTests, Has.Member("potion"));
+            Assert.That(collection.EntryKeysForTests, Has.Member("sword"));
+            // Each entry exposes the entity's own members through the same editor kinds.
+            Assert.That(collection.EntryModelForTests("potion").Rows.Count, Is.EqualTo(2));
+            // Untouched, so Apply waits for an actual edit.
+            Assert.That(ApplyButton.enabledSelf, Is.False);
+        }
 
-            _panel.SetViewModeForTests(json: true);
-            Assert.That(JsonField.isReadOnly, Is.False);
-            Assert.That(ApplyButton.enabledSelf, Is.False, "untouched collection JSON is not applyable");
+        [Test]
+        public void CollectionDocument_FieldsEdit_Apply_WritesTheEntryToDisk()
+        {
+            ShowSampleSaves();
+            SaveTreeNode node = FindDocument("Items");
+            _panel.SelectTreeNodeForTests(node);
+            _panel.SetViewModeForTests(json: false);
 
-            _panel.SetJsonTextForTests("{}");
+            _panel.CollectionFieldsForTests!.EntryViewForTests("potion").SetTextForTests("Count", "42");
             Assert.That(ApplyButton.enabledSelf, Is.True);
+            _panel.ApplyForTests();
+
+            Assert.That(IsShown(ErrorBox), Is.False, ErrorBox.text);
+            System.Collections.Concurrent.ConcurrentDictionary<string, SampleItem> items = ReadItemsFromDisk(node.Location!);
+            Assert.That(items["potion"].Count, Is.EqualTo(42));
+            Assert.That(items["sword"].Count, Is.EqualTo(1), "untouched entry must be preserved");
+        }
+
+        [Test]
+        public void CollectionDocument_FieldsEdit_SwitchToJsonView_KeepsTheEditedEntry()
+        {
+            ShowSampleSaves();
+            _panel.SelectTreeNodeForTests(FindDocument("Items"));
+            _panel.SetViewModeForTests(json: false);
+
+            _panel.CollectionFieldsForTests!.EntryViewForTests("sword").SetTextForTests("Count", "7");
+            _panel.SetViewModeForTests(json: true);
+
+            Assert.That(_panel.IsJsonViewActiveForTests, Is.True);
+            Assert.That(JsonField.isReadOnly, Is.False);
+            Assert.That(JsonField.value, Does.Contain("\"Count\": 7"));
         }
 
         // ---- viewer-wide view mode preference ----

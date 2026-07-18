@@ -328,11 +328,31 @@ namespace PlayerData.Unity.Editor
     }
 
     /// <summary>
+    /// The Fields-tab editing surface for one document: a UIElements root plus the working-copy
+    /// operations the viewer needs to serialize, gate Apply and detect edits. Single documents
+    /// (<see cref="FieldEditorView"/>) and collection documents
+    /// (<see cref="CollectionFieldsEditor"/>) each supply their own implementation so the panel
+    /// treats both uniformly.
+    /// </summary>
+    internal interface IFieldsEditor
+    {
+        VisualElement Root { get; }
+
+        /// <summary>The edited document as a JSON payload for the existing Apply pipelines.</summary>
+        string ToJson();
+
+        /// <summary>True while any field holds unparseable input; callers must block Apply.</summary>
+        bool HasInvalid { get; }
+
+        event Action Changed;
+    }
+
+    /// <summary>
     /// Builds the UIElements rows for a <see cref="FieldEditorModel"/> and routes control edits
     /// into it. Raises <see cref="Changed"/> after every edit so the host can re-evaluate the
     /// Apply gate (<see cref="FieldEditorModel.HasInvalid"/>).
     /// </summary>
-    internal sealed class FieldEditorView
+    internal sealed class FieldEditorView : IFieldsEditor
     {
         internal const string InvalidClassName = "playerdata-field-invalid";
         internal const string HintClassName = "playerdata-field-hint";
@@ -351,6 +371,13 @@ namespace PlayerData.Unity.Editor
         }
 
         public VisualElement Root { get; }
+
+        /// <summary>The working copy this view edits; exposed for the collection surface and tests.</summary>
+        internal FieldEditorModel Model => _model;
+
+        public string ToJson() => _model.ToJson();
+
+        public bool HasInvalid => _model.HasInvalid;
 
         public event Action? Changed;
 
@@ -506,6 +533,176 @@ namespace PlayerData.Unity.Editor
                 field.style.borderLeftWidth = StyleKeyword.Null;
                 field.style.borderRightWidth = StyleKeyword.Null;
             }
+        }
+    }
+
+    /// <summary>
+    /// The Fields-tab surface for a collection document: one sub-form per entry, headed by the
+    /// collection key, reusing <see cref="FieldEditorModel"/>/<see cref="FieldEditorView"/> for
+    /// each entry's entity. <see cref="ToJson"/> recombines the entries into the same
+    /// {key: entity} JSON the JSON tab and the Apply pipelines already speak, so editing an entry
+    /// here is byte-identical to editing it in the JSON view. Adding and removing entries is still
+    /// a JSON-tab operation; this surface edits the entities of the entries that exist.
+    /// </summary>
+    internal sealed class CollectionFieldsEditor : IFieldsEditor
+    {
+        internal const string EmptyLabelName = "collection-empty";
+
+        // Indents each entry's fields under its key header so the grouping reads at a glance.
+        private const int EntryIndent = 12;
+
+        private readonly List<Entry> _entries = new List<Entry>();
+
+        internal CollectionFieldsEditor(string json, Type entityType)
+        {
+            if (json is null) throw new ArgumentNullException(nameof(json));
+            if (entityType is null) throw new ArgumentNullException(nameof(entityType));
+
+            JObject dictionary;
+            // DateParseHandling.None mirrors FieldEditorModel/MemoryPackJsonConverter: date-looking
+            // strings stay strings so untouched entries round-trip unchanged.
+            using (JsonTextReader reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None })
+                dictionary = JObject.Load(reader);
+
+            Root = new VisualElement();
+            foreach (JProperty property in dictionary.Properties())
+            {
+                Entry entry = BuildEntry(property.Name, property.Value, entityType);
+                _entries.Add(entry);
+                Root.Add(entry.Section);
+            }
+
+            if (_entries.Count == 0)
+            {
+                Label empty = new Label(ViewerDisplayNames.EmptyCollectionLabel);
+                empty.name = EmptyLabelName;
+                empty.style.unityFontStyleAndWeight = FontStyle.Italic;
+                Root.Add(empty);
+            }
+        }
+
+        public VisualElement Root { get; }
+
+        public event Action? Changed;
+
+        public bool HasInvalid
+        {
+            get
+            {
+                foreach (Entry entry in _entries)
+                {
+                    if (entry.Model is not null && entry.Model.HasInvalid)
+                        return true;
+                }
+
+                return false;
+            }
+        }
+
+        public string ToJson()
+        {
+            JObject root = new JObject();
+            foreach (Entry entry in _entries)
+            {
+                // Editable entries re-serialize through their model; non-object entries (which
+                // cannot back a field form) round-trip untouched.
+                root[entry.Key] = entry.Model is not null
+                    ? JToken.Parse(entry.Model.ToJson())
+                    : entry.RawValue.DeepClone();
+            }
+
+            return root.ToString(Formatting.Indented);
+        }
+
+        internal static string EntrySectionName(string key) => "collection-entry-" + key;
+
+        // ---- Test hooks ----
+
+        internal IReadOnlyList<string> EntryKeysForTests
+        {
+            get
+            {
+                List<string> keys = new List<string>(_entries.Count);
+                foreach (Entry entry in _entries)
+                    keys.Add(entry.Key);
+                return keys;
+            }
+        }
+
+        internal FieldEditorView EntryViewForTests(string key)
+        {
+            Entry entry = RequireEntry(key);
+            return entry.View ?? throw new InvalidOperationException($"Collection entry '{key}' has no editable fields.");
+        }
+
+        internal FieldEditorModel EntryModelForTests(string key)
+        {
+            Entry entry = RequireEntry(key);
+            return entry.Model ?? throw new InvalidOperationException($"Collection entry '{key}' has no editable fields.");
+        }
+
+        private Entry RequireEntry(string key)
+        {
+            foreach (Entry entry in _entries)
+            {
+                if (string.Equals(entry.Key, key, StringComparison.Ordinal))
+                    return entry;
+            }
+
+            throw new KeyNotFoundException($"No collection entry named '{key}'.");
+        }
+
+        private Entry BuildEntry(string key, JToken value, Type entityType)
+        {
+            VisualElement section = new VisualElement();
+            section.name = EntrySectionName(key);
+
+            Label header = new Label(key);
+            header.style.unityFontStyleAndWeight = FontStyle.Bold;
+            section.Add(header);
+
+            // Only object entries can back a field form. A null or scalar entry (unusual, but the
+            // JSON may hold anything) is shown as a read-only preview and round-trips untouched.
+            if (!(value is JObject entityJson))
+            {
+                Label preview = new Label(value is null ? "null" : value.ToString(Formatting.None));
+                preview.style.marginLeft = EntryIndent;
+                section.Add(preview);
+                return new Entry(key, model: null, view: null, value ?? JValue.CreateNull(), section);
+            }
+
+            FieldEditorModel model = FieldEditorModel.Create(entityJson.ToString(Formatting.Indented), entityType);
+            FieldEditorView view = new FieldEditorView(model);
+            view.Changed += RaiseChanged;
+            view.Root.style.marginLeft = EntryIndent;
+            section.Add(view.Root);
+            return new Entry(key, model, view, value, section);
+        }
+
+        private void RaiseChanged() => Changed?.Invoke();
+
+        private sealed class Entry
+        {
+            public Entry(string key, FieldEditorModel? model, FieldEditorView? view, JToken rawValue, VisualElement section)
+            {
+                Key = key;
+                Model = model;
+                View = view;
+                RawValue = rawValue;
+                Section = section;
+            }
+
+            public string Key { get; }
+
+            /// <summary>Non-null for object entries backed by a field form; null for passthrough entries.</summary>
+            public FieldEditorModel? Model { get; }
+
+            public FieldEditorView? View { get; }
+
+            /// <summary>Original token, re-emitted verbatim for passthrough entries.</summary>
+            public JToken RawValue { get; }
+
+            public VisualElement Section { get; }
         }
     }
 }

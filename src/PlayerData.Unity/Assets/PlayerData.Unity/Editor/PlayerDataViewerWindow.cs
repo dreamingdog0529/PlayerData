@@ -51,14 +51,10 @@ namespace PlayerData.Unity.Editor
         internal const string FieldsToggleName = "fields-toggle";
         internal const string JsonToggleName = "json-toggle";
         internal const string FieldsSectionName = "fields-section";
-        internal const string FieldsHintName = "fields-hint";
         internal const string JsonTextFieldName = "json-text-field";
         internal const string ApplyButtonName = "apply-button";
         internal const string RevertButtonName = "revert-button";
         internal const string ErrorBoxName = "error-box";
-
-        internal const string CollectionFieldsHint =
-            "This is a collection. Switch to the JSON view to edit its entries.";
 
         // Per-project key so projects sharing this machine keep independent viewer roots.
         internal static string RootPathPrefsKey => "PlayerData.Viewer.RootPath." + PlayerSettings.productGUID;
@@ -87,7 +83,6 @@ namespace PlayerData.Unity.Editor
         private readonly ToolbarToggle _jsonToggle;
         private readonly ScrollView _fieldsScroll;
         private readonly VisualElement _fieldsSection;
-        private readonly Label _fieldsHint;
         private readonly ScrollView _jsonScroll;
         private readonly TextField _jsonField;
         private readonly Button _applyButton;
@@ -104,13 +99,13 @@ namespace PlayerData.Unity.Editor
         private IReadOnlyList<SaveTreeNode> _treeRoots = Array.Empty<SaveTreeNode>();
         private SaveTreeNode? _selectedNode;
         private Type? _payloadType;
+        private Type? _entityType;
         private bool _isCollection;
         private bool _editable;
         private bool _jsonViewActive;
         private bool _preferredJsonView;
         private string? _originalJson;
-        private FieldEditorModel? _fieldsModel;
-        private FieldEditorView? _fieldsView;
+        private IFieldsEditor? _fields;
 
         internal ViewerPanel(VisualElement root, PlayerDataViewerController controller, string initialRootPath)
         {
@@ -252,11 +247,6 @@ namespace PlayerData.Unity.Editor
 
             _fieldsScroll = new ScrollView();
             _fieldsScroll.style.flexGrow = 1;
-            _fieldsHint = new Label();
-            _fieldsHint.name = ViewerUI.FieldsHintName;
-            _fieldsHint.style.unityFontStyleAndWeight = FontStyle.Italic;
-            _fieldsHint.style.display = DisplayStyle.None;
-            _fieldsScroll.Add(_fieldsHint);
             _fieldsSection = new VisualElement();
             _fieldsSection.name = ViewerUI.FieldsSectionName;
             _fieldsScroll.Add(_fieldsSection);
@@ -609,6 +599,9 @@ namespace PlayerData.Unity.Editor
             _editable = view.CanEdit;
             _isCollection = entry.Descriptor?.IsCollection == true;
             _payloadType = entry.Descriptor?.PayloadType;
+            // Entity T of the collection (each entry's value type); the payload itself is the
+            // ConcurrentDictionary wrapper, which the collection Fields surface never reflects on.
+            _entityType = entry.Descriptor?.DocumentType;
 
             PresentDocument(view.Json, view.JsonError, FieldsBlockReason(entry, view, stateReason));
         }
@@ -669,6 +662,7 @@ namespace PlayerData.Unity.Editor
             _editable = editable;
             _isCollection = descriptor.IsCollection;
             _payloadType = descriptor.IsCollection ? null : descriptor.EntityType;
+            _entityType = descriptor.EntityType;
 
             string? fieldsBlockReason = null;
             if (json is null)
@@ -738,8 +732,8 @@ namespace PlayerData.Unity.Editor
             {
                 // Fields -> JSON: the shared working copy is serialized into the text field,
                 // so nothing edited mid-switch is lost.
-                if (_fieldsModel is not null)
-                    _jsonField.SetValueWithoutNotify(_fieldsModel.ToJson());
+                if (_fields is not null)
+                    _jsonField.SetValueWithoutNotify(_fields.ToJson());
                 ClearFieldsSurface();
                 HideError();
                 _jsonViewActive = true;
@@ -766,32 +760,30 @@ namespace PlayerData.Unity.Editor
         private bool TryBuildFieldsSurface(string json)
         {
             ClearFieldsSurface();
-            if (_isCollection)
-            {
-                _fieldsHint.text = ViewerUI.CollectionFieldsHint;
-                _fieldsHint.style.display = DisplayStyle.Flex;
-                HideError();
-                return true;
-            }
 
-            if (_payloadType is null)
-                return false; // unreachable while the Fields toggle gating holds
+            // A collection reflects on its entity T per entry; a single document on its payload
+            // type. Both need a resolved type — without one the Fields toggle should not have been
+            // reachable, so this is a defensive guard.
+            Type? surfaceType = _isCollection ? _entityType : _payloadType;
+            if (surfaceType is null)
+                return false;
 
             try
             {
-                _fieldsModel = FieldEditorModel.Create(json, _payloadType);
+                _fields = _isCollection
+                    ? new CollectionFieldsEditor(json, surfaceType)
+                    : (IFieldsEditor)new FieldEditorView(FieldEditorModel.Create(json, surfaceType));
             }
             catch (Exception ex)
             {
-                _fieldsModel = null;
+                _fields = null;
                 ShowError($"JSON error: {ex.Message}");
                 return false;
             }
 
             HideError();
-            _fieldsView = new FieldEditorView(_fieldsModel);
-            _fieldsView.Changed += UpdateApplyState;
-            _fieldsSection.Add(_fieldsView.Root);
+            _fields.Changed += UpdateApplyState;
+            _fieldsSection.Add(_fields.Root);
             _fieldsSection.SetEnabled(_editable);
             return true;
         }
@@ -803,15 +795,15 @@ namespace PlayerData.Unity.Editor
                 return;
 
             string payload;
-            if (!_jsonViewActive && _fieldsModel is not null)
+            if (!_jsonViewActive && _fields is not null)
             {
-                if (_fieldsModel.HasInvalid)
+                if (_fields.HasInvalid)
                 {
                     ShowError("Fix the highlighted fields before applying.");
                     return;
                 }
 
-                payload = _fieldsModel.ToJson();
+                payload = _fields.ToJson();
             }
             else
             {
@@ -867,7 +859,7 @@ namespace PlayerData.Unity.Editor
             bool editable = _selectedNode is not null && _editable;
             bool dirty = editable && IsDirty();
             bool canApply = dirty;
-            if (canApply && !_jsonViewActive && _fieldsModel is not null && _fieldsModel.HasInvalid)
+            if (canApply && !_jsonViewActive && _fields is not null && _fields.HasInvalid)
                 canApply = false;
             _applyButton.SetEnabled(canApply);
             _revertButton.SetEnabled(dirty);
@@ -883,9 +875,9 @@ namespace PlayerData.Unity.Editor
             if (_originalJson is null)
                 return false;
 
-            if (!_jsonViewActive && _fieldsModel is not null)
-                return _fieldsModel.HasInvalid
-                    || !string.Equals(CanonicalJson(_fieldsModel.ToJson()), CanonicalJson(_originalJson), StringComparison.Ordinal);
+            if (!_jsonViewActive && _fields is not null)
+                return _fields.HasInvalid
+                    || !string.Equals(CanonicalJson(_fields.ToJson()), CanonicalJson(_originalJson), StringComparison.Ordinal);
 
             return !string.Equals(CanonicalJson(_jsonField.value), CanonicalJson(_originalJson), StringComparison.Ordinal);
         }
@@ -919,6 +911,7 @@ namespace PlayerData.Unity.Editor
             _selectedNode = null;
             _originalJson = null;
             _payloadType = null;
+            _entityType = null;
             _isCollection = false;
             _editable = false;
             _jsonViewActive = _preferredJsonView;
@@ -933,10 +926,7 @@ namespace PlayerData.Unity.Editor
         private void ClearFieldsSurface()
         {
             _fieldsSection.Clear();
-            _fieldsModel = null;
-            _fieldsView = null;
-            _fieldsHint.text = string.Empty;
-            _fieldsHint.style.display = DisplayStyle.None;
+            _fields = null;
         }
 
         private void ShowError(string message)
@@ -999,8 +989,10 @@ namespace PlayerData.Unity.Editor
 
         internal bool IsJsonViewActiveForTests => _jsonViewActive;
 
-        internal FieldEditorModel? FieldsModelForTests => _fieldsModel;
+        internal FieldEditorModel? FieldsModelForTests => (_fields as FieldEditorView)?.Model;
 
-        internal FieldEditorView? FieldsViewForTests => _fieldsView;
+        internal FieldEditorView? FieldsViewForTests => _fields as FieldEditorView;
+
+        internal CollectionFieldsEditor? CollectionFieldsForTests => _fields as CollectionFieldsEditor;
     }
 }

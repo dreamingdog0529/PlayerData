@@ -301,6 +301,69 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That((bool)result["Flag"], Is.False);
             Assert.That((int)result["Rank"], Is.EqualTo((int)SampleRank.Gold));
         }
+
+        // ---- Collection sub-forms ----
+
+        private const string TwoItemsJson =
+            "{ \"potion\": { \"ItemId\": \"potion\", \"Count\": 3 }," +
+            " \"sword\": { \"ItemId\": \"sword\", \"Count\": 1 } }";
+
+        [Test]
+        public void CollectionEditor_BuildsOneSubFormPerEntry_WithEntityRows()
+        {
+            CollectionFieldsEditor editor = new CollectionFieldsEditor(TwoItemsJson, typeof(SampleItem));
+
+            Assert.That(editor.EntryKeysForTests.Count, Is.EqualTo(2));
+            Assert.That(editor.EntryKeysForTests, Has.Member("potion"));
+            Assert.That(editor.EntryKeysForTests, Has.Member("sword"));
+            Assert.That(editor.EntryModelForTests("potion").Rows.Count, Is.EqualTo(2), "each entry exposes the entity's members");
+            Assert.That(editor.Root.Q<VisualElement>(CollectionFieldsEditor.EntrySectionName("potion")), Is.Not.Null);
+        }
+
+        [Test]
+        public void CollectionEditor_ToJson_RecombinesEditedAndUntouchedEntries()
+        {
+            CollectionFieldsEditor editor = new CollectionFieldsEditor(TwoItemsJson, typeof(SampleItem));
+
+            editor.EntryViewForTests("potion").SetTextForTests("Count", "42");
+
+            JObject result = JObject.Parse(editor.ToJson());
+            Assert.That((int)result["potion"]["Count"], Is.EqualTo(42));
+            Assert.That((int)result["sword"]["Count"], Is.EqualTo(1), "untouched entry must be preserved");
+        }
+
+        [Test]
+        public void CollectionEditor_InvalidEntryField_SetsHasInvalid()
+        {
+            CollectionFieldsEditor editor = new CollectionFieldsEditor(TwoItemsJson, typeof(SampleItem));
+            Assert.That(editor.HasInvalid, Is.False);
+
+            editor.EntryViewForTests("potion").SetTextForTests("Count", "abc");
+
+            Assert.That(editor.HasInvalid, Is.True);
+        }
+
+        [Test]
+        public void CollectionEditor_EntryEdit_RaisesChanged()
+        {
+            CollectionFieldsEditor editor = new CollectionFieldsEditor(TwoItemsJson, typeof(SampleItem));
+            int changed = 0;
+            editor.Changed += () => changed++;
+
+            editor.EntryViewForTests("sword").SetTextForTests("Count", "5");
+
+            Assert.That(changed, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void CollectionEditor_EmptyCollection_ShowsEmptyLabel_AndEmptyJson()
+        {
+            CollectionFieldsEditor editor = new CollectionFieldsEditor("{}", typeof(SampleItem));
+
+            Assert.That(editor.EntryKeysForTests.Count, Is.EqualTo(0));
+            Assert.That(editor.Root.Q<Label>(CollectionFieldsEditor.EmptyLabelName), Is.Not.Null);
+            Assert.That(editor.ToJson().Trim(), Is.EqualTo("{}"));
+        }
     }
 
     // The former FieldEditorWindowTests (window-level Fields integration) was removed with the

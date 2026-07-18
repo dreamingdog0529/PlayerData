@@ -48,7 +48,6 @@ namespace PlayerData.Unity.Editor.Tests
         private TextField JsonField => _rootElement.Q<TextField>(ViewerUI.JsonTextFieldName);
         private Button ApplyButton => _rootElement.Q<Button>(ViewerUI.ApplyButtonName);
         private HelpBox ErrorBox => _rootElement.Q<HelpBox>(ViewerUI.ErrorBoxName);
-        private Label FieldsHint => _rootElement.Q<Label>(ViewerUI.FieldsHintName);
 
         private static bool IsShown(VisualElement element) => element.style.display.value == DisplayStyle.Flex;
 
@@ -214,7 +213,7 @@ namespace PlayerData.Unity.Editor.Tests
         // ---- collections ----
 
         [Test]
-        public void LiveCollection_FieldsViewShowsJsonOnlyHint_NoPerFieldEditors()
+        public void LiveCollection_FieldsView_ShowsOneSubFormPerEntry()
         {
             using (LiveSessionRegistry.Register("game", _session))
             {
@@ -223,9 +222,26 @@ namespace PlayerData.Unity.Editor.Tests
                 _panel.SetViewModeForTests(json: false);
 
                 Assert.That(FieldsToggle.enabledSelf, Is.True);
-                Assert.That(IsShown(FieldsHint), Is.True);
-                Assert.That(FieldsHint.text, Is.EqualTo(ViewerUI.CollectionFieldsHint));
-                Assert.That(_panel.FieldsViewForTests, Is.Null, "no per-field editors for collections");
+                CollectionFieldsEditor collection = _panel.CollectionFieldsForTests;
+                Assert.That(collection, Is.Not.Null, "live collections get one field sub-form per entry");
+                Assert.That(collection!.EntryKeysForTests, Has.Member("potion"));
+            }
+        }
+
+        [Test]
+        public void LiveCollection_FieldsEdit_Apply_UpdatesRunningSession()
+        {
+            using (LiveSessionRegistry.Register("game", _session))
+            {
+                _session.Items.Upsert(new SampleItem { ItemId = "potion", Count = 3 });
+                SelectLiveDocument("Items");
+                _panel.SetViewModeForTests(json: false);
+
+                _panel.CollectionFieldsForTests!.EntryViewForTests("potion").SetTextForTests("Count", "9");
+                _panel.ApplyForTests();
+
+                Assert.That(IsShown(ErrorBox), Is.False, ErrorBox.text);
+                Assert.That(_session.Items.Snapshot["potion"].Count, Is.EqualTo(9));
             }
         }
 

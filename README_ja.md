@@ -439,7 +439,7 @@ viewerToken.Dispose();
 
 ライブドキュメントも同じペインで編集します。**Apply** はセッション自身の API（`IDoc<T>.Replace`、`IBag<TKey,T>.Set/Upsert/Remove`）経由のため、実行中のゲームには通常の `Changed`（`DataChangeCause.UserWrite`）として届きます。再生を停止すると **Playing now** グループは消えます。
 
-コレクションのドキュメント（`IBag`）は **JSON** ビューで 1 つの JSON オブジェクトとして編集します。エントリの追加・削除は JSON を編集して Apply してください（エントリ単位の Fields エディタはありません）。
+コレクションのドキュメント（`IBag`）は **Fields** ビューでエントリごとにサブフォームが並び、各エンティティのメンバーを個別に編集できます（キーを見出しに表示）。エントリの追加・削除やキーの変更は **JSON** ビューで JSON を編集して Apply してください（Fields はエントリの中身の編集用）。
 
 | メンバー型 | Fields のエディタ |
 | --- | --- |

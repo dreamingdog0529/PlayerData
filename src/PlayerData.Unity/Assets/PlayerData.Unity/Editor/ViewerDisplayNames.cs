@@ -19,6 +19,8 @@ namespace PlayerData.Unity.Editor
 
         public const string JsonOnlyHint = "Edit via the JSON view";
 
+        public const string EmptyCollectionLabel = "This collection has no entries.";
+
         public static string StateLabel(DocumentState state)
         {
             switch (state)
