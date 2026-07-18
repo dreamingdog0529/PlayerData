@@ -160,8 +160,42 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(Header.text, Is.EqualTo("SampleProfile"));
             Assert.That(StateLabel.text, Is.EqualTo(ViewerDisplayNames.StateLabel(DocumentState.Editable)));
             Assert.That(PathLabel.text, Is.EqualTo(node.Location!.Directory));
+            // Editable, but untouched: both buttons wait for an actual change.
+            Assert.That(ApplyButton.enabledSelf, Is.False);
+            Assert.That(RevertButton.enabledSelf, Is.False);
+        }
+
+        [Test]
+        public void ApplyAndRevert_EnableOnEdit_AndDisableAgainAfterRevert()
+        {
+            ShowSampleSaves();
+            _panel.SelectTreeNodeForTests(FindDocument("SampleProfile"));
+            _panel.SetViewModeForTests(json: true);
+            Assert.That(ApplyButton.enabledSelf, Is.False);
+            Assert.That(RevertButton.enabledSelf, Is.False);
+
+            _panel.SetJsonTextForTests(JsonField.value.Replace("\"Level\": 5", "\"Level\": 9"));
             Assert.That(ApplyButton.enabledSelf, Is.True);
             Assert.That(RevertButton.enabledSelf, Is.True);
+
+            _panel.RevertForTests();
+            Assert.That(ApplyButton.enabledSelf, Is.False);
+            Assert.That(RevertButton.enabledSelf, Is.False);
+        }
+
+        [Test]
+        public void Refresh_KeepsSelectedDocumentShown()
+        {
+            ShowSampleSaves();
+            SaveTreeNode node = FindDocument("SampleProfile");
+            _panel.SelectTreeNodeForTests(node);
+            Assert.That(IsShown(DetailContent), Is.True);
+
+            _panel.RefreshForTests();
+
+            Assert.That(IsShown(DetailContent), Is.True, "Refresh must keep the selected document shown.");
+            Assert.That(Header.text, Is.EqualTo("SampleProfile"));
+            Assert.That(PathLabel.text, Is.EqualTo(node.Location!.Directory));
         }
 
         [Test]
@@ -391,6 +425,9 @@ namespace PlayerData.Unity.Editor.Tests
 
             _panel.SetViewModeForTests(json: true);
             Assert.That(JsonField.isReadOnly, Is.False);
+            Assert.That(ApplyButton.enabledSelf, Is.False, "untouched collection JSON is not applyable");
+
+            _panel.SetJsonTextForTests("{}");
             Assert.That(ApplyButton.enabledSelf, Is.True);
         }
 

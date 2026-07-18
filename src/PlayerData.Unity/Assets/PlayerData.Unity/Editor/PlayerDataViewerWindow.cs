@@ -108,6 +108,7 @@ namespace PlayerData.Unity.Editor
         private bool _editable;
         private bool _jsonViewActive;
         private bool _preferredJsonView;
+        private string? _originalJson;
         private FieldEditorModel? _fieldsModel;
         private FieldEditorView? _fieldsView;
 
@@ -233,6 +234,20 @@ namespace PlayerData.Unity.Editor
                     SyncViewToggles();
             });
             viewModeBar.Add(_jsonToggle);
+
+            // Apply/Revert live in this top bar (right-aligned) so they stay reachable without
+            // scrolling past a long document.
+            VisualElement viewModeSpacer = new VisualElement();
+            viewModeSpacer.style.flexGrow = 1;
+            viewModeBar.Add(viewModeSpacer);
+            _applyButton = new Button(OnApply) { text = ViewerDisplayNames.ApplyLabel };
+            _applyButton.name = ViewerUI.ApplyButtonName;
+            _applyButton.SetEnabled(false);
+            viewModeBar.Add(_applyButton);
+            _revertButton = new Button(OnRevert) { text = ViewerDisplayNames.RevertLabel };
+            _revertButton.name = ViewerUI.RevertButtonName;
+            _revertButton.SetEnabled(false);
+            viewModeBar.Add(_revertButton);
             _detailContent.Add(viewModeBar);
 
             _fieldsScroll = new ScrollView();
@@ -251,20 +266,9 @@ namespace PlayerData.Unity.Editor
             _jsonScroll.style.flexGrow = 1;
             _jsonField = new TextField { multiline = true, isReadOnly = true };
             _jsonField.name = ViewerUI.JsonTextFieldName;
+            _jsonField.RegisterValueChangedCallback(_ => UpdateApplyState());
             _jsonScroll.Add(_jsonField);
             _detailContent.Add(_jsonScroll);
-
-            VisualElement buttonRow = new VisualElement();
-            buttonRow.style.flexDirection = FlexDirection.Row;
-            _applyButton = new Button(OnApply) { text = ViewerDisplayNames.ApplyLabel };
-            _applyButton.name = ViewerUI.ApplyButtonName;
-            _applyButton.SetEnabled(false);
-            buttonRow.Add(_applyButton);
-            _revertButton = new Button(OnRevert) { text = ViewerDisplayNames.RevertLabel };
-            _revertButton.name = ViewerUI.RevertButtonName;
-            _revertButton.SetEnabled(false);
-            buttonRow.Add(_revertButton);
-            _detailContent.Add(buttonRow);
 
             // Outside the content block so load failures are visible while the pane is empty.
             _errorBox = new HelpBox(string.Empty, HelpBoxMessageType.Error);
@@ -406,13 +410,53 @@ namespace PlayerData.Unity.Editor
 
         private void Rescan()
         {
+            SaveTreeNode? previous = _selectedNode;
             _controller.Scan(_rootPath);
             _treeRoots = SaveTreeModel.Build(
                 _rootPath, _controller.LoadScannedSaves(), CollectLiveSessions());
             RebuildTree();
-            // Scanning reloads every save (and recreates the live views), so a previously shown
-            // document may be gone or stale.
+            // Scanning reloads every save (and recreates the live views), so the shown document
+            // is re-resolved by identity: still present → re-shown freshly loaded (pending edits
+            // are discarded, same as selecting another node), gone → the detail stays cleared.
             ClearDetail();
+            if (previous is not null && TryFindSameDocument(_visibleItems, previous, out SaveTreeNode match))
+            {
+                _treeView.SetSelectionByIdWithoutNotify(new[] { match.Id });
+                ShowNode(match);
+            }
+        }
+
+        // Identity, not tree id: ids are positional and shift when saves appear or disappear.
+        private static bool TryFindSameDocument(
+            IEnumerable<TreeViewItemData<SaveTreeNode>> items, SaveTreeNode previous, out SaveTreeNode match)
+        {
+            foreach (TreeViewItemData<SaveTreeNode> item in items)
+            {
+                SaveTreeNode node = item.data;
+                if (node.Kind == previous.Kind && node.IsSelectableForDetail && IsSameDocument(node, previous))
+                {
+                    match = node;
+                    return true;
+                }
+
+                if (TryFindSameDocument(item.children, previous, out match))
+                    return true;
+            }
+
+            match = null!;
+            return false;
+        }
+
+        private static bool IsSameDocument(SaveTreeNode left, SaveTreeNode right)
+        {
+            if (left.Kind == SaveTreeNodeKind.Document)
+                return left.Location is not null && right.Location is not null
+                    && string.Equals(left.Location.Directory, right.Location.Directory, StringComparison.Ordinal)
+                    && string.Equals(left.StorageKey, right.StorageKey, StringComparison.Ordinal);
+
+            return string.Equals(left.SessionName, right.SessionName, StringComparison.Ordinal)
+                && string.Equals(left.StorageKey, right.StorageKey, StringComparison.Ordinal)
+                && string.Equals(left.PropertyName, right.PropertyName, StringComparison.Ordinal);
         }
 
         // Recreates the live views from the registry. Session display names are the tree's
@@ -639,6 +683,7 @@ namespace PlayerData.Unity.Editor
         // Fields gate and restores the preferred view mode.
         private void PresentDocument(string? json, string? jsonError, string? fieldsBlockReason)
         {
+            _originalJson = json;
             _jsonField.SetValueWithoutNotify(json ?? string.Empty);
             _jsonField.isReadOnly = !_editable;
 
@@ -819,12 +864,42 @@ namespace PlayerData.Unity.Editor
 
         private void UpdateApplyState()
         {
-            bool hasDocument = _selectedNode is not null;
-            bool canApply = hasDocument && _editable;
+            bool editable = _selectedNode is not null && _editable;
+            bool dirty = editable && IsDirty();
+            bool canApply = dirty;
             if (canApply && !_jsonViewActive && _fieldsModel is not null && _fieldsModel.HasInvalid)
                 canApply = false;
             _applyButton.SetEnabled(canApply);
-            _revertButton.SetEnabled(hasDocument && _editable);
+            _revertButton.SetEnabled(dirty);
+        }
+
+        // "Changed from the original" is compared on canonical (parse + compact re-serialize)
+        // JSON so formatting drift between the converter output, the field editor's working
+        // copy and hand-typed text never counts as an edit. Unparseable typed JSON counts as
+        // dirty (Apply will surface the parse error), as do invalid field values (Revert must
+        // stay available to escape them).
+        private bool IsDirty()
+        {
+            if (_originalJson is null)
+                return false;
+
+            if (!_jsonViewActive && _fieldsModel is not null)
+                return _fieldsModel.HasInvalid
+                    || !string.Equals(CanonicalJson(_fieldsModel.ToJson()), CanonicalJson(_originalJson), StringComparison.Ordinal);
+
+            return !string.Equals(CanonicalJson(_jsonField.value), CanonicalJson(_originalJson), StringComparison.Ordinal);
+        }
+
+        private static string CanonicalJson(string json)
+        {
+            try
+            {
+                return Newtonsoft.Json.Linq.JToken.Parse(json).ToString(Newtonsoft.Json.Formatting.None);
+            }
+            catch (Newtonsoft.Json.JsonException)
+            {
+                return json;
+            }
         }
 
         private void UpdateEditSurfaceVisibility()
@@ -842,6 +917,7 @@ namespace PlayerData.Unity.Editor
         private void ClearDetail()
         {
             _selectedNode = null;
+            _originalJson = null;
             _payloadType = null;
             _isCollection = false;
             _editable = false;
@@ -901,7 +977,13 @@ namespace PlayerData.Unity.Editor
 
         internal void SetViewModeForTests(bool json) => SetViewMode(json, persist: false);
 
-        internal void SetJsonTextForTests(string json) => _jsonField.SetValueWithoutNotify(json);
+        internal void SetJsonTextForTests(string json)
+        {
+            // Mirrors the runtime path (typing raises a change event → UpdateApplyState); the
+            // event is not dispatched reliably on an unattached panel, so the update is direct.
+            _jsonField.SetValueWithoutNotify(json);
+            UpdateApplyState();
+        }
 
         internal void ApplyForTests() => OnApply();
 

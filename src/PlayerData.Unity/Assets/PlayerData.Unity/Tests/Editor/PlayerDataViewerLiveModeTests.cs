@@ -154,7 +154,7 @@ namespace PlayerData.Unity.Editor.Tests
                 Assert.That(PathLabel.text, Is.EqualTo(SaveTreeModel.PlayingNowLabel));
                 Assert.That(JsonField.value, Does.Contain("\"Hp\": 12"));
                 Assert.That(JsonField.isReadOnly, Is.False);
-                Assert.That(ApplyButton.enabledSelf, Is.True);
+                Assert.That(ApplyButton.enabledSelf, Is.False, "untouched document is not applyable");
             }
         }
 
