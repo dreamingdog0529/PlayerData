@@ -246,6 +246,10 @@ public sealed class DirectorySaveBackend : ISaveBackend
                     BinaryPrimitives.WriteInt32LittleEndian(new Span<byte>(ptr, sizeof(int)), byteCount);
                     ptr += sizeof(int);
                     var written = Encoding.UTF8.GetBytes(keys[i].AsSpan(), new Span<byte>(ptr, byteCount));
+                    if ((uint)written > (uint)byteCount)
+                    {
+                        throw new InvalidOperationException("Encoding produced an invalid byte count.");
+                    }
                     ptr += written;
                 }
             }
