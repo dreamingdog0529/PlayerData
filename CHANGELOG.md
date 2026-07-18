@@ -9,6 +9,23 @@ This file is maintained automatically by [Release Please](https://github.com/goo
 from Conventional Commits. Add user-facing notes under `[Unreleased]` if you want to
 call something out before the next release.
 
+## [0.1.4](https://github.com/dreamingdog0529/PlayerData/compare/v0.1.3...v0.1.4) (2026-07-18)
+
+
+### Bug Fixes
+
+* validate encoded byte count before advancing manifest pointer ([#11](https://github.com/dreamingdog0529/PlayerData/issues/11)) ([33506df](https://github.com/dreamingdog0529/PlayerData/commit/33506df5f40e3e58f92cda9d159094481f50803a))
+
+
+### Documentation
+
+* remove Cysharp-style Runtime/External mention from READMEs ([#12](https://github.com/dreamingdog0529/PlayerData/issues/12)) ([b100946](https://github.com/dreamingdog0529/PlayerData/commit/b100946ca040f1cfe8a08bb93c9352ede915446d))
+
+
+### CI/CD
+
+* harden workflows per OpenSSF Scorecard ([#9](https://github.com/dreamingdog0529/PlayerData/issues/9)) ([81ea8b4](https://github.com/dreamingdog0529/PlayerData/commit/81ea8b41d7a19d2aeec160f00e6b46ed8c2744f9))
+
 ## [0.1.3](https://github.com/dreamingdog0529/PlayerData/compare/v0.1.2...v0.1.3) (2026-07-18)
 
 
