@@ -132,7 +132,7 @@ pwsh ./scripts/install-git-hooks.ps1
 ## DCO
 
 This project uses the [Developer Certificate of Origin](https://developercertificate.org/).
-Sign off every commit with `-s`. Maintainers may enable the [dco2](https://github.com/apps/dco2) GitHub App (see `.github/dco.yml`).
+Sign off every commit with `-s`. Maintainers may enable the [DCO-2](https://github.com/apps/dco-2) GitHub App (see `.github/dco.yml`).
 
 ## Automation
 
@@ -157,7 +157,7 @@ Sign off every commit with `-s`. Maintainers may enable the [dco2](https://githu
 3. Merge the release PR → tag + GitHub Release.
 4. (Optional) Add a `release-assets` job to build and attach release artifacts.
 
-One-time: Actions read/write + allow Actions to create PRs. Optional: `SETTINGS_TOKEN` (repo PAT) for full `settings.yml` apply; install dco2 for DCO checks on PRs.
+One-time: Actions read/write + allow Actions to create PRs. Optional: `SETTINGS_TOKEN` (repo PAT) for full `settings.yml` apply; install DCO-2 for DCO checks on PRs.
 
 ## Security
 
