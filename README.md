@@ -439,7 +439,7 @@ viewerToken.Dispose();
 
 Live documents are edited in the same pane; **Apply** goes through the session APIs (`IDoc<T>.Replace`, `IBag<TKey,T>.Set/Upsert/Remove`), so the running game sees ordinary `Changed` events (`DataChangeCause.UserWrite`). Stopping play mode removes the **Playing now** group.
 
-Collection documents (`IBag`) show one sub-form per entry in the **Fields** view (headed by the entry key), so you can edit each entity's members inline. Add or remove entries — and change keys — in the **JSON** view by editing the JSON and applying; Fields edits the entities of the entries that already exist.
+Collection documents (`IBag`) are edited Inspector-style in the **Fields** view: one sub-form per entry, an **Add entry** button at the bottom, and a **Remove** button on each entry. An entry's key *is* the entity's `[PlayerDataKey]` member value, so editing that field renames the entry (duplicate keys are flagged in red and block Apply). You can still edit the whole object directly in the **JSON** view.
 
 | Member type | Fields editor |
 | --- | --- |

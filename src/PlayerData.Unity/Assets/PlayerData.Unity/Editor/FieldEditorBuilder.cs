@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
@@ -163,6 +164,12 @@ namespace PlayerData.Unity.Editor
 
         /// <summary>The edited document as a JSON payload for the existing Apply pipelines.</summary>
         public string ToJson() => _root.ToString(Formatting.Indented);
+
+        /// <summary>
+        /// Current working-copy token for a member, or null when absent. Read-only peek used by
+        /// the collection surface to derive an entry's key from its [PlayerDataKey] member.
+        /// </summary>
+        internal JToken? GetMemberToken(string memberName) => _root[memberName];
 
         private FieldRow CreateRow(JsonProperty property)
         {
@@ -537,26 +544,45 @@ namespace PlayerData.Unity.Editor
     }
 
     /// <summary>
-    /// The Fields-tab surface for a collection document: one sub-form per entry, headed by the
-    /// collection key, reusing <see cref="FieldEditorModel"/>/<see cref="FieldEditorView"/> for
-    /// each entry's entity. <see cref="ToJson"/> recombines the entries into the same
-    /// {key: entity} JSON the JSON tab and the Apply pipelines already speak, so editing an entry
-    /// here is byte-identical to editing it in the JSON view. Adding and removing entries is still
-    /// a JSON-tab operation; this surface edits the entities of the entries that exist.
+    /// The Fields-tab surface for a collection document: one sub-form per entry, reusing
+    /// <see cref="FieldEditorModel"/>/<see cref="FieldEditorView"/> for each entry's entity, plus
+    /// Inspector-style add/remove. An entry's key is the value of the entity's [PlayerDataKey]
+    /// member — the single source of truth the runtime bag also keys on — so editing that member
+    /// renames the entry and no separate key can drift out of sync. <see cref="ToJson"/> recombines
+    /// the entries into the same {key: entity} JSON the JSON tab and the Apply pipelines speak, so
+    /// editing here is byte-identical to editing in the JSON view. Duplicate keys are flagged and
+    /// block Apply via <see cref="HasInvalid"/>.
     /// </summary>
     internal sealed class CollectionFieldsEditor : IFieldsEditor
     {
         internal const string EmptyLabelName = "collection-empty";
+        internal const string AddButtonName = "collection-add";
+        internal const string RemoveButtonName = "collection-remove";
+        internal const string DuplicateWarningName = "collection-dup-warning";
 
         // Indents each entry's fields under its key header so the grouping reads at a glance.
         private const int EntryIndent = 12;
+        private const string DefaultNewStringKey = "newEntry";
 
+        private readonly Type _entityType;
+        private readonly Type? _keyType;
+        private readonly string? _keyMemberName;
+        private readonly bool _keyIsNumeric;
+        private readonly VisualElement _entriesContainer;
+        private readonly Label _emptyLabel;
+        private readonly Button _addButton;
+        private readonly string? _defaultEntityJson;
         private readonly List<Entry> _entries = new List<Entry>();
+        private bool _hasDuplicate;
 
-        internal CollectionFieldsEditor(string json, Type entityType)
+        internal CollectionFieldsEditor(string json, Type entityType, Type? keyType)
         {
             if (json is null) throw new ArgumentNullException(nameof(json));
-            if (entityType is null) throw new ArgumentNullException(nameof(entityType));
+            _entityType = entityType ?? throw new ArgumentNullException(nameof(entityType));
+            _keyType = keyType;
+            _keyMemberName = ResolveKeyMemberJsonName(entityType);
+            _keyIsNumeric = keyType is not null && IsNumericKey(keyType);
+            _defaultEntityJson = TryBuildDefaultEntityJson(entityType);
 
             JObject dictionary;
             // DateParseHandling.None mirrors FieldEditorModel/MemoryPackJsonConverter: date-looking
@@ -565,20 +591,34 @@ namespace PlayerData.Unity.Editor
                 dictionary = JObject.Load(reader);
 
             Root = new VisualElement();
+            _entriesContainer = new VisualElement();
+            Root.Add(_entriesContainer);
+
+            _emptyLabel = new Label(ViewerDisplayNames.EmptyCollectionLabel);
+            _emptyLabel.name = EmptyLabelName;
+            _emptyLabel.style.unityFontStyleAndWeight = FontStyle.Italic;
+            _entriesContainer.Add(_emptyLabel);
+
             foreach (JProperty property in dictionary.Properties())
             {
-                Entry entry = BuildEntry(property.Name, property.Value, entityType);
+                Entry entry = BuildEntry(property.Name, property.Value);
                 _entries.Add(entry);
-                Root.Add(entry.Section);
+                _entriesContainer.Add(entry.Section);
             }
 
-            if (_entries.Count == 0)
+            _addButton = new Button(AddEntry) { text = ViewerDisplayNames.AddEntryLabel };
+            _addButton.name = AddButtonName;
+            if (_defaultEntityJson is null)
             {
-                Label empty = new Label(ViewerDisplayNames.EmptyCollectionLabel);
-                empty.name = EmptyLabelName;
-                empty.style.unityFontStyleAndWeight = FontStyle.Italic;
-                Root.Add(empty);
+                // A non-constructible entity has no template to append; keep the button visible but
+                // disabled so the JSON tab stays the way to add entries.
+                _addButton.SetEnabled(false);
+                _addButton.tooltip = $"Cannot create a default {ViewerDisplayNames.ShortTypeName(entityType)}.";
             }
+
+            Root.Add(_addButton);
+
+            RecomputeKeys();
         }
 
         public VisualElement Root { get; }
@@ -589,6 +629,8 @@ namespace PlayerData.Unity.Editor
         {
             get
             {
+                if (_hasDuplicate)
+                    return true;
                 foreach (Entry entry in _entries)
                 {
                     if (entry.Model is not null && entry.Model.HasInvalid)
@@ -604,11 +646,13 @@ namespace PlayerData.Unity.Editor
             JObject root = new JObject();
             foreach (Entry entry in _entries)
             {
-                // Editable entries re-serialize through their model; non-object entries (which
-                // cannot back a field form) round-trip untouched.
-                root[entry.Key] = entry.Model is not null
-                    ? JToken.Parse(entry.Model.ToJson())
-                    : entry.RawValue.DeepClone();
+                // Editable entries re-serialize through their model, keyed by the current key
+                // member; non-object entries (which cannot back a field form) round-trip untouched.
+                // A duplicate key overwrites here, but HasInvalid blocks Apply before that matters.
+                if (entry.Model is not null)
+                    root[entry.DerivedKey] = JToken.Parse(entry.Model.ToJson());
+                else
+                    root[entry.DerivedKey] = entry.RawValue.DeepClone();
             }
 
             return root.ToString(Formatting.Indented);
@@ -624,10 +668,12 @@ namespace PlayerData.Unity.Editor
             {
                 List<string> keys = new List<string>(_entries.Count);
                 foreach (Entry entry in _entries)
-                    keys.Add(entry.Key);
+                    keys.Add(entry.DerivedKey);
                 return keys;
             }
         }
+
+        internal bool HasDuplicateKeysForTests => _hasDuplicate;
 
         internal FieldEditorView EntryViewForTests(string key)
         {
@@ -641,58 +687,282 @@ namespace PlayerData.Unity.Editor
             return entry.Model ?? throw new InvalidOperationException($"Collection entry '{key}' has no editable fields.");
         }
 
+        internal void AddEntryForTests() => AddEntry();
+
+        internal void RemoveEntryForTests(string key) => RemoveEntry(RequireEntry(key));
+
         private Entry RequireEntry(string key)
         {
             foreach (Entry entry in _entries)
             {
-                if (string.Equals(entry.Key, key, StringComparison.Ordinal))
+                if (string.Equals(entry.DerivedKey, key, StringComparison.Ordinal))
                     return entry;
             }
 
             throw new KeyNotFoundException($"No collection entry named '{key}'.");
         }
 
-        private Entry BuildEntry(string key, JToken value, Type entityType)
+        private Entry BuildEntry(string key, JToken value)
         {
             VisualElement section = new VisualElement();
             section.name = EntrySectionName(key);
 
+            VisualElement headerRow = new VisualElement();
+            headerRow.style.flexDirection = FlexDirection.Row;
+            headerRow.style.alignItems = Align.Center;
+
             Label header = new Label(key);
             header.style.unityFontStyleAndWeight = FontStyle.Bold;
-            section.Add(header);
+            headerRow.Add(header);
 
+            Label duplicateWarning = new Label(ViewerDisplayNames.DuplicateKeyWarning);
+            duplicateWarning.name = DuplicateWarningName;
+            duplicateWarning.style.marginLeft = 8;
+            duplicateWarning.style.color = new Color(0.9f, 0.4f, 0.4f);
+            duplicateWarning.style.display = DisplayStyle.None;
+            headerRow.Add(duplicateWarning);
+
+            VisualElement spacer = new VisualElement();
+            spacer.style.flexGrow = 1;
+            headerRow.Add(spacer);
+
+            Entry entry;
             // Only object entries can back a field form. A null or scalar entry (unusual, but the
             // JSON may hold anything) is shown as a read-only preview and round-trips untouched.
             if (!(value is JObject entityJson))
             {
+                section.Add(headerRow);
                 Label preview = new Label(value is null ? "null" : value.ToString(Formatting.None));
                 preview.style.marginLeft = EntryIndent;
                 section.Add(preview);
-                return new Entry(key, model: null, view: null, value ?? JValue.CreateNull(), section);
+                entry = new Entry(key, model: null, view: null, value ?? JValue.CreateNull(), section, header, duplicateWarning);
+            }
+            else
+            {
+                FieldEditorModel model = FieldEditorModel.Create(entityJson.ToString(Formatting.Indented), _entityType);
+                FieldEditorView view = new FieldEditorView(model);
+                view.Changed += OnEntryChanged;
+                view.Root.style.marginLeft = EntryIndent;
+                section.Add(headerRow);
+                section.Add(view.Root);
+                entry = new Entry(key, model, view, value, section, header, duplicateWarning);
             }
 
-            FieldEditorModel model = FieldEditorModel.Create(entityJson.ToString(Formatting.Indented), entityType);
-            FieldEditorView view = new FieldEditorView(model);
-            view.Changed += RaiseChanged;
-            view.Root.style.marginLeft = EntryIndent;
-            section.Add(view.Root);
-            return new Entry(key, model, view, value, section);
+            Button remove = new Button(() => RemoveEntry(entry)) { text = ViewerDisplayNames.RemoveEntryLabel };
+            remove.name = RemoveButtonName;
+            headerRow.Add(remove);
+            return entry;
+        }
+
+        private void AddEntry()
+        {
+            if (_defaultEntityJson is null)
+                return;
+
+            JObject entityJson = JObject.Parse(_defaultEntityJson);
+            AssignUniqueKey(entityJson);
+
+            Entry entry = BuildEntry(DeriveKey(entityJson), entityJson);
+            _entries.Add(entry);
+            _entriesContainer.Add(entry.Section);
+            RecomputeKeys();
+            RaiseChanged();
+        }
+
+        private void RemoveEntry(Entry entry)
+        {
+            if (!_entries.Remove(entry))
+                return;
+
+            if (entry.View is not null)
+                entry.View.Changed -= OnEntryChanged;
+            _entriesContainer.Remove(entry.Section);
+            RecomputeKeys();
+            RaiseChanged();
+        }
+
+        private void OnEntryChanged()
+        {
+            // A key member edit renames an entry, which can create or clear a duplicate, so keys are
+            // recomputed on every edit before the host re-evaluates the Apply gate.
+            RecomputeKeys();
+            RaiseChanged();
+        }
+
+        // Re-derives every entry's key, refreshes headers, and flags duplicate keys. Kept cheap
+        // (linear over the entries) because it runs on each edit; collections are small.
+        private void RecomputeKeys()
+        {
+            Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (Entry entry in _entries)
+            {
+                entry.DerivedKey = entry.Model is not null ? DeriveKey(entry.Model) : entry.OriginalKey;
+                counts[entry.DerivedKey] = counts.TryGetValue(entry.DerivedKey, out int count) ? count + 1 : 1;
+            }
+
+            _hasDuplicate = false;
+            foreach (Entry entry in _entries)
+            {
+                bool duplicate = counts[entry.DerivedKey] > 1;
+                _hasDuplicate |= duplicate;
+                entry.RefreshHeader(duplicate);
+            }
+
+            _emptyLabel.style.display = _entries.Count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        private string DeriveKey(FieldEditorModel model) =>
+            _keyMemberName is null ? string.Empty : KeyString(model.GetMemberToken(_keyMemberName));
+
+        private string DeriveKey(JObject entityJson) =>
+            _keyMemberName is null ? string.Empty : KeyString(entityJson[_keyMemberName]);
+
+        private static string KeyString(JToken? token)
+        {
+            if (token is JValue value && value.Value is not null)
+                return Convert.ToString(value.Value, CultureInfo.InvariantCulture) ?? string.Empty;
+            return string.Empty;
+        }
+
+        // Seeds a new entry's key member with a value not already used, so consecutive adds do not
+        // pile up under one duplicate key. String keys count up from "newEntry"; numeric keys take
+        // max + 1. Other key types keep the template default and rely on the duplicate warning.
+        private void AssignUniqueKey(JObject entityJson)
+        {
+            if (_keyMemberName is null)
+                return;
+
+            HashSet<string> existing = new HashSet<string>(StringComparer.Ordinal);
+            foreach (Entry entry in _entries)
+                existing.Add(entry.DerivedKey);
+
+            if (_keyIsNumeric)
+            {
+                long max = -1;
+                foreach (string key in existing)
+                {
+                    if (long.TryParse(key, NumberStyles.Integer, CultureInfo.InvariantCulture, out long parsed))
+                        max = Math.Max(max, parsed);
+                }
+
+                entityJson[_keyMemberName] = new JValue(max + 1);
+                return;
+            }
+
+            if (_keyType == typeof(string))
+            {
+                string candidate = DefaultNewStringKey;
+                int suffix = 2;
+                while (existing.Contains(candidate))
+                    candidate = DefaultNewStringKey + suffix++;
+                entityJson[_keyMemberName] = new JValue(candidate);
+            }
+        }
+
+        private static bool IsNumericKey(Type keyType)
+        {
+            switch (Type.GetTypeCode(keyType))
+            {
+                case TypeCode.SByte:
+                case TypeCode.Byte:
+                case TypeCode.Int16:
+                case TypeCode.UInt16:
+                case TypeCode.Int32:
+                case TypeCode.UInt32:
+                case TypeCode.Int64:
+                case TypeCode.UInt64:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        // Resolves the JSON property name of the entity's [PlayerDataKey] member, matching the
+        // contract MemoryPackJsonConverter/FieldEditorModel use. Null when it cannot be determined,
+        // which disables key derivation and add (the entries then keep their original keys).
+        private static string? ResolveKeyMemberJsonName(Type entityType)
+        {
+            const BindingFlags declaredInstance =
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+            string? memberName = null;
+            foreach (PropertyInfo property in entityType.GetProperties(declaredInstance))
+            {
+                if (property.IsDefined(typeof(PlayerDataKeyAttribute), inherit: false))
+                {
+                    memberName = property.Name;
+                    break;
+                }
+            }
+
+            if (memberName is null)
+            {
+                foreach (FieldInfo field in entityType.GetFields(declaredInstance))
+                {
+                    if (field.IsDefined(typeof(PlayerDataKeyAttribute), inherit: false))
+                    {
+                        memberName = field.Name;
+                        break;
+                    }
+                }
+            }
+
+            if (memberName is null)
+                return null;
+
+            try
+            {
+                JsonObjectContract contract = MemoryPackJsonConverter.ResolveObjectContract(entityType);
+                foreach (JsonProperty property in contract.Properties)
+                {
+                    if (string.Equals(property.UnderlyingName, memberName, StringComparison.Ordinal))
+                        return property.PropertyName ?? memberName;
+                }
+            }
+            catch (Exception)
+            {
+                // Fall through to the raw member name; the contract mirrors member names anyway.
+            }
+
+            return memberName;
+        }
+
+        private static string? TryBuildDefaultEntityJson(Type entityType)
+        {
+            return ViewerDisplayNames.TryCreateDefaultJson(entityType, out string json, out _) ? json : null;
         }
 
         private void RaiseChanged() => Changed?.Invoke();
 
         private sealed class Entry
         {
-            public Entry(string key, FieldEditorModel? model, FieldEditorView? view, JToken rawValue, VisualElement section)
+            private readonly Label _header;
+            private readonly Label _duplicateWarning;
+
+            public Entry(
+                string originalKey,
+                FieldEditorModel? model,
+                FieldEditorView? view,
+                JToken rawValue,
+                VisualElement section,
+                Label header,
+                Label duplicateWarning)
             {
-                Key = key;
+                OriginalKey = originalKey;
+                DerivedKey = originalKey;
                 Model = model;
                 View = view;
                 RawValue = rawValue;
                 Section = section;
+                _header = header;
+                _duplicateWarning = duplicateWarning;
             }
 
-            public string Key { get; }
+            /// <summary>Dict key this entry loaded under; the fallback key when none can be derived.</summary>
+            public string OriginalKey { get; }
+
+            /// <summary>Current key: the entity's [PlayerDataKey] member value, recomputed on edit.</summary>
+            public string DerivedKey { get; set; }
 
             /// <summary>Non-null for object entries backed by a field form; null for passthrough entries.</summary>
             public FieldEditorModel? Model { get; }
@@ -703,6 +973,12 @@ namespace PlayerData.Unity.Editor
             public JToken RawValue { get; }
 
             public VisualElement Section { get; }
+
+            public void RefreshHeader(bool duplicate)
+            {
+                _header.text = string.IsNullOrEmpty(DerivedKey) ? "(empty key)" : DerivedKey;
+                _duplicateWarning.style.display = duplicate ? DisplayStyle.Flex : DisplayStyle.None;
+            }
         }
     }
 }

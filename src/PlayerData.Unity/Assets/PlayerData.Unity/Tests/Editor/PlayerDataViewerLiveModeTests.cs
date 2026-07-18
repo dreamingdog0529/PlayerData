@@ -246,6 +246,43 @@ namespace PlayerData.Unity.Editor.Tests
         }
 
         [Test]
+        public void LiveCollection_FieldsAddEntry_Apply_UpsertsIntoRunningSession()
+        {
+            using (LiveSessionRegistry.Register("game", _session))
+            {
+                _session.Items.Upsert(new SampleItem { ItemId = "potion", Count = 3 });
+                SelectLiveDocument("Items");
+                _panel.SetViewModeForTests(json: false);
+
+                _panel.CollectionFieldsForTests!.AddEntryForTests();
+                _panel.ApplyForTests();
+
+                Assert.That(IsShown(ErrorBox), Is.False, ErrorBox.text);
+                Assert.That(_session.Items.Contains("newEntry"), Is.True);
+                Assert.That(_session.Items.Contains("potion"), Is.True, "existing entries must be preserved");
+            }
+        }
+
+        [Test]
+        public void LiveCollection_FieldsRemoveEntry_Apply_RemovesFromRunningSession()
+        {
+            using (LiveSessionRegistry.Register("game", _session))
+            {
+                _session.Items.Upsert(new SampleItem { ItemId = "potion", Count = 3 });
+                _session.Items.Upsert(new SampleItem { ItemId = "elixir", Count = 1 });
+                SelectLiveDocument("Items");
+                _panel.SetViewModeForTests(json: false);
+
+                _panel.CollectionFieldsForTests!.RemoveEntryForTests("elixir");
+                _panel.ApplyForTests();
+
+                Assert.That(IsShown(ErrorBox), Is.False, ErrorBox.text);
+                Assert.That(_session.Items.Contains("elixir"), Is.False);
+                Assert.That(_session.Items.Count, Is.EqualTo(1));
+            }
+        }
+
+        [Test]
         public void LiveCollection_JsonEdit_Apply_UpsertsAndUpdatesEntries()
         {
             using (LiveSessionRegistry.Register("game", _session))

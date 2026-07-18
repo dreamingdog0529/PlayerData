@@ -21,6 +21,12 @@ namespace PlayerData.Unity.Editor
 
         public const string EmptyCollectionLabel = "This collection has no entries.";
 
+        public const string AddEntryLabel = "Add entry";
+
+        public const string RemoveEntryLabel = "Remove";
+
+        public const string DuplicateKeyWarning = "Duplicate key — each entry needs a unique key.";
+
         public static string StateLabel(DocumentState state)
         {
             switch (state)

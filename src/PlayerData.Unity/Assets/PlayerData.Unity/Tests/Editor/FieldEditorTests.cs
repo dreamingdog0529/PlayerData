@@ -308,10 +308,13 @@ namespace PlayerData.Unity.Editor.Tests
             "{ \"potion\": { \"ItemId\": \"potion\", \"Count\": 3 }," +
             " \"sword\": { \"ItemId\": \"sword\", \"Count\": 1 } }";
 
+        private static CollectionFieldsEditor Items(string json) =>
+            new CollectionFieldsEditor(json, typeof(SampleItem), typeof(string));
+
         [Test]
         public void CollectionEditor_BuildsOneSubFormPerEntry_WithEntityRows()
         {
-            CollectionFieldsEditor editor = new CollectionFieldsEditor(TwoItemsJson, typeof(SampleItem));
+            CollectionFieldsEditor editor = Items(TwoItemsJson);
 
             Assert.That(editor.EntryKeysForTests.Count, Is.EqualTo(2));
             Assert.That(editor.EntryKeysForTests, Has.Member("potion"));
@@ -323,7 +326,7 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void CollectionEditor_ToJson_RecombinesEditedAndUntouchedEntries()
         {
-            CollectionFieldsEditor editor = new CollectionFieldsEditor(TwoItemsJson, typeof(SampleItem));
+            CollectionFieldsEditor editor = Items(TwoItemsJson);
 
             editor.EntryViewForTests("potion").SetTextForTests("Count", "42");
 
@@ -335,7 +338,7 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void CollectionEditor_InvalidEntryField_SetsHasInvalid()
         {
-            CollectionFieldsEditor editor = new CollectionFieldsEditor(TwoItemsJson, typeof(SampleItem));
+            CollectionFieldsEditor editor = Items(TwoItemsJson);
             Assert.That(editor.HasInvalid, Is.False);
 
             editor.EntryViewForTests("potion").SetTextForTests("Count", "abc");
@@ -346,7 +349,7 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void CollectionEditor_EntryEdit_RaisesChanged()
         {
-            CollectionFieldsEditor editor = new CollectionFieldsEditor(TwoItemsJson, typeof(SampleItem));
+            CollectionFieldsEditor editor = Items(TwoItemsJson);
             int changed = 0;
             editor.Changed += () => changed++;
 
@@ -358,11 +361,83 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void CollectionEditor_EmptyCollection_ShowsEmptyLabel_AndEmptyJson()
         {
-            CollectionFieldsEditor editor = new CollectionFieldsEditor("{}", typeof(SampleItem));
+            CollectionFieldsEditor editor = Items("{}");
 
             Assert.That(editor.EntryKeysForTests.Count, Is.EqualTo(0));
             Assert.That(editor.Root.Q<Label>(CollectionFieldsEditor.EmptyLabelName), Is.Not.Null);
             Assert.That(editor.ToJson().Trim(), Is.EqualTo("{}"));
+        }
+
+        // ---- Add / remove ----
+
+        [Test]
+        public void CollectionEditor_KeyIsDerivedFromKeyMember_RenamesOnEdit()
+        {
+            CollectionFieldsEditor editor = Items(TwoItemsJson);
+
+            // Editing the [PlayerDataKey] member (ItemId) renames the entry's dictionary key.
+            editor.EntryViewForTests("potion").SetTextForTests("ItemId", "elixir");
+
+            Assert.That(editor.EntryKeysForTests, Has.Member("elixir"));
+            Assert.That(editor.EntryKeysForTests, Has.No.Member("potion"));
+            Assert.That(JObject.Parse(editor.ToJson())["elixir"], Is.Not.Null);
+        }
+
+        [Test]
+        public void CollectionEditor_AddEntry_AppendsWithUniqueKey()
+        {
+            CollectionFieldsEditor editor = Items(TwoItemsJson);
+
+            editor.AddEntryForTests();
+            editor.AddEntryForTests();
+
+            Assert.That(editor.EntryKeysForTests.Count, Is.EqualTo(4));
+            // The two new keys are distinct, so the JSON keeps four entries.
+            Assert.That(JObject.Parse(editor.ToJson()).Count, Is.EqualTo(4));
+            Assert.That(editor.HasInvalid, Is.False, "unique auto keys must not collide");
+        }
+
+        [Test]
+        public void CollectionEditor_RemoveEntry_DropsItFromJson()
+        {
+            CollectionFieldsEditor editor = Items(TwoItemsJson);
+
+            editor.RemoveEntryForTests("potion");
+
+            Assert.That(editor.EntryKeysForTests.Count, Is.EqualTo(1));
+            Assert.That(editor.EntryKeysForTests, Has.No.Member("potion"));
+            JObject result = JObject.Parse(editor.ToJson());
+            Assert.That(result["potion"], Is.Null);
+            Assert.That(result["sword"], Is.Not.Null);
+        }
+
+        [Test]
+        public void CollectionEditor_DuplicateKey_BlocksApply_UntilResolved()
+        {
+            CollectionFieldsEditor editor = Items(TwoItemsJson);
+
+            // Rename sword to collide with potion.
+            editor.EntryViewForTests("sword").SetTextForTests("ItemId", "potion");
+            Assert.That(editor.HasDuplicateKeysForTests, Is.True);
+            Assert.That(editor.HasInvalid, Is.True, "a duplicate key must block Apply");
+
+            // Rename it to something unique again.
+            editor.EntryViewForTests("potion").SetTextForTests("ItemId", "elixir");
+            Assert.That(editor.HasDuplicateKeysForTests, Is.False);
+            Assert.That(editor.HasInvalid, Is.False);
+        }
+
+        [Test]
+        public void CollectionEditor_AddAndRemove_RaiseChanged()
+        {
+            CollectionFieldsEditor editor = Items(TwoItemsJson);
+            int changed = 0;
+            editor.Changed += () => changed++;
+
+            editor.AddEntryForTests();
+            editor.RemoveEntryForTests("sword");
+
+            Assert.That(changed, Is.EqualTo(2));
         }
     }
 

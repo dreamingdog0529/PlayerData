@@ -468,6 +468,57 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(JsonField.value, Does.Contain("\"Count\": 7"));
         }
 
+        [Test]
+        public void CollectionDocument_FieldsAddEntry_Apply_WritesNewEntryToDisk()
+        {
+            ShowSampleSaves();
+            SaveTreeNode node = FindDocument("Items");
+            _panel.SelectTreeNodeForTests(node);
+            _panel.SetViewModeForTests(json: false);
+
+            _panel.CollectionFieldsForTests!.AddEntryForTests();
+            Assert.That(ApplyButton.enabledSelf, Is.True);
+            _panel.ApplyForTests();
+
+            Assert.That(IsShown(ErrorBox), Is.False, ErrorBox.text);
+            System.Collections.Concurrent.ConcurrentDictionary<string, SampleItem> items = ReadItemsFromDisk(node.Location!);
+            Assert.That(items.Count, Is.EqualTo(3));
+            Assert.That(items.ContainsKey("newEntry"), Is.True);
+            Assert.That(items.ContainsKey("potion"), Is.True, "existing entries must be preserved");
+        }
+
+        [Test]
+        public void CollectionDocument_FieldsRemoveEntry_Apply_DeletesFromDisk()
+        {
+            ShowSampleSaves();
+            SaveTreeNode node = FindDocument("Items");
+            _panel.SelectTreeNodeForTests(node);
+            _panel.SetViewModeForTests(json: false);
+
+            _panel.CollectionFieldsForTests!.RemoveEntryForTests("sword");
+            Assert.That(ApplyButton.enabledSelf, Is.True);
+            _panel.ApplyForTests();
+
+            Assert.That(IsShown(ErrorBox), Is.False, ErrorBox.text);
+            System.Collections.Concurrent.ConcurrentDictionary<string, SampleItem> items = ReadItemsFromDisk(node.Location!);
+            Assert.That(items.Count, Is.EqualTo(1));
+            Assert.That(items.ContainsKey("sword"), Is.False);
+            Assert.That(items.ContainsKey("potion"), Is.True);
+        }
+
+        [Test]
+        public void CollectionDocument_DuplicateKey_BlocksApply()
+        {
+            ShowSampleSaves();
+            _panel.SelectTreeNodeForTests(FindDocument("Items"));
+            _panel.SetViewModeForTests(json: false);
+
+            // Rename sword's key member onto potion's key.
+            _panel.CollectionFieldsForTests!.EntryViewForTests("sword").SetTextForTests("ItemId", "potion");
+
+            Assert.That(ApplyButton.enabledSelf, Is.False, "a duplicate key must block Apply");
+        }
+
         // ---- viewer-wide view mode preference ----
 
         [Test]

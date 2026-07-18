@@ -100,6 +100,7 @@ namespace PlayerData.Unity.Editor
         private SaveTreeNode? _selectedNode;
         private Type? _payloadType;
         private Type? _entityType;
+        private Type? _keyType;
         private bool _isCollection;
         private bool _editable;
         private bool _jsonViewActive;
@@ -602,6 +603,7 @@ namespace PlayerData.Unity.Editor
             // Entity T of the collection (each entry's value type); the payload itself is the
             // ConcurrentDictionary wrapper, which the collection Fields surface never reflects on.
             _entityType = entry.Descriptor?.DocumentType;
+            _keyType = entry.Descriptor?.KeyType;
 
             PresentDocument(view.Json, view.JsonError, FieldsBlockReason(entry, view, stateReason));
         }
@@ -663,6 +665,7 @@ namespace PlayerData.Unity.Editor
             _isCollection = descriptor.IsCollection;
             _payloadType = descriptor.IsCollection ? null : descriptor.EntityType;
             _entityType = descriptor.EntityType;
+            _keyType = descriptor.KeyType;
 
             string? fieldsBlockReason = null;
             if (json is null)
@@ -771,7 +774,7 @@ namespace PlayerData.Unity.Editor
             try
             {
                 _fields = _isCollection
-                    ? new CollectionFieldsEditor(json, surfaceType)
+                    ? new CollectionFieldsEditor(json, surfaceType, _keyType)
                     : (IFieldsEditor)new FieldEditorView(FieldEditorModel.Create(json, surfaceType));
             }
             catch (Exception ex)
@@ -912,6 +915,7 @@ namespace PlayerData.Unity.Editor
             _originalJson = null;
             _payloadType = null;
             _entityType = null;
+            _keyType = null;
             _isCollection = false;
             _editable = false;
             _jsonViewActive = _preferredJsonView;
