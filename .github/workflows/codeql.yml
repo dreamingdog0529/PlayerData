@@ -1,0 +1,58 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "40 2 * * 1" # Weekly Monday 02:40 UTC
+
+# Least privilege: analysis only reads the repository; results upload needs
+# security-events write, granted at the job level below.
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze C#
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@7188fc363630916deb702c7fdcf4e481b751f97a # v4
+        with:
+          languages: csharp
+          build-mode: manual
+
+      # Mirror the CI build: PlayerData.SourceGenerator.IntegrationTests consumes
+      # the packed PlayerData.Core nupkg from the local feed (../.local-feed, see
+      # nuget.config), so pack Core into the feed before restoring the solution.
+      - name: Prepare local feed
+        run: mkdir -p ../.local-feed
+
+      - name: Build PlayerData.Core (packs to local feed)
+        run: dotnet build src/PlayerData.Core/PlayerData.Core.csproj -c Debug
+
+      - name: Build solution
+        run: dotnet build PlayerData.slnx -c Debug
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@7188fc363630916deb702c7fdcf4e481b751f97a # v4
+        with:
+          category: "/language:csharp"

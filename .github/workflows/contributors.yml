@@ -5,11 +5,14 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   contributors:
     runs-on: ubuntu-latest
+    # Needs write to commit the regenerated contributors table to README.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
