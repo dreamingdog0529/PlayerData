@@ -1,11 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace PlayerData.Unity.Editor.Tests
 {
     public sealed class ViewerDisplayNamesTests
     {
+        [Test]
+        public void RevealLabel_MatchesTheHostFileBrowserPerPlatform()
+        {
+            Assert.That(ViewerDisplayNames.RevealLabel(RuntimePlatform.WindowsEditor), Is.EqualTo("Show in Explorer"));
+            Assert.That(ViewerDisplayNames.RevealLabel(RuntimePlatform.OSXEditor), Is.EqualTo("Reveal in Finder"));
+            Assert.That(ViewerDisplayNames.RevealLabel(RuntimePlatform.LinuxEditor), Is.EqualTo("Show in file manager"));
+        }
+
         [Test]
         public void StateLabel_MapsAllDocumentStatesToPlainLanguage()
         {

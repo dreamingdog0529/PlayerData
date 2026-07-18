@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -55,6 +56,7 @@ namespace PlayerData.Unity.Editor
         internal const string ApplyButtonName = "apply-button";
         internal const string RevertButtonName = "revert-button";
         internal const string ErrorBoxName = "error-box";
+        internal const string EmptyStateName = "empty-state";
 
         // Per-project key so projects sharing this machine keep independent viewer roots.
         internal static string RootPathPrefsKey => "PlayerData.Viewer.RootPath." + PlayerSettings.productGUID;
@@ -88,6 +90,7 @@ namespace PlayerData.Unity.Editor
         private readonly Button _applyButton;
         private readonly Button _revertButton;
         private readonly HelpBox _errorBox;
+        private readonly VisualElement _emptyState;
         private readonly List<TreeViewItemData<SaveTreeNode>> _visibleItems = new List<TreeViewItemData<SaveTreeNode>>();
         private readonly Dictionary<string, LiveSessionView> _liveViews =
             new Dictionary<string, LiveSessionView>(StringComparer.Ordinal);
@@ -175,9 +178,38 @@ namespace PlayerData.Unity.Editor
             _treeView.style.flexGrow = 0;
             _treeView.style.flexShrink = 0;
             _treeView.style.minWidth = 120;
-            _treeView.makeItem = static () => new Label();
+            // A row is icon + name + status dot: the icon distinguishes the node kind and the dot
+            // flags the document's state at a glance (its tooltip carries the state text).
+            _treeView.makeItem = static () =>
+            {
+                VisualElement row = new VisualElement();
+                row.AddToClassList("playerdata-viewer__tree-row");
+
+                VisualElement icon = new VisualElement { name = "tree-icon" };
+                icon.AddToClassList("playerdata-viewer__tree-icon");
+                row.Add(icon);
+
+                Label label = new Label { name = "tree-label" };
+                label.AddToClassList("playerdata-viewer__tree-label");
+                row.Add(label);
+
+                VisualElement dot = new VisualElement { name = "tree-dot" };
+                dot.AddToClassList("playerdata-viewer__tree-dot");
+                row.Add(dot);
+
+                // Right-click a folder or file row to open its location; the menu reads the bound
+                // node from the row's userData (refreshed on each bind).
+                row.AddManipulator(new ContextualMenuManipulator(PopulateTreeContextMenu));
+                return row;
+            };
             _treeView.bindItem = (element, index) =>
-                ((Label)element).text = _treeView.GetItemDataForIndex<SaveTreeNode>(index).DisplayName;
+            {
+                SaveTreeNode node = _treeView.GetItemDataForIndex<SaveTreeNode>(index);
+                element.userData = node;
+                element.Q<Label>("tree-label").text = node.DisplayName;
+                BindTreeIcon(element.Q<VisualElement>("tree-icon"), node.Kind);
+                BindTreeDot(element.Q<VisualElement>("tree-dot"), node);
+            };
             _treeView.selectionChanged += OnTreeSelectionChanged;
             splitView.Add(_treeView);
 
@@ -191,21 +223,28 @@ namespace PlayerData.Unity.Editor
 
             _detailContent = new VisualElement();
             _detailContent.name = ViewerUI.DetailContentName;
+            _detailContent.AddToClassList("playerdata-viewer__detail");
             _detailContent.style.flexGrow = 1;
             _detailContent.style.display = DisplayStyle.None;
             detailPane.Add(_detailContent);
 
+            // Header row: the document name, with its status badge pinned alongside.
+            VisualElement headerRow = new VisualElement();
+            headerRow.AddToClassList("playerdata-viewer__detail-headerrow");
             _detailHeader = new Label();
             _detailHeader.name = ViewerUI.DetailHeaderName;
-            _detailHeader.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _detailContent.Add(_detailHeader);
+            _detailHeader.AddToClassList("playerdata-viewer__detail-header");
+            headerRow.Add(_detailHeader);
 
             _detailStateLabel = new Label();
             _detailStateLabel.name = ViewerUI.DetailStateLabelName;
-            _detailContent.Add(_detailStateLabel);
+            _detailStateLabel.AddToClassList("playerdata-viewer__status-badge");
+            headerRow.Add(_detailStateLabel);
+            _detailContent.Add(headerRow);
 
             _detailPathLabel = new Label();
             _detailPathLabel.name = ViewerUI.DetailPathLabelName;
+            _detailPathLabel.AddToClassList("playerdata-viewer__path");
             _detailPathLabel.style.overflow = Overflow.Hidden;
             _detailContent.Add(_detailPathLabel);
 
@@ -247,6 +286,7 @@ namespace PlayerData.Unity.Editor
             _detailContent.Add(viewModeBar);
 
             _fieldsScroll = new ScrollView();
+            _fieldsScroll.AddToClassList("playerdata-viewer__edit-surface");
             _fieldsScroll.style.flexGrow = 1;
             _fieldsSection = new VisualElement();
             _fieldsSection.name = ViewerUI.FieldsSectionName;
@@ -254,6 +294,7 @@ namespace PlayerData.Unity.Editor
             _detailContent.Add(_fieldsScroll);
 
             _jsonScroll = new ScrollView();
+            _jsonScroll.AddToClassList("playerdata-viewer__edit-surface");
             _jsonScroll.style.flexGrow = 1;
             _jsonField = new TextField { multiline = true, isReadOnly = true };
             _jsonField.name = ViewerUI.JsonTextFieldName;
@@ -266,6 +307,19 @@ namespace PlayerData.Unity.Editor
             _errorBox.name = ViewerUI.ErrorBoxName;
             _errorBox.style.display = DisplayStyle.None;
             detailPane.Add(_errorBox);
+
+            // Fills the pane while nothing is selected (and no error is showing) so it guides
+            // instead of sitting blank.
+            _emptyState = new VisualElement();
+            _emptyState.name = ViewerUI.EmptyStateName;
+            _emptyState.AddToClassList("playerdata-viewer__empty");
+            Label emptyTitle = new Label(ViewerDisplayNames.NoDocumentSelectedTitle);
+            emptyTitle.AddToClassList("playerdata-viewer__empty-title");
+            _emptyState.Add(emptyTitle);
+            Label emptyHint = new Label(ViewerDisplayNames.NoDocumentSelectedHint);
+            emptyHint.AddToClassList("playerdata-viewer__empty-hint");
+            _emptyState.Add(emptyHint);
+            detailPane.Add(_emptyState);
 
             _registryChangedHandler = OnRegistryChanged;
             LiveSessionRegistry.Changed += _registryChangedHandler;
@@ -587,14 +641,13 @@ namespace PlayerData.Unity.Editor
             }
 
             DocumentEntry entry = view.Entry;
-            _detailContent.style.display = DisplayStyle.Flex;
+            ShowDetailContent();
             _detailHeader.text = ViewerDisplayNames.DocumentDisplayName(
                 entry.StorageKey, entry.Descriptor?.PropertyName, entry.Descriptor?.DocumentType.Name);
-            _detailStateLabel.text = ViewerDisplayNames.StateLabel(entry.State);
             string stateReason = ViewerDisplayNames.StateDescription(entry.State);
             if (string.IsNullOrEmpty(stateReason))
                 stateReason = entry.StateReason ?? string.Empty;
-            _detailStateLabel.tooltip = stateReason;
+            SetStatusBadge(entry.State, stateReason);
             _detailPathLabel.text = node.Location!.Directory;
 
             _editable = view.CanEdit;
@@ -652,13 +705,13 @@ namespace PlayerData.Unity.Editor
             string? editBlockReason = null;
             bool editable = json is not null && view.CanEdit(descriptor.PropertyName, out editBlockReason);
 
-            _detailContent.style.display = DisplayStyle.Flex;
+            ShowDetailContent();
             _detailHeader.text = $"{descriptor.PropertyName} ({node.SessionName})";
             // Live docs have no on-disk DocumentState; the live round-trip gate maps onto the
-            // same two labels the disk pane uses.
-            _detailStateLabel.text = ViewerDisplayNames.StateLabel(
-                editable ? DocumentState.Editable : DocumentState.ReadOnlyRoundTrip);
-            _detailStateLabel.tooltip = editBlockReason ?? jsonError ?? string.Empty;
+            // same two states (and colours) the disk pane uses.
+            SetStatusBadge(
+                editable ? DocumentState.Editable : DocumentState.ReadOnlyRoundTrip,
+                editBlockReason ?? jsonError ?? string.Empty);
             _detailPathLabel.text = SaveTreeModel.PlayingNowLabel;
 
             _editable = editable;
@@ -920,6 +973,8 @@ namespace PlayerData.Unity.Editor
             _editable = false;
             _jsonViewActive = _preferredJsonView;
             _detailContent.style.display = DisplayStyle.None;
+            ClearCardAccent();
+            _emptyState.style.display = DisplayStyle.Flex;
             ClearFieldsSurface();
             _jsonField.SetValueWithoutNotify(string.Empty);
             _jsonField.isReadOnly = true;
@@ -935,6 +990,7 @@ namespace PlayerData.Unity.Editor
 
         private void ShowError(string message)
         {
+            _emptyState.style.display = DisplayStyle.None;
             _errorBox.text = message;
             _errorBox.style.display = DisplayStyle.Flex;
         }
@@ -943,6 +999,154 @@ namespace PlayerData.Unity.Editor
         {
             _errorBox.text = string.Empty;
             _errorBox.style.display = DisplayStyle.None;
+        }
+
+        // Right-click menu for a tree row: reveal a disk node's folder in the OS file browser
+        // (Explorer / Finder / file manager), and for a document, open its file in the default app.
+        // Groups and live nodes have no disk backing, so they get no entries.
+        private static void PopulateTreeContextMenu(ContextualMenuPopulateEvent evt)
+        {
+            VisualElement element = evt.target as VisualElement;
+            while (element != null && element.userData is not SaveTreeNode)
+                element = element.parent;
+
+            if (element?.userData is not SaveTreeNode node)
+                return;
+
+            string directory = RevealableDirectory(node);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                evt.menu.AppendAction(
+                    ViewerDisplayNames.RevealLabel(Application.platform),
+                    _ => EditorUtility.RevealInFinder(directory));
+            }
+
+            string filePath = DocumentFilePath(node);
+            if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
+            {
+                evt.menu.AppendAction(
+                    ViewerDisplayNames.OpenFileLabel,
+                    _ => EditorUtility.OpenWithDefaultApp(filePath));
+            }
+        }
+
+        // The on-disk folder to reveal for a node, or null for nodes with no disk location
+        // (groups and live session/documents).
+        internal static string RevealableDirectory(SaveTreeNode node) => node?.Location?.Directory;
+
+        // A disk document's own file, or null for anything that is not a disk document. The path
+        // follows DirectorySaveBackend's layout so the name matches what was written.
+        internal static string DocumentFilePath(SaveTreeNode node)
+        {
+            if (node is null || node.Kind != SaveTreeNodeKind.Document
+                || node.Location is null || string.IsNullOrEmpty(node.StorageKey))
+                return null;
+
+            return DirectorySaveBackend.DocumentFilePath(node.Location.Directory, node.StorageKey);
+        }
+
+        // Reveals the document detail and takes down the empty-state placeholder.
+        private void ShowDetailContent()
+        {
+            _detailContent.style.display = DisplayStyle.Flex;
+            _emptyState.style.display = DisplayStyle.None;
+        }
+
+        // Paints the status badge and the card's left accent from the shared status palette, so a
+        // document's state reads the same here as its dot in the tree.
+        private void SetStatusBadge(DocumentState state, string tooltip)
+        {
+            Color accent = ViewerStatusVisuals.AccentColor(state);
+            _detailStateLabel.text = ViewerDisplayNames.StateLabel(state);
+            _detailStateLabel.tooltip = tooltip ?? string.Empty;
+            _detailStateLabel.style.color = accent;
+            _detailStateLabel.style.backgroundColor = ViewerStatusVisuals.BadgeBackground(accent);
+            SetBadgeBorderColor(_detailStateLabel, ViewerStatusVisuals.BadgeBorder(accent));
+            _detailContent.style.borderLeftWidth = 3;
+            _detailContent.style.borderLeftColor = accent;
+        }
+
+        private void ClearCardAccent()
+        {
+            _detailContent.style.borderLeftWidth = 0;
+            _detailContent.style.borderLeftColor = StyleKeyword.Null;
+        }
+
+        private static void SetBadgeBorderColor(VisualElement badge, Color color)
+        {
+            badge.style.borderTopColor = color;
+            badge.style.borderBottomColor = color;
+            badge.style.borderLeftColor = color;
+            badge.style.borderRightColor = color;
+        }
+
+        private static void BindTreeIcon(VisualElement icon, SaveTreeNodeKind kind)
+        {
+            Texture2D texture = TreeIcon(kind);
+            if (texture is null)
+            {
+                icon.style.display = DisplayStyle.None;
+                return;
+            }
+
+            icon.style.display = DisplayStyle.Flex;
+            icon.style.backgroundImage = new StyleBackground(texture);
+        }
+
+        // Only attention states get a dot: a healthy Editable document stays quiet so the ones
+        // that need a second look stand out. Live leaves get a "live" dot (their on-disk state is
+        // undefined until opened). The dot's tooltip explains the state, so hovering it answers
+        // "what's going on with this document?".
+        private static void BindTreeDot(VisualElement dot, SaveTreeNode node)
+        {
+            if (node.Kind == SaveTreeNodeKind.Document && node.State.HasValue
+                && node.State.Value != DocumentState.Editable)
+            {
+                DocumentState state = node.State.Value;
+                dot.style.display = DisplayStyle.Flex;
+                dot.style.backgroundColor = ViewerStatusVisuals.AccentColor(state);
+                dot.tooltip = DotTooltip(state);
+            }
+            else if (node.Kind == SaveTreeNodeKind.LiveDocument)
+            {
+                dot.style.display = DisplayStyle.Flex;
+                dot.style.backgroundColor = ViewerStatusVisuals.LiveAccentColor();
+                dot.tooltip = SaveTreeModel.PlayingNowLabel;
+            }
+            else
+            {
+                dot.style.display = DisplayStyle.None;
+                dot.tooltip = string.Empty;
+            }
+        }
+
+        // Short state label plus its plain-language explanation, e.g.
+        // "View only — This value can't be edited safely in the viewer."
+        private static string DotTooltip(DocumentState state)
+        {
+            string label = ViewerDisplayNames.StateLabel(state);
+            string description = ViewerDisplayNames.StateDescription(state);
+            return string.IsNullOrEmpty(description) ? label : $"{label} — {description}";
+        }
+
+        private static Texture2D TreeIcon(SaveTreeNodeKind kind)
+        {
+            string iconName;
+            switch (kind)
+            {
+                case SaveTreeNodeKind.Save:
+                case SaveTreeNodeKind.LiveSession:
+                    iconName = "Folder Icon";
+                    break;
+                case SaveTreeNodeKind.Document:
+                case SaveTreeNodeKind.LiveDocument:
+                    iconName = "TextAsset Icon";
+                    break;
+                default:
+                    return null; // Group rows lean on the foldout arrow alone.
+            }
+
+            return EditorGUIUtility.IconContent(iconName)?.image as Texture2D;
         }
 
         // ---- Test hooks ----

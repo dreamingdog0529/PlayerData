@@ -45,6 +45,7 @@ namespace PlayerData.Unity.Editor.Tests
         private Button ApplyButton => _rootElement.Q<Button>(ViewerUI.ApplyButtonName);
         private Button RevertButton => _rootElement.Q<Button>(ViewerUI.RevertButtonName);
         private HelpBox ErrorBox => _rootElement.Q<HelpBox>(ViewerUI.ErrorBoxName);
+        private VisualElement EmptyState => _rootElement.Q<VisualElement>(ViewerUI.EmptyStateName);
 
         private static bool IsShown(VisualElement element) => element.style.display.value == DisplayStyle.Flex;
 
@@ -153,6 +154,25 @@ namespace PlayerData.Unity.Editor.Tests
         }
 
         // ---- header / selection ----
+
+        [Test]
+        public void EmptyState_ShowsWhenNothingSelected_AndHidesOnSelection()
+        {
+            ShowSampleSaves();
+
+            // Nothing selected yet: the placeholder fills the pane, the detail content is hidden.
+            Assert.That(IsShown(EmptyState), Is.True);
+            Assert.That(IsShown(DetailContent), Is.False);
+
+            _panel.SelectTreeNodeForTests(FindDocument("SampleProfile"));
+            Assert.That(IsShown(EmptyState), Is.False);
+            Assert.That(IsShown(DetailContent), Is.True);
+
+            // Clearing the selection brings the placeholder back.
+            _panel.SelectTreeNodeForTests(null);
+            Assert.That(IsShown(EmptyState), Is.True);
+            Assert.That(IsShown(DetailContent), Is.False);
+        }
 
         [Test]
         public void SelectDocumentLeaf_ShowsHeaderStateAndPath()

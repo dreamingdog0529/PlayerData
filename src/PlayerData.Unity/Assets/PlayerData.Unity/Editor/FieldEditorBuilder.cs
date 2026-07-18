@@ -314,7 +314,7 @@ namespace PlayerData.Unity.Editor
             if (token is null)
                 return string.Empty;
             string text = token.ToString(Formatting.None);
-            return text.Length <= PreviewMaxLength ? text : text.Substring(0, PreviewMaxLength) + "窶ｦ";
+            return text.Length <= PreviewMaxLength ? text : text.Substring(0, PreviewMaxLength) + "…";
         }
 
         private FieldRow RequireRow(string memberName, FieldEditorKind kind)
@@ -471,7 +471,7 @@ namespace PlayerData.Unity.Editor
                     readOnlyRow.style.flexDirection = FlexDirection.Row;
 
                     Label label = new Label(member);
-                    label.style.minWidth = 120;
+                    label.AddToClassList("playerdata-field__label");
                     readOnlyRow.Add(label);
 
                     Label preview = new Label(row.DisplayValue);
@@ -706,6 +706,7 @@ namespace PlayerData.Unity.Editor
         {
             VisualElement section = new VisualElement();
             section.name = EntrySectionName(key);
+            section.AddToClassList("playerdata-viewer__entry-card");
 
             VisualElement headerRow = new VisualElement();
             headerRow.style.flexDirection = FlexDirection.Row;

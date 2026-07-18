@@ -26,7 +26,8 @@ namespace PlayerData.Unity.Editor
             SaveLocation? location,
             string? storageKey,
             string? sessionName,
-            string? propertyName)
+            string? propertyName,
+            DocumentState? state = null)
         {
             Id = id;
             DisplayName = displayName;
@@ -36,6 +37,7 @@ namespace PlayerData.Unity.Editor
             StorageKey = storageKey;
             SessionName = sessionName;
             PropertyName = propertyName;
+            State = state;
         }
 
         /// <summary>Unique within one Build result; stable across builds for identical inputs.</summary>
@@ -58,6 +60,9 @@ namespace PlayerData.Unity.Editor
 
         /// <summary>Set on LiveDocument nodes.</summary>
         public string? PropertyName { get; }
+
+        /// <summary>The on-disk document state; set on Document nodes only, drives the tree's status dot.</summary>
+        public DocumentState? State { get; }
 
         /// <summary>Only document leaves open the detail pane; groups/saves/sessions just expand.</summary>
         public bool IsSelectableForDetail =>
@@ -132,13 +137,16 @@ namespace PlayerData.Unity.Editor
             {
                 documents.Add(new SaveTreeNode(
                     nextId++,
-                    ViewerDisplayNames.FormatDocumentLine(entry, includeTechnicalDetails: false),
+                    // Name only: the state now reads from the row's status dot, not the label text.
+                    ViewerDisplayNames.DocumentDisplayName(
+                        entry.StorageKey, entry.Descriptor?.PropertyName, entry.Descriptor?.DocumentType.Name),
                     SaveTreeNodeKind.Document,
                     Array.Empty<SaveTreeNode>(),
                     save.Location,
                     entry.StorageKey,
                     sessionName: null,
-                    propertyName: null));
+                    propertyName: null,
+                    entry.State));
             }
 
             return new SaveTreeNode(

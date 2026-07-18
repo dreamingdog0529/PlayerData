@@ -152,12 +152,71 @@ namespace PlayerData.Unity.Editor.Tests
                 Assert.That(leaf.IsSelectableForDetail, Is.True);
             }
 
-            Assert.That(byKey["SampleProfile"].DisplayName, Does.StartWith("SampleProfile"));
-            Assert.That(byKey["SampleProfile"].DisplayName, Does.Contain(ViewerDisplayNames.StateLabel(DocumentState.Editable)));
-            Assert.That(byKey["items-v1"].DisplayName, Does.StartWith("Items"), "property name preferred over storage key");
-            Assert.That(byKey["mystery"].DisplayName, Does.StartWith("mystery"), "unknown key falls back to storage key");
-            Assert.That(byKey["mystery"].DisplayName, Does.Contain(ViewerDisplayNames.StateLabel(DocumentState.UnknownKey)));
-            Assert.That(byKey["Stats"].DisplayName, Does.Contain(ViewerDisplayNames.StateLabel(DocumentState.Unreadable)));
+            // The leaf label is the name only; the state now lives on the node's State property
+            // (rendered as the row's status dot) rather than being appended to the text.
+            Assert.That(byKey["SampleProfile"].DisplayName, Is.EqualTo("SampleProfile"));
+            Assert.That(byKey["SampleProfile"].DisplayName, Does.Not.Contain("·"));
+            Assert.That(byKey["SampleProfile"].State, Is.EqualTo(DocumentState.Editable));
+            Assert.That(byKey["items-v1"].DisplayName, Is.EqualTo("Items"), "property name preferred over storage key");
+            Assert.That(byKey["mystery"].DisplayName, Is.EqualTo("mystery"), "unknown key falls back to storage key");
+            Assert.That(byKey["mystery"].State, Is.EqualTo(DocumentState.UnknownKey));
+            Assert.That(byKey["Stats"].State, Is.EqualTo(DocumentState.Unreadable));
+        }
+
+        [Test]
+        public void RevealableDirectory_ResolvesDiskNodes_AndSkipsGroupsAndLiveNodes()
+        {
+            WriteSave(Path.Combine(_root, "save"), DefaultDocuments());
+            IReadOnlyList<SaveTreeNode> groups = SaveTreeModel.Build(_root, ScanAndLoadAll(), SampleLiveSessions());
+
+            SaveTreeNode savedFiles = groups[0];
+            SaveTreeNode saveNode = savedFiles.Children[0];
+            SaveTreeNode documentNode = saveNode.Children[0];
+
+            // Both a save (folder) and its documents (files) resolve to the save's on-disk folder.
+            Assert.That(ViewerPanel.RevealableDirectory(saveNode), Is.EqualTo(saveNode.Location!.Directory));
+            Assert.That(ViewerPanel.RevealableDirectory(documentNode), Is.EqualTo(saveNode.Location!.Directory));
+
+            // Groups and live nodes have no on-disk location, so there is nothing to reveal.
+            Assert.That(ViewerPanel.RevealableDirectory(savedFiles), Is.Null);
+            SaveTreeNode liveSession = groups[1].Children[0];
+            Assert.That(ViewerPanel.RevealableDirectory(liveSession), Is.Null);
+            Assert.That(ViewerPanel.RevealableDirectory(liveSession.Children[0]), Is.Null);
+        }
+
+        [Test]
+        public void DocumentFilePath_PointsAtTheDocumentFile_AndSkipsNonDocuments()
+        {
+            WriteSave(Path.Combine(_root, "save"), DefaultDocuments());
+            IReadOnlyList<SaveTreeNode> groups = SaveTreeModel.Build(_root, ScanAndLoadAll(), SampleLiveSessions());
+            SaveTreeNode saveNode = groups[0].Children[0];
+            SaveTreeNode profile = saveNode.Children.Single(n => n.StorageKey == "SampleProfile");
+
+            string path = ViewerPanel.DocumentFilePath(profile);
+            Assert.That(path, Is.Not.Null);
+            Assert.That(File.Exists(path), Is.True, path);
+            Assert.That(Path.GetFileName(path), Is.EqualTo("SampleProfile.bin"));
+
+            // Only document leaves have a file; folders, groups and live nodes do not.
+            Assert.That(ViewerPanel.DocumentFilePath(saveNode), Is.Null);
+            Assert.That(ViewerPanel.DocumentFilePath(groups[0]), Is.Null);
+            SaveTreeNode liveDocument = groups[1].Children[0].Children[0];
+            Assert.That(ViewerPanel.DocumentFilePath(liveDocument), Is.Null);
+        }
+
+        [Test]
+        public void DocumentFilePath_MatchesTheBackendsSanitizedFileName()
+        {
+            // A key with an invalid file-name character is sanitized to '_' on disk; the derived
+            // path must match what the backend actually wrote (guards against naming drift).
+            Dictionary<string, byte[]> documents = new Dictionary<string, byte[]> { ["odd/key"] = new byte[] { 1, 2 } };
+            WriteSave(Path.Combine(_root, "save"), documents);
+            IReadOnlyList<SaveTreeNode> groups = SaveTreeModel.Build(_root, ScanAndLoadAll(), NoLiveSessions);
+            SaveTreeNode node = groups[0].Children[0].Children.Single();
+
+            string path = ViewerPanel.DocumentFilePath(node);
+            Assert.That(Path.GetFileName(path), Is.EqualTo("odd_key.bin"));
+            Assert.That(File.Exists(path), Is.True, path);
         }
 
         [Test]
@@ -193,6 +252,7 @@ namespace PlayerData.Unity.Editor.Tests
                 Assert.That(leaf.Kind, Is.EqualTo(SaveTreeNodeKind.LiveDocument));
                 Assert.That(leaf.SessionName, Is.EqualTo("Main"));
                 Assert.That(leaf.PropertyName, Is.EqualTo(leaf.DisplayName));
+                Assert.That(leaf.State, Is.Null, "live docs have no on-disk state until opened");
                 Assert.That(leaf.IsSelectableForDetail, Is.True);
             }
         }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace PlayerData.Unity.Editor
 {
@@ -26,6 +27,29 @@ namespace PlayerData.Unity.Editor
         public const string RemoveEntryLabel = "Remove";
 
         public const string DuplicateKeyWarning = "Duplicate key — each entry needs a unique key.";
+
+        public const string NoDocumentSelectedTitle = "No document selected";
+
+        public const string NoDocumentSelectedHint = "Pick one from the list to view and edit its saved values.";
+
+        public const string OpenFileLabel = "Open file";
+
+        /// <summary>
+        /// The "open the containing folder" button label, worded for the host OS's file browser
+        /// (Explorer / Finder / file manager). Pure — takes the platform so it stays testable.
+        /// </summary>
+        public static string RevealLabel(RuntimePlatform platform)
+        {
+            switch (platform)
+            {
+                case RuntimePlatform.OSXEditor:
+                    return "Reveal in Finder";
+                case RuntimePlatform.LinuxEditor:
+                    return "Show in file manager";
+                default:
+                    return "Show in Explorer";
+            }
+        }
 
         public static string StateLabel(DocumentState state)
         {
