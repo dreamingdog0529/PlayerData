@@ -104,10 +104,7 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void BuildInto_CreatesTwoPaneSkeletonElements()
         {
-            Label rootPathLabel = _rootElement.Q<Label>(ViewerUI.RootPathLabelName);
-            Assert.That(rootPathLabel, Is.Not.Null);
-            Assert.That(rootPathLabel.text, Is.EqualTo(_root));
-            Assert.That(_rootElement.Q<ToolbarButton>(ViewerUI.BrowseButtonName), Is.Not.Null);
+            Assert.That(_rootElement.Q<ToolbarMenu>(ViewerUI.RootMenuName), Is.Not.Null);
             Assert.That(_rootElement.Q<ToolbarButton>(ViewerUI.RefreshButtonName), Is.Not.Null);
             Assert.That(_rootElement.Q<DropdownField>(ViewerUI.SessionDropdownName), Is.Not.Null);
             Assert.That(_rootElement.Q<ToolbarSearchField>(ViewerUI.SearchFieldName), Is.Not.Null);
@@ -138,7 +135,9 @@ namespace PlayerData.Unity.Editor.Tests
 
             _panel.SetRootForTests(saveRoot);
 
-            Assert.That(_rootElement.Q<Label>(ViewerUI.RootPathLabelName).text, Is.EqualTo(saveRoot));
+            ToolbarMenu rootMenu = _rootElement.Q<ToolbarMenu>(ViewerUI.RootMenuName);
+            Assert.That(rootMenu.text, Is.EqualTo(saveRoot), "a custom root shows its path");
+            Assert.That(rootMenu.tooltip, Is.EqualTo(saveRoot));
             List<string> names = VisibleNames();
             Assert.That(names, Has.Member(ViewerDisplayNames.SavedFilesLabel));
             Assert.That(names, Has.Member(SaveTreeModel.RootSaveLabel));
@@ -146,6 +145,16 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(names, Has.Some.StartsWith("SampleProfile"));
             Assert.That(names, Has.Some.StartsWith("Items"));
             Assert.That(names, Has.Some.StartsWith("mystery"));
+        }
+
+        [Test]
+        public void SetRoot_PersistentDataPath_MenuShowsDefaultLabelWithPathTooltip()
+        {
+            _panel.SetRootForTests(UnityEngine.Application.persistentDataPath);
+
+            ToolbarMenu rootMenu = _rootElement.Q<ToolbarMenu>(ViewerUI.RootMenuName);
+            Assert.That(rootMenu.text, Is.EqualTo(ViewerDisplayNames.DefaultRootLabel));
+            Assert.That(rootMenu.tooltip, Is.EqualTo(UnityEngine.Application.persistentDataPath));
         }
 
         [Test]
@@ -201,6 +210,8 @@ namespace PlayerData.Unity.Editor.Tests
                 "documents-list",
                 "disk-section",
                 "live-section",
+                "root-path-label",
+                "browse-button",
             };
 
             foreach (string oldName in oldNames)

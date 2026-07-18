@@ -37,8 +37,7 @@ namespace PlayerData.Unity.Editor
     // guaranteed to run in batch mode).
     internal static class ViewerUI
     {
-        internal const string RootPathLabelName = "root-path-label";
-        internal const string BrowseButtonName = "browse-button";
+        internal const string RootMenuName = "root-menu";
         internal const string RefreshButtonName = "refresh-button";
         internal const string SessionDropdownName = "session-dropdown";
         internal const string SearchFieldName = "search-field";
@@ -76,7 +75,7 @@ namespace PlayerData.Unity.Editor
     internal sealed class ViewerPanel : IDisposable
     {
         private readonly PlayerDataViewerController _controller;
-        private readonly Label _rootPathLabel;
+        private readonly ToolbarMenu _rootMenu;
         private readonly DropdownField _sessionDropdown;
         private readonly ToolbarSearchField _searchField;
         private readonly TreeView _treeView;
@@ -123,16 +122,13 @@ namespace PlayerData.Unity.Editor
             Toolbar toolbar = new Toolbar();
             root.Add(toolbar);
 
-            _rootPathLabel = new Label(initialRootPath);
-            _rootPathLabel.name = ViewerUI.RootPathLabelName;
-            _rootPathLabel.style.unityTextAlign = TextAnchor.MiddleLeft;
-            _rootPathLabel.style.flexShrink = 1;
-            _rootPathLabel.style.overflow = Overflow.Hidden;
-            toolbar.Add(_rootPathLabel);
-
-            ToolbarButton browseButton = new ToolbarButton(OnBrowse) { text = "Browse..." };
-            browseButton.name = ViewerUI.BrowseButtonName;
-            toolbar.Add(browseButton);
+            _rootMenu = new ToolbarMenu();
+            _rootMenu.name = ViewerUI.RootMenuName;
+            // Long custom paths must not push the other toolbar controls out of view.
+            _rootMenu.style.flexShrink = 1;
+            _rootMenu.style.overflow = Overflow.Hidden;
+            toolbar.Add(_rootMenu);
+            UpdateRootMenu();
 
             ToolbarButton refreshButton = new ToolbarButton(Rescan) { text = "Refresh" };
             refreshButton.name = ViewerUI.RefreshButtonName;
@@ -290,7 +286,7 @@ namespace PlayerData.Unity.Editor
                 Rescan();
         }
 
-        private void OnBrowse()
+        private void OnChooseFolder()
         {
             string picked = EditorUtility.OpenFolderPanel("Select save data folder", _rootPath, string.Empty);
             if (string.IsNullOrEmpty(picked))
@@ -301,11 +297,49 @@ namespace PlayerData.Unity.Editor
         private void SetRoot(string rootPath, bool persist)
         {
             _rootPath = rootPath;
-            _rootPathLabel.text = rootPath;
+            UpdateRootMenu();
             if (persist)
                 EditorPrefs.SetString(ViewerUI.RootPathPrefsKey, rootPath);
             Rescan();
         }
+
+        // The dropdown's face answers "which folder am I looking at?" without exposing a raw
+        // path in the common case: the game's own save folder reads as a plain-language label,
+        // anything else shows the path itself. The tooltip always carries the resolved path.
+        private void UpdateRootMenu()
+        {
+            bool isDefault = string.Equals(
+                NormalizePathForComparison(_rootPath),
+                NormalizePathForComparison(Application.persistentDataPath),
+                StringComparison.Ordinal);
+
+            _rootMenu.text = isDefault ? ViewerDisplayNames.DefaultRootLabel : _rootPath;
+            _rootMenu.tooltip = _rootPath;
+
+            _rootMenu.menu.MenuItems().Clear();
+            _rootMenu.menu.AppendAction(
+                ViewerDisplayNames.DefaultRootLabel,
+                _ => SetRoot(Application.persistentDataPath, persist: true),
+                isDefault ? DropdownMenuAction.Status.Checked : DropdownMenuAction.Status.Normal);
+            if (!isDefault)
+            {
+                // DropdownMenu treats '/' in an item name as a submenu separator, so the
+                // active custom path is shown with backslashes to stay a single item.
+                _rootMenu.menu.AppendAction(
+                    _rootPath.Replace('/', '\\'),
+                    _ => { }, // already active; selecting it keeps the current root
+                    DropdownMenuAction.Status.Checked);
+            }
+
+            _rootMenu.menu.AppendAction(
+                ViewerDisplayNames.ChooseFolderLabel,
+                _ => OnChooseFolder(),
+                DropdownMenuAction.Status.Normal);
+        }
+
+        // Forward slashes, no trailing separator: "C:\X\" and "C:/X" name the same folder.
+        private static string NormalizePathForComparison(string path) =>
+            path.Replace('\\', '/').TrimEnd('/');
 
         private void OnSessionChanged()
         {

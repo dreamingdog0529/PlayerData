@@ -410,7 +410,7 @@ auto.Bind(save); // dirty only; concurrent commits gated
 
 The toolbar holds everything else:
 
-- **Root folder** — defaults to `Application.persistentDataPath`; **Browse...** picks another folder, and the choice is remembered per project.
+- **Location dropdown** — the default entry, **This game's save folder** (`Application.persistentDataPath`, where Unity games store their save data), normally needs no change. Pick **Choose folder...** to point the viewer elsewhere; the choice is remembered per project, and the tooltip always shows the full path.
 - **Refresh** — rescans the root. Scanning also runs when the window opens and when the root changes.
 - **Save type** — short name of your `[PlayerDataSession]` class. Save binaries carry no type metadata, so the viewer resolves document types from this schema.
 - **Search** — filters documents by display name (case-insensitive); parents of a match stay visible.

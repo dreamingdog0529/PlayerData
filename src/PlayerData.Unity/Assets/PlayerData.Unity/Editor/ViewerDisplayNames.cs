@@ -10,6 +10,8 @@ namespace PlayerData.Unity.Editor
     public static class ViewerDisplayNames
     {
         public const string SavedFilesLabel = "Saved files";
+        public const string DefaultRootLabel = "This game's save folder";
+        public const string ChooseFolderLabel = "Choose folder...";
         public const string ApplyLabel = "Apply";
         public const string RevertLabel = "Revert";
         public const string FieldsTabLabel = "Fields";
