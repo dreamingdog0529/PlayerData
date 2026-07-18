@@ -1,0 +1,14 @@
+/* Split divider: a 1px theme-colored line inside a 5px grab area, with the same
+   horizontal-resize hover cursor as Unity's built-in pane splitters. */
+.playerdata-viewer__split-divider {
+    width: 5px;
+    flex-shrink: 0;
+    cursor: resize-horizontal;
+}
+
+.playerdata-viewer__split-divider-line {
+    width: 1px;
+    flex-grow: 1;
+    margin-left: 2px;
+    background-color: var(--unity-colors-default-border);
+}

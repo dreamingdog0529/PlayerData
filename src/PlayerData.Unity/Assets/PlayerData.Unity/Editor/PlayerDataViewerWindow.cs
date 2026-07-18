@@ -119,6 +119,14 @@ namespace PlayerData.Unity.Editor
             controller.RefreshSessionTypes();
             root.Clear();
 
+            // Located by search, not a literal path, so it resolves both when the package lives
+            // under Assets/ (this repo) and when consumed from Packages/ via UPM.
+            string[] styleGuids = AssetDatabase.FindAssets("PlayerDataViewerWindow t:StyleSheet");
+            if (styleGuids.Length > 0)
+                root.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(AssetDatabase.GUIDToAssetPath(styleGuids[0])));
+            else
+                Debug.LogWarning("PlayerDataViewerWindow.uss was not found; the split divider will render unstyled.");
+
             Toolbar toolbar = new Toolbar();
             root.Add(toolbar);
 
@@ -147,9 +155,14 @@ namespace PlayerData.Unity.Editor
             _searchField.RegisterValueChangedCallback(evt => OnSearchChanged(evt.newValue));
             toolbar.Add(_searchField);
 
-            TwoPaneSplitView splitView = new TwoPaneSplitView(0, 260f, TwoPaneSplitViewOrientation.Horizontal);
+            // Plain flex row + a hand-rolled drag handle instead of TwoPaneSplitView: in a
+            // code-built editor window that control collapsed its fixed pane to 0 width on the
+            // first zero-size layout pass and its dragger stopped resizing the panes, so the
+            // split is laid out and dragged explicitly here.
+            VisualElement splitView = new VisualElement();
             splitView.name = ViewerUI.SplitViewName;
             splitView.style.flexGrow = 1;
+            splitView.style.flexDirection = FlexDirection.Row;
             root.Add(splitView);
 
             _treeView = new TreeView
@@ -159,15 +172,24 @@ namespace PlayerData.Unity.Editor
                 autoExpand = true,
             };
             _treeView.name = ViewerUI.TreeViewName;
+            // flexBasis, not width: TreeView's own stylesheet sets flex-grow/flex-basis, which
+            // wins over an inline width on the flex main axis (both panes end up ~equal halves).
+            _treeView.style.flexBasis = 260;
+            _treeView.style.flexGrow = 0;
+            _treeView.style.flexShrink = 0;
+            _treeView.style.minWidth = 120;
             _treeView.makeItem = static () => new Label();
             _treeView.bindItem = (element, index) =>
                 ((Label)element).text = _treeView.GetItemDataForIndex<SaveTreeNode>(index).DisplayName;
             _treeView.selectionChanged += OnTreeSelectionChanged;
             splitView.Add(_treeView);
 
+            splitView.Add(BuildSplitDivider(splitView));
+
             VisualElement detailPane = new VisualElement();
             detailPane.name = ViewerUI.DetailPaneName;
             detailPane.style.flexGrow = 1;
+            detailPane.style.minWidth = 160;
             splitView.Add(detailPane);
 
             _detailContent = new VisualElement();
@@ -284,6 +306,37 @@ namespace PlayerData.Unity.Editor
             // Changed itself when it clears its entries on play-mode exit.
             if (change == PlayModeStateChange.EnteredPlayMode || change == PlayModeStateChange.EnteredEditMode)
                 Rescan();
+        }
+
+        // Dragging the divider resizes the tree; the detail pane flexes to take the rest.
+        // Look and hover cursor come from PlayerDataViewerWindow.uss (inline styles cannot set
+        // the built-in resize cursor).
+        private VisualElement BuildSplitDivider(VisualElement splitContainer)
+        {
+            VisualElement divider = new VisualElement();
+            divider.AddToClassList("playerdata-viewer__split-divider");
+            VisualElement line = new VisualElement();
+            line.AddToClassList("playerdata-viewer__split-divider-line");
+            divider.Add(line);
+            float dragStartX = 0f;
+            float dragStartWidth = 0f;
+            divider.RegisterCallback<PointerDownEvent>(evt =>
+            {
+                divider.CapturePointer(evt.pointerId);
+                dragStartX = evt.position.x;
+                dragStartWidth = _treeView.resolvedStyle.width;
+                evt.StopPropagation();
+            });
+            divider.RegisterCallback<PointerMoveEvent>(evt =>
+            {
+                if (!divider.HasPointerCapture(evt.pointerId))
+                    return;
+                // Keeps the detail pane's minWidth (160) plus the divider itself (5) reachable.
+                float max = Mathf.Max(120f, splitContainer.resolvedStyle.width - 165f);
+                _treeView.style.flexBasis = Mathf.Clamp(dragStartWidth + evt.position.x - dragStartX, 120f, max);
+            });
+            divider.RegisterCallback<PointerUpEvent>(evt => divider.ReleasePointer(evt.pointerId));
+            return divider;
         }
 
         private void OnChooseFolder()

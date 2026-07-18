@@ -108,7 +108,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(_rootElement.Q<ToolbarButton>(ViewerUI.RefreshButtonName), Is.Not.Null);
             Assert.That(_rootElement.Q<DropdownField>(ViewerUI.SessionDropdownName), Is.Not.Null);
             Assert.That(_rootElement.Q<ToolbarSearchField>(ViewerUI.SearchFieldName), Is.Not.Null);
-            Assert.That(_rootElement.Q<TwoPaneSplitView>(ViewerUI.SplitViewName), Is.Not.Null);
+            Assert.That(_rootElement.Q<VisualElement>(ViewerUI.SplitViewName), Is.Not.Null);
             Assert.That(Tree, Is.Not.Null);
             Assert.That(_rootElement.Q<VisualElement>(ViewerUI.DetailPaneName), Is.Not.Null);
             Assert.That(_controller.SessionTypes, Has.Member(typeof(SampleEditorSession)));
