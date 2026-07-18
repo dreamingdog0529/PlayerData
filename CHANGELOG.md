@@ -9,6 +9,18 @@ This file is maintained automatically by [Release Please](https://github.com/goo
 from Conventional Commits. Add user-facing notes under `[Unreleased]` if you want to
 call something out before the next release.
 
+## [0.1.3](https://github.com/dreamingdog0529/PlayerData/compare/v0.1.2...v0.1.3) (2026-07-18)
+
+
+### Bug Fixes
+
+* correct DCO-2 GitHub App URL (dco2 -&gt; dco-2) ([#8](https://github.com/dreamingdog0529/PlayerData/issues/8)) ([f245e55](https://github.com/dreamingdog0529/PlayerData/commit/f245e5558dba10dfd47afda2d892d88f691a6b96))
+
+
+### Miscellaneous
+
+* declare automation-created labels in settings.yml ([#6](https://github.com/dreamingdog0529/PlayerData/issues/6)) ([cdcf904](https://github.com/dreamingdog0529/PlayerData/commit/cdcf9041c49bf66d29a6d859595eacd16999a970))
+
 ## [0.1.2](https://github.com/dreamingdog0529/PlayerData/compare/v0.1.1...v0.1.2) (2026-07-18)
 
 
