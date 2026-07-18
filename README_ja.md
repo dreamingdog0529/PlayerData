@@ -773,7 +773,5 @@ MIT © 2026 dreamingdog0529
 
 - [MemoryPack](https://github.com/Cysharp/MemoryPack) — version-tolerant なバイナリシリアライズ
 - [NuGetForUnity](https://github.com/GlitchEnzo/NuGetForUnity) — Unity で NuGet パッケージ
-- [Best-README-Template](https://github.com/othneildrew/Best-README-Template) — README 構成
-- [Shields.io](https://shields.io/) — バッジ
 
 <p align="right">(<a href="#readme-top">トップへ戻る</a>)</p>

@@ -789,7 +789,5 @@ MIT © 2026 dreamingdog0529
 
 - [MemoryPack](https://github.com/Cysharp/MemoryPack) — version-tolerant binary serialization
 - [NuGetForUnity](https://github.com/GlitchEnzo/NuGetForUnity) — NuGet packages in Unity
-- [Best-README-Template](https://github.com/othneildrew/Best-README-Template) — README structure
-- [Shields.io](https://shields.io/) — badges
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
