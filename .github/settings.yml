@@ -138,6 +138,16 @@ labels:
   build:
     color: c2e0c6
     description: Build system changes
+  # Auto-created by automation; declared here so drift-check stays clean.
+  github_actions:
+    color: "000000"
+    description: Pull requests that update GitHub Actions code
+  "autorelease: pending":
+    color: ededed
+    description: Release Please — release PR pending
+  "autorelease: tagged":
+    color: ededed
+    description: Release Please — release tagged
 
 security:
   secret_scanning:
