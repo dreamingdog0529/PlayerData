@@ -1,0 +1,62 @@
+name: Release Assets
+
+# Reusable workflow called by release-please.yml when a release is created.
+# Packs the NuGet packages at the released version and attaches the .nupkg
+# files to the GitHub Release.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Release version, e.g. 0.1.2"
+        required: true
+        type: string
+      tag_name:
+        description: "Release tag, e.g. v0.1.2"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  pack-and-upload:
+    name: Pack and upload nupkgs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Prepare local feed
+        run: mkdir -p ../.local-feed
+
+      - name: Pack packages
+        run: |
+          version='${{ inputs.version }}'
+          for proj in \
+            src/PlayerData.Core/PlayerData.Core.csproj \
+            src/PlayerData.MessagePipe/PlayerData.MessagePipe.csproj \
+            src/PlayerData.R3/PlayerData.R3.csproj \
+            src/PlayerData.VitalRouter/PlayerData.VitalRouter.csproj; do
+            dotnet pack "$proj" -c Release -p:Version="$version" -o ./nupkgs
+          done
+
+      - name: Upload nupkgs to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload '${{ inputs.tag_name }}' ./nupkgs/*.nupkg --clobber
+
+      - name: Upload nupkgs as workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nupkgs
+          path: ./nupkgs/*.nupkg
+
+      # To publish to NuGet.org, add a NUGET_KEY secret and uncomment:
+      # - name: Push to NuGet.org
+      #   run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

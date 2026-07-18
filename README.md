@@ -1,13 +1,73 @@
-# PlayerData
+<a id="readme-top"></a>
 
-[![GitHub Actions](https://github.com/dreamingdog0529/PlayerData/workflows/Build-Debug/badge.svg)](https://github.com/dreamingdog0529/PlayerData/actions) [![Releases](https://img.shields.io/github/release/dreamingdog0529/PlayerData.svg)](https://github.com/dreamingdog0529/PlayerData/releases) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<div align="center">
 
-English | [日本語](README_ja.md)
+English | [日本語](./README_ja.md)
 
-Session-centric player save data for .NET and Unity — typed `IDoc` / `IBag` documents, [MemoryPack](https://github.com/Cysharp/MemoryPack) persistence, and multi-document commit behind one clear save boundary.
+<h1>PlayerData</h1>
+
+<p><em>Session-centric player save data for .NET and Unity — typed <code>IDoc</code> / <code>IBag</code> documents, <a href="https://github.com/Cysharp/MemoryPack">MemoryPack</a> persistence, and multi-document commit behind one clear save boundary.</em></p>
+
+[![CI](https://github.com/dreamingdog0529/PlayerData/actions/workflows/ci.yml/badge.svg)](https://github.com/dreamingdog0529/PlayerData/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/dreamingdog0529/PlayerData?include_prereleases&sort=semver)](https://github.com/dreamingdog0529/PlayerData/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/dreamingdog0529/PlayerData/badge)](https://securityscorecards.dev/viewer/?uri=github.com/dreamingdog0529/PlayerData)
+
+<p>
+  <a href="docs/development.md"><strong>Explore the docs »</strong></a>
+  <br /><br />
+  <a href="https://github.com/dreamingdog0529/PlayerData/issues/new?template=bug_report.yml">Report Bug</a>
+  ·
+  <a href="https://github.com/dreamingdog0529/PlayerData/issues/new?template=feature_request.yml">Request Feature</a>
+  ·
+  <a href="https://github.com/dreamingdog0529/PlayerData/discussions">Discussions</a>
+</p>
+
+</div>
 
 > [!WARNING]
 > **Beta (0.x).** APIs, package surfaces, and generated code may change in **breaking** ways between minor/patch releases. Pin exact versions in production, and expect migration work until 1.0.
+
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li><a href="#about">About The Project</a></li>
+    <li><a href="#features">Features</a></li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#installation">Installation</a></li>
+      </ul>
+    </li>
+    <li>
+      <a href="#usage">Usage</a>
+      <ul>
+        <li><a href="#quick-start">Quick start</a></li>
+        <li><a href="#session-and-documents">Session and Documents</a></li>
+        <li><a href="#commit-and-validation">Commit and Validation</a></li>
+        <li><a href="#save-backends">Save Backends</a></li>
+        <li><a href="#migrations">Migrations</a></li>
+        <li><a href="#source-generator">Source Generator</a></li>
+        <li><a href="#extension-packages">Extension Packages</a></li>
+        <li><a href="#unity">Unity</a></li>
+      </ul>
+    </li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#development">Development</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#project-docs">Project Docs</a></li>
+    <li><a href="#license">License</a></li>
+    <li><a href="#acknowledgments">Acknowledgments</a></li>
+  </ol>
+</details>
+
+<a id="about"></a>
+
+## About The Project
+
+Session-centric player save data for .NET and Unity — typed `IDoc` / `IBag` documents, [MemoryPack](https://github.com/Cysharp/MemoryPack) persistence, and multi-document commit behind one clear save boundary.
 
 PlayerData is for **player save data** (progress the player changes) that outgrows `PlayerPrefs` or a single JSON blob — not read-only master tables (see [MasterSheet](https://github.com/dreamingdog0529/MasterSheet) for those). Save systems have two conflicting needs: **frequent in-memory mutation** and **rare, consistent durable writes**. PlayerData splits that ownership deliberately:
 
@@ -50,9 +110,51 @@ flowchart LR
   end
 ```
 
-Getting Started
----
+### Built With
+
+- [.NET Standard 2.1](https://learn.microsoft.com/dotnet/standard/net-standard)
+- [MemoryPack](https://github.com/Cysharp/MemoryPack) — version-tolerant binary serialization
+- [Roslyn](https://github.com/dotnet/roslyn) source generators
+- [Unity](https://unity.com/) 6000.0+ (optional, via UPM)
+- Optional adapters: [R3](https://github.com/Cysharp/R3), [VitalRouter](https://github.com/hadashiA/VitalRouter), [MessagePipe](https://github.com/Cysharp/MessagePipe)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<a id="features"></a>
+
+## Features
+
+- **One save boundary.** Compose documents into a single session; load and commit are session-wide and transactional.
+- **Typed documents.** `IDoc<T>` single values and `IBag<TKey,T>` keyed collections with pure-function updates.
+- **Generated boilerplate.** A Roslyn source generator emits `OpenAsync`, typed properties, and `ISaveSession` from class-level attributes.
+- **Fail-fast validation.** Validators run before any I/O; a bad commit leaves the previous save intact.
+- **Swappable backends.** Directory, slots, Unity paths, plus encryption / obfuscation / compression wrappers behind `ISaveBackend`.
+- **Migrations.** Chained on load when the on-disk format version is older than the current one.
+- **Unity integration.** `UnitySaveBackend`, `PlayerDataAutoSave`, an in-editor Data Viewer, Document Assets, and optional VContainer support.
+- **Optional reactive adapters.** R3 observables, VitalRouter commands, and MessagePipe publishing as separate packages.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<a id="getting-started"></a>
+
+## Getting Started
+
 This library is distributed via NuGet, targeting .NET Standard 2.1. Unity is supported via UPM ([Unity](#unity)).
+
+<a id="prerequisites"></a>
+
+### Prerequisites
+
+| Item | Requirement |
+| --- | --- |
+| Libraries | .NET Standard 2.1 |
+| MemoryPack | 1.21.4+ |
+| C# | `partial` classes |
+| Unity (optional) | Unity 6+ UPM; install Core via [NuGetForUnity](https://github.com/GlitchEnzo/NuGetForUnity) **first** |
+
+<a id="installation"></a>
+
+### Installation
 
 ```bash
 dotnet add package PlayerData.Core
@@ -62,12 +164,15 @@ dotnet add package PlayerData.VitalRouter
 dotnet add package PlayerData.MessagePipe
 ```
 
-| Item | Requirement |
-| --- | --- |
-| Libraries | .NET Standard 2.1 |
-| MemoryPack | 1.21.4+ |
-| C# | `partial` classes |
-| Unity (optional) | Unity 6+ UPM; install Core via [NuGetForUnity](https://github.com/GlitchEnzo/NuGetForUnity) **first** |
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<a id="usage"></a>
+
+## Usage
+
+<a id="quick-start"></a>
+
+### Quick start
 
 First, mark document types with MemoryPack:
 
@@ -122,8 +227,10 @@ await save.CommitAsync();
 | `Update` etc. | Memory only |
 | `CommitAsync` | Validate → write; on failure disk unchanged, stays dirty |
 
-Session and Documents
----
+<a id="session-and-documents"></a>
+
+### Session and Documents
+
 | Term | Meaning |
 | --- | --- |
 | Session | The open save as a whole (`ISaveSession` / generated `GameSave`) |
@@ -133,7 +240,7 @@ Session and Documents
 | dirty | User writes since last successful commit |
 | Backend | `ISaveBackend` (directory, slots, Unity path, …) |
 
-### Session attributes
+#### Session attributes
 
 ```csharp
 [PlayerDataSession]
@@ -152,7 +259,7 @@ public partial class GameSave { }
 
 Generator rules: valid identifiers; unique property names and storage keys; no clash with reserved members (`IsDirty`, `LoadAsync`, `OpenAsync`, …); class must be `partial` (**PD0008–PD0012**, **PD0006**).
 
-### `IDoc` / `IBag`
+#### `IDoc` / `IBag`
 
 ```csharp
 // IDoc
@@ -183,7 +290,7 @@ save.Profile.Update(delta, (d, p) => p with { Level = p.Level + d });
 save.Inventory.GetOrAdd("potion", 1, (key, n) => new InventoryItem(key, n));
 ```
 
-### Manual session
+#### Manual session
 
 ```csharp
 var session = new SaveSession(new DirectorySaveBackend(path));
@@ -194,7 +301,7 @@ profile.Update(p => p with { Level = 2 });
 await session.CommitAsync();
 ```
 
-### Suppress notifications
+#### Suppress notifications
 
 ```csharp
 using (save.SuppressNotifications())
@@ -204,8 +311,10 @@ using (save.SuppressNotifications())
 } // coalesced flush of Changed / DirtyChanged on dispose
 ```
 
-Commit and Validation
----
+<a id="commit-and-validation"></a>
+
+### Commit and Validation
+
 Validation is fail-fast **before** I/O. On failure: disk untouched, session stays dirty.
 
 ```csharp
@@ -239,8 +348,10 @@ Lifecycle members:
 public partial class GameSave { }
 ```
 
-Save Backends
----
+<a id="save-backends"></a>
+
+### Save Backends
+
 | Implementation | Layout |
 | --- | --- |
 | `DirectorySaveBackend` | `{root}/manifest.bin`, `{root}/docs/{key}.bin` (via `.staging`) |
@@ -268,7 +379,7 @@ public interface ISaveBackend
 }
 ```
 
-### Encryption, Obfuscation & Compression
+#### Encryption, Obfuscation & Compression
 
 These wrap any `ISaveBackend` and transform each document's bytes on write/read; nothing about `SaveSession` / `IDoc` / `IBag` changes.
 
@@ -307,8 +418,10 @@ var backend = new EncryptedSaveBackend(
 
 Key/passphrase generation, storage, and rotation are the caller's responsibility; `PlayerData.Core` never persists or manages them. Only each document's byte value is transformed — document keys and `DirectorySaveBackend`'s `manifest.bin` / file names stay in plaintext (so a document's type name may still be inferable from its file name; `EncryptedSaveBackend` does bind the document key into its HMAC, so swapping ciphertext between documents is still detected). Unity + VContainer: pass `wrapBackend` to `RegisterPlayerDataSession` (see [VContainer](#vcontainer)).
 
-Migrations
----
+<a id="migrations"></a>
+
+### Migrations
+
 Applied on load when on-disk version &lt; `SaveSession.CurrentFormatVersion`.
 
 ```csharp
@@ -324,8 +437,10 @@ await using var save = await GameSave.OpenAsync(backend, migrations: new[] { new
 
 Adding fields often works with MemoryPack alone. Unknown document keys on disk are ignored (forward-compatible).
 
-Source Generator
----
+<a id="source-generator"></a>
+
+### Source Generator
+
 The Roslyn source generator ships as an analyzer inside `PlayerData.Core`; consumers get it just by referencing the package. Diagnostics are **errors** (fail-closed) — no session members are emitted until fixed.
 
 | ID | When | Fix |
@@ -351,8 +466,10 @@ Runtime troubleshooting:
 | Hand-wrote `IDoc` properties on session | Attributes only — let the generator emit members |
 | Tamper / decrypt failure | Wrong key, or use `ObfuscatedSaveBackend` only when no security claim is needed |
 
-Extension Packages
----
+<a id="extension-packages"></a>
+
+### Extension Packages
+
 | Package | Role |
 | --- | --- |
 | [PlayerData.Core](src/PlayerData.Core/) | **Required.** Runtime + source generator |
@@ -362,7 +479,7 @@ Extension Packages
 | [PlayerData.MessagePipe](src/PlayerData.MessagePipe/) | MessagePipe publish |
 | [PlayerData.Unity](src/PlayerData.Unity/Assets/PlayerData.Unity/) | `UnitySaveBackend` / `PlayerDataAutoSave` / optional VContainer (UPM) |
 
-### R3
+#### R3
 
 ```csharp
 using PlayerData.R3;
@@ -372,7 +489,7 @@ save.Profile.AsChangeObservable();
 save.Inventory.AsObservable();
 ```
 
-### VitalRouter / MessagePipe
+#### VitalRouter / MessagePipe
 
 ```csharp
 // VitalRouter: PlayerDataChangedCommand<T> (document types need not implement ICommand)
@@ -382,8 +499,8 @@ save.Profile.PublishChangesTo(publisher);
 save.Profile.PublishChangesTo(publisher);
 ```
 
-Platform Supports
----
+<a id="unity"></a>
+
 ### Unity
 
 Minimum supported Unity version is 6000.0. Install `PlayerData.Core` (and MemoryPack) from NuGet via [NuGetForUnity](https://github.com/GlitchEnzo/NuGetForUnity) **first**, then add the UPM package by git URL:
@@ -406,7 +523,7 @@ auto.CommitOnPause = auto.CommitOnQuit = true;
 auto.Bind(save); // dirty only; concurrent commits gated
 ```
 
-### Save Data Viewer (Editor)
+#### Save Data Viewer (Editor)
 
 `Window > PlayerData > Data Viewer` opens a two-pane window styled after the Project view: a save tree on the left, an editor for the selected document on the right. No play mode is required for on-disk saves.
 
@@ -459,7 +576,7 @@ Safety rules:
 
 The on-disk binary format is unchanged: no type metadata is embedded in `manifest.bin` / `docs/*.bin`. The viewer resolves types from the selected save type.
 
-### Editor Document Assets (fixtures)
+#### Editor Document Assets (fixtures)
 
 For sample / QA fixtures in the Project window (not runtime player saves), create **Assets > Create > PlayerData > Document Asset**.
 
@@ -470,7 +587,7 @@ For sample / QA fixtures in the Project window (not runtime player saves), creat
 
 These assets live in the **Editor** assembly — game runtime code does not load them, and Core binaries stay type-free. They are for authoring fixtures in the Inspector the way you would pick a model or AudioClip, without embedding schema metadata into save files.
 
-### VContainer
+#### VContainer
 
 Optional [VContainer](https://github.com/hadashiA/VContainer) integration ships **inside** `PlayerData.Unity` (Cysharp-style `Runtime/External`). When `jp.hadashikick.vcontainer` is installed, the `PlayerData.Unity.VContainer` assembly is auto-enabled via asmdef version defines — no separate PlayerData package is required. Without VContainer, the assembly is simply not compiled.
 
@@ -495,8 +612,12 @@ builder.RegisterPlayerDataSession<GameSave>(
     wrapBackend: b => new EncryptedSaveBackend(b, key));
 ```
 
-Architecture
----
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<a id="architecture"></a>
+
+## Architecture
+
 ```mermaid
 flowchart TB
   subgraph schema ["Schema layer"]
@@ -553,7 +674,13 @@ flowchart TB
 
 Stage → promote docs → replace manifest. Mid-write crash tends to leave the previous consistent save.
 
-**Repository layout / building**
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<a id="development"></a>
+
+## Development
+
+Repository layout:
 
 ```
 src/       PlayerData.Core and adapter libraries; src/PlayerData.Unity is a Unity project
@@ -561,13 +688,21 @@ tests/     unit + source generator integration tests
 sandbox/   BenchmarkDotNet project
 ```
 
+Build and test:
+
 ```bash
 dotnet build src/PlayerData.Core/PlayerData.Core.csproj   # packs Core into the local feed
 dotnet build PlayerData.slnx
 dotnet test PlayerData.slnx
 ```
 
-Integration tests consume the packed Core nupkg from `../.local-feed` (see `nuget.config`), so build Core once before restoring the full solution.
+Integration tests consume the packed Core nupkg from `../.local-feed` (see `nuget.config`), so build Core once before restoring the full solution. Or use the [Task](https://taskfile.dev/) wrappers:
+
+```bash
+task build
+task test
+task check   # spellcheck + commit-lint + dco-check + build + test
+```
 
 The Unity project (`src/PlayerData.Unity`) restores its precompiled DLLs via NuGetForUnity; the binaries under `Assets/Packages/` are not committed. Restore them once before opening the project:
 
@@ -579,6 +714,80 @@ nugetforunity restore src/PlayerData.Unity
 
 Unity EditMode tests run from the Test Runner window, or headless via `Unity.exe -batchmode -projectPath src/PlayerData.Unity -runTests -testPlatform EditMode -testResults <xml> -logFile <log>`.
 
-License
----
-This library is under the MIT License.
+Full development and build instructions: **[docs/development.md](docs/development.md)**
+How to contribute: **[CONTRIBUTING.md](.github/CONTRIBUTING.md)**
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<a id="roadmap"></a>
+
+## Roadmap
+
+See the [open issues](https://github.com/dreamingdog0529/PlayerData/issues) and
+[ROADMAP.md](ROADMAP.md) for planned features and known issues.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<a id="contributing"></a>
+
+## Contributing
+
+Contributions are welcome. Please read **[CONTRIBUTING.md](.github/CONTRIBUTING.md)** for the
+workflow (Conventional Commits, DCO sign-off, PR process) and our
+[Code of Conduct](.github/CODE_OF_CONDUCT.md).
+
+Thanks to everyone who has contributed to PlayerData. This list is updated automatically from git history.
+
+<!-- readme: contributors -start -->
+<table>
+	<tbody>
+		<tr>
+            <td align="center">
+                <a href="https://github.com/dreamingdog0529">
+                    <img src="https://avatars.githubusercontent.com/u/301185108?v=4" width="100;" alt="dreamingdog0529"/>
+                    <br />
+                    <sub><b>dreamingdog0529</b></sub>
+                </a>
+            </td>
+		</tr>
+	<tbody>
+</table>
+<!-- readme: contributors -end -->
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<a id="project-docs"></a>
+
+## Project Docs
+
+| Document | Purpose |
+|----------|---------|
+| [CONTRIBUTING.md](.github/CONTRIBUTING.md) | Develop, test, PRs, DCO, CI/CD, releases |
+| [SUPPORT.md](.github/SUPPORT.md) | How to get help |
+| [ROADMAP.md](ROADMAP.md) | Direction and how to propose work |
+| [CODE_OF_CONDUCT.md](.github/CODE_OF_CONDUCT.md) | Community standards |
+| [SECURITY.md](.github/SECURITY.md) | Private vulnerability reporting |
+| [CODEOWNERS](CODEOWNERS) | Default code review owners |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
+| [LICENSE](LICENSE) | MIT license text |
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<a id="license"></a>
+
+## License
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
+
+MIT © 2026 dreamingdog0529
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+<a id="acknowledgments"></a>
+
+## Acknowledgments
+
+- [MemoryPack](https://github.com/Cysharp/MemoryPack) — version-tolerant binary serialization
+- [NuGetForUnity](https://github.com/GlitchEnzo/NuGetForUnity) — NuGet packages in Unity
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>

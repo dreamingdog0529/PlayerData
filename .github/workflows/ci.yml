@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: build/test only needs to read the repository contents.
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 10.0.x
+
+      # PlayerData.SourceGenerator.IntegrationTests consumes the packed
+      # PlayerData.Core nupkg from the local feed (../.local-feed, see nuget.config),
+      # so pack Core into the feed before restoring the full solution.
+      - name: Prepare local feed
+        run: mkdir -p ../.local-feed
+
+      - name: Build PlayerData.Core (packs to local feed)
+        run: dotnet build src/PlayerData.Core/PlayerData.Core.csproj -c Debug
+
+      - name: Build solution
+        run: dotnet build PlayerData.slnx -c Debug
+
+      - name: Test
+        run: dotnet test PlayerData.slnx -c Debug --no-build
