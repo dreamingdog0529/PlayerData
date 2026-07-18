@@ -749,6 +749,13 @@ Thanks to everyone who has contributed to PlayerData. This list is updated autom
                     <sub><b>dreamingdog0529</b></sub>
                 </a>
             </td>
+            <td align="center">
+                <a href="https://github.com/claude">
+                    <img src="https://avatars.githubusercontent.com/u/81847?v=4" width="100;" alt="claude"/>
+                    <br />
+                    <sub><b>Claude</b></sub>
+                </a>
+            </td>
 		</tr>
 	<tbody>
 </table>
