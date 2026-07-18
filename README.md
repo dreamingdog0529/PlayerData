@@ -392,6 +392,8 @@ Minimum supported Unity version is 6000.0. Install `PlayerData.Core` (and Memory
 https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity
 ```
 
+NuGet restores Roslyn source generators (`PlayerData.SourceGenerator`, `MemoryPack.Generator`) under `Assets/Packages/**/analyzers/**`. Unity may log *Unable to resolve reference 'Microsoft.CodeAnalysis'* for those DLLs — they are analyzers, not runtime plugins. After the UPM package is imported, PlayerData disables **Validate References** on them automatically; you can also uncheck it in the Plugin Inspector.
+
 ```csharp
 var backend = UnitySaveBackend.Create();
 var slot1   = UnitySaveBackend.Create(slot: 1);

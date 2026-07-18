@@ -392,6 +392,8 @@ Platform Supports
 https://github.com/dreamingdog0529/PlayerData.git?path=src/PlayerData.Unity/Assets/PlayerData.Unity
 ```
 
+NuGet は Roslyn ソースジェネレータ（`PlayerData.SourceGenerator` / `MemoryPack.Generator`）を `Assets/Packages/**/analyzers/**` に展開します。Unity がこれらをランタイムプラグインとして検証し *Unable to resolve reference 'Microsoft.CodeAnalysis'* と出すことがありますが、実際にはアナライザ専用です。UPM パッケージ導入後、PlayerData が **Validate References** を自動でオフにします（Plugin Inspector で手動解除しても構いません）。
+
 ```csharp
 var backend = UnitySaveBackend.Create();          // …/PlayerData
 var slot1   = UnitySaveBackend.Create(slot: 1);
