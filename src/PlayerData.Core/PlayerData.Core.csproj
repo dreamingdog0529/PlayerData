@@ -7,7 +7,7 @@
   </PropertyGroup>
   <PropertyGroup>
     <PackageId>PlayerData.Core</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Description>Session-centric thread-safe player save data with MemoryPack persistence (IDoc/IBag, explicit session composition, multi-document commit).</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>

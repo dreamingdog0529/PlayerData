@@ -135,6 +135,17 @@ public sealed class DirectorySaveBackend : ISaveBackend
 
     private string DocumentPath(string key) => Path.Combine(_root, "docs", ToFileName(key));
 
+    /// <summary>
+    /// The on-disk path of a single document's file inside a save directory, following this
+    /// backend's layout ({root}/docs/{sanitized-key}.bin). Lets tooling locate one document's file
+    /// without re-deriving the name from the key.
+    /// </summary>
+    public static string DocumentFilePath(string rootDirectory, string key)
+    {
+        if (rootDirectory is null) throw new ArgumentNullException(nameof(rootDirectory));
+        return Path.Combine(rootDirectory, "docs", ToFileName(key));
+    }
+
     // Portable invalid-filename set (union of Unix and Windows Path.GetInvalidFileNameChars),
     // with '.' folded in so a key cannot collide with the ".bin" extension rule below. The host
     // API is OS-specific - Unix only reports '\0' and '/', so backslash and Windows-reserved
