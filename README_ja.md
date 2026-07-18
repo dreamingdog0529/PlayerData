@@ -589,7 +589,7 @@ viewerToken.Dispose();
 
 #### VContainer
 
-任意の [VContainer](https://github.com/hadashiA/VContainer) 統合は `PlayerData.Unity` **内**に同梱されています（Cysharp 流の `Runtime/External`）。`jp.hadashikick.vcontainer` が導入されていれば、asmdef の version defines により `PlayerData.Unity.VContainer` アセンブリが自動有効化されます — 別の PlayerData パッケージは不要です。VContainer が無い場合、当該アセンブリはコンパイルされません。
+任意の [VContainer](https://github.com/hadashiA/VContainer) 統合は `PlayerData.Unity` **内**に同梱されています。`jp.hadashikick.vcontainer` が導入されていれば、asmdef の version defines により `PlayerData.Unity.VContainer` アセンブリが自動有効化されます — 別の PlayerData パッケージは不要です。VContainer が無い場合、当該アセンブリはコンパイルされません。
 
 `Packages/manifest.json` に PlayerData.Unity（と VContainer 本体）を追加します:
 
