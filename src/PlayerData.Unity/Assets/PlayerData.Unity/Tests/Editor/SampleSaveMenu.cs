@@ -26,6 +26,21 @@ namespace PlayerData.Unity.Editor.Tests
                 $"'{typeof(SampleEditorSession).FullName}', set the root path to persistentDataPath and press Scan.");
         }
 
+        [MenuItem("PlayerData/Tests/Delete Sample Save")]
+        public static void DeleteSampleSaveMenuItem()
+        {
+            string root = Path.Combine(Application.persistentDataPath, SampleFolderName);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+                Debug.Log($"[PlayerData] Sample saves deleted: {root}. Press Refresh in the viewer.");
+            }
+            else
+            {
+                Debug.Log($"[PlayerData] No sample saves to delete under: {root}");
+            }
+        }
+
         public static string Create(string baseDirectory)
         {
             string root = Path.Combine(baseDirectory, SampleFolderName);
