@@ -9,6 +9,16 @@ This file is maintained automatically by [Release Please](https://github.com/goo
 from Conventional Commits. Add user-facing notes under `[Unreleased]` if you want to
 call something out before the next release.
 
+## [0.1.5](https://github.com/dreamingdog0529/PlayerData/compare/v0.1.4...v0.1.5) (2026-11-20)
+
+
+### Miscellaneous
+
+* **deps:** bump actions/labeler from 6.2.0 to 7.0.0 ([#16](https://github.com/dreamingdog0529/PlayerData/issues/16)) ([961797d](https://github.com/dreamingdog0529/PlayerData/commit/961797d9395c9bf2ed67842ed20429ece5737343))
+* **deps:** bump github/codeql-action to 4.37.3 (init + analyze) ([#19](https://github.com/dreamingdog0529/PlayerData/issues/19)) ([e4ed7a4](https://github.com/dreamingdog0529/PlayerData/commit/e4ed7a4ad0e66e8c3d85a5a9155ebf2153880b1f))
+* **deps:** bump github/codeql-action/upload-sarif from 4.37.1 to 4.37.3 ([#15](https://github.com/dreamingdog0529/PlayerData/issues/15)) ([fa19184](https://github.com/dreamingdog0529/PlayerData/commit/fa19184563a6abf10e0372cc99d940c7074acb63))
+* **deps:** bump ossf/scorecard-action from 2.4.3 to 2.4.4 ([#13](https://github.com/dreamingdog0529/PlayerData/issues/13)) ([ca76d9a](https://github.com/dreamingdog0529/PlayerData/commit/ca76d9a2247d09ff9dd0e08bc173ee8c86c47cc4))
+
 ## [0.1.4](https://github.com/dreamingdog0529/PlayerData/compare/v0.1.3...v0.1.4) (2026-07-18)
 
 
