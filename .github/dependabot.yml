@@ -9,6 +9,10 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   # .NET NuGet dependencies across the solution.
   - package-ecosystem: nuget
