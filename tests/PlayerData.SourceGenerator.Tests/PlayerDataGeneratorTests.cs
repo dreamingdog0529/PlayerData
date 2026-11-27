@@ -6,6 +6,7 @@ using PlayerData.SourceGenerator;
 using PlayerData.Persistence;
 using PlayerData.Documents;
 using PlayerData.Sessions;
+using PlayerData.Schema;
 
 namespace PlayerData.SourceGenerator.Tests;
 
@@ -17,6 +18,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -69,6 +71,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -99,6 +102,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -128,6 +132,7 @@ public class PlayerDataGeneratorTests
     {
         const string source = """
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -154,6 +159,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -184,6 +190,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -234,6 +241,7 @@ public class PlayerDataGeneratorTests
     {
         const string source = """
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -255,6 +263,7 @@ public class PlayerDataGeneratorTests
     {
         const string source = """
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -274,6 +283,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -301,6 +311,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -336,6 +347,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -362,6 +374,7 @@ public class PlayerDataGeneratorTests
     {
         const string source = """
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -386,6 +399,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -414,6 +428,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -449,6 +464,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -479,6 +495,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -510,6 +527,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -537,7 +555,7 @@ public class PlayerDataGeneratorTests
     private static (System.Collections.Immutable.ImmutableArray<Diagnostic> Diagnostics, System.Collections.Immutable.ImmutableArray<SyntaxTree> GeneratedTrees) RunGenerator(string additionalSource)
     {
         var references = Basic.Reference.Assemblies.Net90.References.All
-            .Append(MetadataReference.CreateFromFile(typeof(PlayerData.PlayerDataSingleAttribute).Assembly.Location))
+            .Append(MetadataReference.CreateFromFile(typeof(PlayerData.Schema.PlayerDataSingleAttribute).Assembly.Location))
             .Append(MetadataReference.CreateFromFile(typeof(MemoryPack.MemoryPackableAttribute).Assembly.Location));
 
         var compilation = CSharpCompilation.Create(

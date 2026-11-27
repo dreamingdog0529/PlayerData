@@ -13,10 +13,10 @@ namespace PlayerData.SourceGenerator;
 [Generator]
 public sealed class PlayerDataGenerator : IIncrementalGenerator
 {
-    private const string SingleAttributeMetadataName = "PlayerData.PlayerDataSingleAttribute";
-    private const string CollectionAttributeMetadataName = "PlayerData.PlayerDataCollectionAttribute";
-    private const string SessionAttributeMetadataName = "PlayerData.PlayerDataSessionAttribute";
-    private const string KeyAttributeMetadataName = "PlayerData.PlayerDataKeyAttribute";
+    private const string SingleAttributeMetadataName = "PlayerData.Schema.PlayerDataSingleAttribute";
+    private const string CollectionAttributeMetadataName = "PlayerData.Schema.PlayerDataCollectionAttribute";
+    private const string SessionAttributeMetadataName = "PlayerData.Schema.PlayerDataSessionAttribute";
+    private const string KeyAttributeMetadataName = "PlayerData.Schema.PlayerDataKeyAttribute";
     private const string MemoryPackableAttributeMetadataName = "MemoryPack.MemoryPackableAttribute";
 
     // Fixed members every generated session always emits; a document property name must not

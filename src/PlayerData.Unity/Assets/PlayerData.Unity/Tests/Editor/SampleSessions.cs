@@ -1,4 +1,5 @@
-﻿using MemoryPack;
+using MemoryPack;
+using PlayerData.Schema;
 
 namespace PlayerData.Unity.Editor.Tests
 {

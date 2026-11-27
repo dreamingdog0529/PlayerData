@@ -6,6 +6,7 @@ using MemoryPack;
 using UnityEditor;
 using PlayerData.Documents;
 using PlayerData.Sessions;
+using PlayerData.Schema;
 
 namespace PlayerData.Unity.Editor
 {
