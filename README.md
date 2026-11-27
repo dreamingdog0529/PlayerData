@@ -179,6 +179,8 @@ First, mark document types with MemoryPack:
 ```csharp
 using MemoryPack;
 using PlayerData;
+using PlayerData.Persistence;
+using PlayerData.Schema;
 
 [MemoryPackable(GenerateType.VersionTolerant)]
 public partial record PlayerProfile(
