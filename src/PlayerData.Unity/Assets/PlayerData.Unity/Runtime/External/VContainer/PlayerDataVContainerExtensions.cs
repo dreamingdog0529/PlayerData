@@ -1,4 +1,4 @@
-﻿#if PLAYERDATA_VCONTAINER_SUPPORT
+#if PLAYERDATA_VCONTAINER_SUPPORT
 
 using System;
 using System.Collections.Generic;
@@ -12,6 +12,7 @@ using Awaitable = System.Threading.Tasks.Task;
 #endif
 using VContainer;
 using VContainer.Unity;
+using PlayerData.Persistence;
 
 namespace PlayerData.Unity
 {

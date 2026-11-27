@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using PlayerData.Persistence;
 
 namespace PlayerData.Unity.Editor
 {

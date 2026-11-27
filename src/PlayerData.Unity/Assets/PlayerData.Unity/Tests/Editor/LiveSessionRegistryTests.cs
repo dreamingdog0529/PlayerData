@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
+using PlayerData.Persistence;
 
 namespace PlayerData.Unity.Editor.Tests
 {

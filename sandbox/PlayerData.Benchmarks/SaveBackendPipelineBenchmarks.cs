@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using BenchmarkDotNet.Attributes;
+using PlayerData.Persistence;
 
 namespace PlayerData.Benchmarks;
 

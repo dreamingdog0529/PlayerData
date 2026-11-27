@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using PlayerData.Persistence;
 
 namespace PlayerData.Core.Tests;
 

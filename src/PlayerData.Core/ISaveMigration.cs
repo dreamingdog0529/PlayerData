@@ -1,3 +1,4 @@
+using PlayerData.Persistence;
 namespace PlayerData;
 
 /// <summary>Migrates a save bundle from <see cref="FromVersion"/> to <see cref="ToVersion"/>.</summary>

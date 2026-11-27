@@ -249,13 +249,13 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
         foreach (var f in fields)
             sb.AppendLine($"{indent}    {f}");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public {session.Name}(global::PlayerData.ISaveBackend backend, global::System.Collections.Generic.IEnumerable<global::PlayerData.ISaveMigration>? migrations = null)");
+        sb.AppendLine($"{indent}    public {session.Name}(global::PlayerData.Persistence.ISaveBackend backend, global::System.Collections.Generic.IEnumerable<global::PlayerData.ISaveMigration>? migrations = null)");
         sb.AppendLine($"{indent}    {{");
         foreach (var line in ctorBody)
             sb.AppendLine($"{indent}        {line}");
         sb.AppendLine($"{indent}    }}");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public static async global::System.Threading.Tasks.ValueTask<{session.Name}> OpenAsync(global::PlayerData.ISaveBackend backend, global::System.Threading.CancellationToken cancellationToken = default, global::System.Collections.Generic.IEnumerable<global::PlayerData.ISaveMigration>? migrations = null)");
+        sb.AppendLine($"{indent}    public static async global::System.Threading.Tasks.ValueTask<{session.Name}> OpenAsync(global::PlayerData.Persistence.ISaveBackend backend, global::System.Threading.CancellationToken cancellationToken = default, global::System.Collections.Generic.IEnumerable<global::PlayerData.ISaveMigration>? migrations = null)");
         sb.AppendLine($"{indent}    {{");
         sb.AppendLine($"{indent}        var session = new {session.Name}(backend, migrations);");
         sb.AppendLine($"{indent}        await session.LoadAsync(cancellationToken).ConfigureAwait(false);");

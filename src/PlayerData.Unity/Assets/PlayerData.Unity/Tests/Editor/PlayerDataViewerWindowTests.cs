@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -8,6 +8,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
+using PlayerData.Persistence;
 
 namespace PlayerData.Unity.Editor.Tests
 {

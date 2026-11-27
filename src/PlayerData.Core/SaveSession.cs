@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MemoryPack;
+using PlayerData.Persistence;
 
 namespace PlayerData;
 

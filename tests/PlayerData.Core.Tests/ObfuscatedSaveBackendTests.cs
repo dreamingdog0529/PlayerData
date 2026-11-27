@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using PlayerData.Persistence;
 
 namespace PlayerData.Core.Tests;
 

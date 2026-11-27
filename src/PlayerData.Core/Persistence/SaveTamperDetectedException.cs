@@ -1,6 +1,6 @@
 using System;
 
-namespace PlayerData;
+namespace PlayerData.Persistence;
 
 public sealed class SaveTamperDetectedException : Exception
 {

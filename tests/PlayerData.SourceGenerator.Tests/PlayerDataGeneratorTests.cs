@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using NUnit.Framework;
 using PlayerData.SourceGenerator;
+using PlayerData.Persistence;
 
 namespace PlayerData.SourceGenerator.Tests;
 
@@ -243,7 +244,7 @@ public class PlayerDataGeneratorTests
         Assert.That(diagnostics, Is.Empty);
         var text = generatedTrees.Single(t => t.FilePath.EndsWith("GameSave.PlayerDataSession.g.cs")).GetText().ToString();
         Assert.That(text, Does.Contain("partial class GameSave : global::PlayerData.ISaveSession"));
-        Assert.That(text, Does.Contain("public GameSave(global::PlayerData.ISaveBackend backend"));
+        Assert.That(text, Does.Contain("public GameSave(global::PlayerData.Persistence.ISaveBackend backend"));
         Assert.That(text, Does.Contain("OpenAsync"));
     }
 

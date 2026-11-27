@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PlayerData;
+namespace PlayerData.Persistence;
 
 // Layout:
 //   {root}/manifest.bin
