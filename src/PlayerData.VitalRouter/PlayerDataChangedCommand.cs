@@ -1,4 +1,5 @@
 using global::VitalRouter;
+using PlayerData.Documents;
 
 namespace PlayerData.VitalRouter;
 

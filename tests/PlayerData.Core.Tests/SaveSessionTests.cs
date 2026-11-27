@@ -8,6 +8,7 @@ using NUnit.Framework;
 using PlayerData.Persistence;
 using PlayerData.Migrations;
 using PlayerData.Validation;
+using PlayerData.Documents;
 
 namespace PlayerData.Core.Tests;
 

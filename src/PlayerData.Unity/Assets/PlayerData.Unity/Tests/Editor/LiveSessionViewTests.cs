@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using PlayerData.Persistence;
 using PlayerData.Validation;
+using PlayerData.Documents;
 
 namespace PlayerData.Unity.Editor.Tests
 {

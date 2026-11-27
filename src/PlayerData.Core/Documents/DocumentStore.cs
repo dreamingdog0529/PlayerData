@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 
-namespace PlayerData;
+namespace PlayerData.Documents;
 
 // Lock-free reads (Volatile.Read) with a CAS retry loop on writes.
 // Persistence is owned by SaveSession - this type is memory-only.

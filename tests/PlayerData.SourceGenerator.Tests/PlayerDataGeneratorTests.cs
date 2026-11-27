@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using NUnit.Framework;
 using PlayerData.SourceGenerator;
 using PlayerData.Persistence;
+using PlayerData.Documents;
 
 namespace PlayerData.SourceGenerator.Tests;
 
@@ -51,8 +52,8 @@ public class PlayerDataGeneratorTests
         Assert.That(text, Does.Contain("partial class GameSave : global::PlayerData.ISaveSession"));
         Assert.That(text, Does.Contain("IDoc<global::Sample.PlayerProfile> Profile"));
         Assert.That(text, Does.Contain("IBag<string, global::Sample.InventoryItem> Inventory"));
-        Assert.That(text, Does.Not.Contain("partial global::PlayerData.IDoc"));
-        Assert.That(text, Does.Not.Contain("partial global::PlayerData.IBag"));
+        Assert.That(text, Does.Not.Contain("partial global::PlayerData.Documents.IDoc"));
+        Assert.That(text, Does.Not.Contain("partial global::PlayerData.Documents.IBag"));
         Assert.That(text, Does.Contain("AddDocument(\"Profile\""));
         Assert.That(text, Does.Contain("AddCollection<string, global::Sample.InventoryItem>(\"Inventory\""));
         Assert.That(text, Does.Contain("OpenAsync"));

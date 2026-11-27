@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using PlayerData;
 using R3;
+using PlayerData.Documents;
 
 namespace PlayerData.R3.Tests;
 

@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace PlayerData;
+namespace PlayerData.Documents;
 
 // Backed by ConcurrentDictionary<TKey,T>: reads (TryGet/Contains/Snapshot enumeration) are
 // lock-free; writes take a short per-bucket lock instead of retrying a whole-tree CAS. Every

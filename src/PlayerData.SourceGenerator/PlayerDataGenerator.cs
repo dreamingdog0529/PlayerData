@@ -210,15 +210,15 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
                 var keyRef = doc.KeyType!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                 var typeRef = doc.EntityType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                 var keyAccess = FormatKeyAccess(doc.KeyMember!);
-                fields.Add($"private readonly global::PlayerData.IBag<{keyRef}, {typeRef}> {fieldName};");
-                props.Add($"public global::PlayerData.IBag<{keyRef}, {typeRef}> {propName} => {fieldName};");
+                fields.Add($"private readonly global::PlayerData.Documents.IBag<{keyRef}, {typeRef}> {fieldName};");
+                props.Add($"public global::PlayerData.Documents.IBag<{keyRef}, {typeRef}> {propName} => {fieldName};");
                 ctorBody.Add($"{fieldName} = _session.AddCollection<{keyRef}, {typeRef}>({keyLiteral}, static e => e{keyAccess});");
             }
             else
             {
                 var typeRef = doc.EntityType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                fields.Add($"private readonly global::PlayerData.IDoc<{typeRef}> {fieldName};");
-                props.Add($"public global::PlayerData.IDoc<{typeRef}> {propName} => {fieldName};");
+                fields.Add($"private readonly global::PlayerData.Documents.IDoc<{typeRef}> {fieldName};");
+                props.Add($"public global::PlayerData.Documents.IDoc<{typeRef}> {propName} => {fieldName};");
                 ctorBody.Add($"{fieldName} = _session.AddDocument({keyLiteral}, {doc.DefaultFactoryExpression});");
             }
         }

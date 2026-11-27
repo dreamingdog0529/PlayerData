@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace PlayerData;
+namespace PlayerData.Documents;
 
 public interface IBag<TKey, T>
     where TKey : notnull

@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
+using PlayerData.Documents;
 
 namespace PlayerData.Unity.Editor.Tests
 {
