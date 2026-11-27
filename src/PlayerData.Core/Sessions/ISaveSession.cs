@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using PlayerData.Validation;
 
-namespace PlayerData;
+namespace PlayerData.Sessions;
 
 public readonly record struct LoadResult(bool Found, int FormatVersion)
 {

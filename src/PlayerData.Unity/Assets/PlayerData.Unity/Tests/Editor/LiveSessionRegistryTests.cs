@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
 using PlayerData.Persistence;
+using PlayerData.Sessions;
 
 namespace PlayerData.Unity.Editor.Tests
 {

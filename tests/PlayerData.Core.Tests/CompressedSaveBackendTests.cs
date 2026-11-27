@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using PlayerData.Persistence;
+using PlayerData.Sessions;
 
 namespace PlayerData.Core.Tests;
 

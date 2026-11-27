@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using BenchmarkDotNet.Attributes;
 using PlayerData.Persistence;
+using PlayerData.Sessions;
 
 namespace PlayerData.Benchmarks;
 

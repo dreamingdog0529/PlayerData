@@ -5,6 +5,7 @@ using System.Reflection;
 using MemoryPack;
 using UnityEditor;
 using PlayerData.Documents;
+using PlayerData.Sessions;
 
 namespace PlayerData.Unity.Editor
 {

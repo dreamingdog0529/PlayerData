@@ -14,6 +14,7 @@ using VContainer;
 using VContainer.Unity;
 using PlayerData.Persistence;
 using PlayerData.Migrations;
+using PlayerData.Sessions;
 
 namespace PlayerData.Unity
 {

@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Threading;
 using MemoryPack;
 using PlayerData.Documents;
+using PlayerData.Sessions;
 
 namespace PlayerData.Unity.Editor
 {

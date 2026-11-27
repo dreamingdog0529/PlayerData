@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using PlayerData.Persistence;
+using PlayerData.Sessions;
 
 namespace PlayerData.Unity.Editor
 {

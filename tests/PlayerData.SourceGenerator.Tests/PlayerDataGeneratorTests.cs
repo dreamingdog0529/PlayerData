@@ -5,6 +5,7 @@ using NUnit.Framework;
 using PlayerData.SourceGenerator;
 using PlayerData.Persistence;
 using PlayerData.Documents;
+using PlayerData.Sessions;
 
 namespace PlayerData.SourceGenerator.Tests;
 
@@ -49,7 +50,7 @@ public class PlayerDataGeneratorTests
         Assert.That(generated, Is.Not.Null);
         var text = generated!.GetText().ToString();
         Assert.That(text, Does.Contain("namespace Sample"));
-        Assert.That(text, Does.Contain("partial class GameSave : global::PlayerData.ISaveSession"));
+        Assert.That(text, Does.Contain("partial class GameSave : global::PlayerData.Sessions.ISaveSession"));
         Assert.That(text, Does.Contain("IDoc<global::Sample.PlayerProfile> Profile"));
         Assert.That(text, Does.Contain("IBag<string, global::Sample.InventoryItem> Inventory"));
         Assert.That(text, Does.Not.Contain("partial global::PlayerData.Documents.IDoc"));
@@ -58,7 +59,7 @@ public class PlayerDataGeneratorTests
         Assert.That(text, Does.Contain("AddCollection<string, global::Sample.InventoryItem>(\"Inventory\""));
         Assert.That(text, Does.Contain("OpenAsync"));
         Assert.That(text, Does.Contain("PlayerProfile.NewGame()"));
-        Assert.That(text, Does.Contain("global::PlayerData.SuppressionScope SuppressNotifications()"));
+        Assert.That(text, Does.Contain("global::PlayerData.Sessions.SuppressionScope SuppressNotifications()"));
         Assert.That(text, Does.Contain("AddValidator"));
     }
 
@@ -244,7 +245,7 @@ public class PlayerDataGeneratorTests
 
         Assert.That(diagnostics, Is.Empty);
         var text = generatedTrees.Single(t => t.FilePath.EndsWith("GameSave.PlayerDataSession.g.cs")).GetText().ToString();
-        Assert.That(text, Does.Contain("partial class GameSave : global::PlayerData.ISaveSession"));
+        Assert.That(text, Does.Contain("partial class GameSave : global::PlayerData.Sessions.ISaveSession"));
         Assert.That(text, Does.Contain("public GameSave(global::PlayerData.Persistence.ISaveBackend backend"));
         Assert.That(text, Does.Contain("OpenAsync"));
     }

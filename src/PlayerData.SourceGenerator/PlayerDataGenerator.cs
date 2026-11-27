@@ -196,7 +196,7 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
         var ctorBody = new List<string>
         {
             "if (backend is null) throw new global::System.ArgumentNullException(nameof(backend));",
-            "_session = new global::PlayerData.SaveSession(backend, migrations);",
+            "_session = new global::PlayerData.Sessions.SaveSession(backend, migrations);",
         };
 
         foreach (var doc in documents)
@@ -243,9 +243,9 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
             sb.AppendLine("{");
         }
 
-        sb.AppendLine($"{indent}{accessibility}partial class {session.Name} : global::PlayerData.ISaveSession");
+        sb.AppendLine($"{indent}{accessibility}partial class {session.Name} : global::PlayerData.Sessions.ISaveSession");
         sb.AppendLine($"{indent}{{");
-        sb.AppendLine($"{indent}    private readonly global::PlayerData.SaveSession _session;");
+        sb.AppendLine($"{indent}    private readonly global::PlayerData.Sessions.SaveSession _session;");
         foreach (var f in fields)
             sb.AppendLine($"{indent}    {f}");
         sb.AppendLine();
@@ -286,15 +286,15 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
         sb.AppendLine($"{indent}        remove => _session.DirtyChanged -= value;");
         sb.AppendLine($"{indent}    }}");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public global::System.Threading.Tasks.ValueTask<global::PlayerData.LoadResult> LoadAsync(global::System.Threading.CancellationToken cancellationToken = default) => _session.LoadAsync(cancellationToken);");
+        sb.AppendLine($"{indent}    public global::System.Threading.Tasks.ValueTask<global::PlayerData.Sessions.LoadResult> LoadAsync(global::System.Threading.CancellationToken cancellationToken = default) => _session.LoadAsync(cancellationToken);");
         sb.AppendLine();
         sb.AppendLine($"{indent}    public global::System.Threading.Tasks.ValueTask CommitAsync(global::System.Threading.CancellationToken cancellationToken = default) => _session.CommitAsync(cancellationToken);");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public global::PlayerData.SuppressionScope SuppressNotifications() => _session.SuppressNotifications();");
+        sb.AppendLine($"{indent}    public global::PlayerData.Sessions.SuppressionScope SuppressNotifications() => _session.SuppressNotifications();");
         sb.AppendLine();
         sb.AppendLine($"{indent}    public void AddValidator(global::PlayerData.Validation.ISaveValidator validator) => _session.AddValidator(validator);");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public void AddValidator(global::System.Action<global::PlayerData.ISaveSession> validate) => _session.AddValidator(validate);");
+        sb.AppendLine($"{indent}    public void AddValidator(global::System.Action<global::PlayerData.Sessions.ISaveSession> validate) => _session.AddValidator(validate);");
         sb.AppendLine();
         if (autoCommit)
         {

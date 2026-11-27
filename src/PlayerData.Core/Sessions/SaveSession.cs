@@ -11,7 +11,7 @@ using PlayerData.Migrations;
 using PlayerData.Validation;
 using PlayerData.Documents;
 
-namespace PlayerData;
+namespace PlayerData.Sessions;
 
 public sealed class SaveSession : ISaveSession
 {

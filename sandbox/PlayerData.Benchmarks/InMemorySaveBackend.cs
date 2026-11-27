@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using PlayerData.Persistence;
+using PlayerData.Sessions;
 
 namespace PlayerData.Benchmarks;
 

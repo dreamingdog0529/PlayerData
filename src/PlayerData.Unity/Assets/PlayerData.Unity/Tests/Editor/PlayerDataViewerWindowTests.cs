@@ -9,6 +9,7 @@ using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
 using PlayerData.Persistence;
+using PlayerData.Sessions;
 
 namespace PlayerData.Unity.Editor.Tests
 {

@@ -9,6 +9,7 @@ using PlayerData.Persistence;
 using PlayerData.Migrations;
 using PlayerData.Validation;
 using PlayerData.Documents;
+using PlayerData.Sessions;
 
 namespace PlayerData.Core.Tests;
 
