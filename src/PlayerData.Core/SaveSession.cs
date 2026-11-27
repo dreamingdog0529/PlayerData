@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MemoryPack;
 using PlayerData.Persistence;
+using PlayerData.Migrations;
 
 namespace PlayerData;
 

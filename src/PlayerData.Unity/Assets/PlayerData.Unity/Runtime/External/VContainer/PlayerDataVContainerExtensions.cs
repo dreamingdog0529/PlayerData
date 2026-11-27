@@ -13,6 +13,7 @@ using Awaitable = System.Threading.Tasks.Task;
 using VContainer;
 using VContainer.Unity;
 using PlayerData.Persistence;
+using PlayerData.Migrations;
 
 namespace PlayerData.Unity
 {

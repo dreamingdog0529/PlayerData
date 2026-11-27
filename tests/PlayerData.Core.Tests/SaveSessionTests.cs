@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using MemoryPack;
 using NUnit.Framework;
 using PlayerData.Persistence;
+using PlayerData.Migrations;
 
 namespace PlayerData.Core.Tests;
 
