@@ -7,6 +7,7 @@ using MemoryPack;
 using NUnit.Framework;
 using PlayerData.Persistence;
 using PlayerData.Migrations;
+using PlayerData.Validation;
 
 namespace PlayerData.Core.Tests;
 

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using PlayerData.Persistence;
+using PlayerData.Validation;
 
 namespace PlayerData.Unity.Editor.Tests
 {

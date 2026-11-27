@@ -292,7 +292,7 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"{indent}    public global::PlayerData.SuppressionScope SuppressNotifications() => _session.SuppressNotifications();");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public void AddValidator(global::PlayerData.ISaveValidator validator) => _session.AddValidator(validator);");
+        sb.AppendLine($"{indent}    public void AddValidator(global::PlayerData.Validation.ISaveValidator validator) => _session.AddValidator(validator);");
         sb.AppendLine();
         sb.AppendLine($"{indent}    public void AddValidator(global::System.Action<global::PlayerData.ISaveSession> validate) => _session.AddValidator(validate);");
         sb.AppendLine();
