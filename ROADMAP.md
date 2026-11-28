@@ -22,4 +22,4 @@
 
 ## リリースの進め方
 
-リリースは Release Please で自動化しています（デフォルトブランチへの Conventional Commits がもとになります）。最新版は [GitHub Releases](https://github.com/dreamingdog0529/PlayerData/releases) で確認でき、詳しい進め方は [CONTRIBUTING.md](.github/CONTRIBUTING.md) にまとめています。
+リリースは Release Please で自動化しています（デフォルトブランチへの Conventional Commits がもとになります）。最新版は [GitHub Releases](https://github.com/dreamingdog0529/PlayerData/releases) で確認でき、詳しい進め方は [docs/development.md](docs/development.md) にまとめています。

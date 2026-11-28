@@ -6,17 +6,15 @@
 
 <p><em>.NET と Unity のための、セッションを単位にしたプレイヤーのセーブデータです。型付きの <code>IDoc</code> / <code>IBag</code> ドキュメントと <a href="https://github.com/Cysharp/MemoryPack">MemoryPack</a> による保存を使って、複数のドキュメントを 1 つのわかりやすいセーブの境界の中でまとめてコミットできます。</em></p>
 
-[![CI](https://github.com/dreamingdog0529/PlayerData/actions/workflows/ci.yml/badge.svg)](https://github.com/dreamingdog0529/PlayerData/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/dreamingdog0529/PlayerData?include_prereleases&sort=semver)](https://github.com/dreamingdog0529/PlayerData/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/dreamingdog0529/PlayerData/badge)](https://securityscorecards.dev/viewer/?uri=github.com/dreamingdog0529/PlayerData)
 
 <p>
   <a href="docs/development.md"><strong>ドキュメントを見る »</strong></a>
   <br /><br />
-  <a href="https://github.com/dreamingdog0529/PlayerData/issues/new?template=bug_report.yml">バグの報告</a>
+  <a href="https://github.com/dreamingdog0529/PlayerData/issues/new">バグの報告</a>
   ·
-  <a href="https://github.com/dreamingdog0529/PlayerData/issues/new?template=feature_request.yml">機能リクエスト</a>
+  <a href="https://github.com/dreamingdog0529/PlayerData/issues/new">機能リクエスト</a>
   ·
   <a href="https://github.com/dreamingdog0529/PlayerData/discussions">ディスカッション</a>
 </p>
@@ -167,7 +165,6 @@ README では入口だけに絞っています。詳しいことは、こちら�
 | 文書 | 内容 |
 |------|------|
 | [docs/development.md](docs/development.md) | 開発・ビルド・テストの手順 |
-| [CONTRIBUTING.md](.github/CONTRIBUTING.md) | コントリビュートの進め方 |
 | [ROADMAP.md](ROADMAP.md) | これからの方向性 |
 | [CHANGELOG.md](CHANGELOG.md) | 変更履歴 |
 | [SECURITY.md](.github/SECURITY.md) | 脆弱性を、公開せずに知らせる方法 |
@@ -176,7 +173,7 @@ README では入口だけに絞っています。詳しいことは、こちら�
 
 ## コントリビュート
 
-コントリビュートは、いつでも歓迎しています。進め方については **[CONTRIBUTING.md](.github/CONTRIBUTING.md)** を、コミュニティの決まりごとについては [行動規範](.github/CODE_OF_CONDUCT.md) をご覧ください。
+コントリビュートは、いつでも歓迎しています。開発の進め方は [docs/development.md](docs/development.md) をご覧ください。
 
 ## ライセンス
 

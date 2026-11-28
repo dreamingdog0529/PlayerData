@@ -6,9 +6,7 @@
 - Unity 6000.0 以上（`src/PlayerData.Unity` を触るときだけ。任意です）
 - [NuGetForUnity CLI](https://github.com/GlitchEnzo/NuGetForUnity)（Unity プロジェクトを触るときだけ）
 
-あると便利なツールです（CI やローカルのフックで使っています）。
-
-- [typos](https://github.com/crate-ci/typos) — スペルチェック用です
+あると便利なツールです（ローカルのフックやタスクで使っています）。
 - [lefthook](https://github.com/evilmartians/lefthook) — Git フック用です
 - [Task](https://taskfile.dev/) — タスクランナーです
 
@@ -25,12 +23,12 @@ dotnet test PlayerData.slnx -c Release --no-build
 ```bash
 task build
 task test
-task check   # スペルチェック + コミットメッセージのチェック + DCO チェック + ビルド + テスト
+task check   # コミットメッセージのチェック + ビルド + テスト
 ```
 
 ## Git フック
 
-ローカルのフックを入れておくと、Conventional Commits や DCO のサインオフを忘れにくくなります。
+ローカルのフックを入れておくと、Conventional Commits の形を忘れにくくなります。
 
 ```powershell
 pwsh ./scripts/install-git-hooks.ps1
@@ -38,16 +36,12 @@ pwsh ./scripts/install-git-hooks.ps1
 task setup
 ```
 
-- **pre-commit**: ステージされた Markdown / YAML のスペルチェックをします（lefthook 経由です）
-- **commit-msg**: Conventional Commits と DCO の `Signed-off-by` が付いているか確認します
+- **commit-msg**: Conventional Commits の形になっているか確認します
 
-## コミットと PR の約束ごと
+## コミットについて
 
-- [Conventional Commits](https://www.conventionalcommits.org/) で書いてください（`type: description` の形です）
-- すべてのコミットにサインオフをお願いします（`git commit -s` です）
-- マージはスカッシュマージだけです。PR のタイトルが、そのままデフォルトブランチ上のコミットになります
-
-全体の流れは [CONTRIBUTING.md](../.github/CONTRIBUTING.md) にまとめています。
+- [Conventional Commits](https://www.conventionalcommits.org/) で書いてください（`type: description` の形です）。リリースの自動化がこの形を見ています
+- 作業はそのまま main へ push して大丈夫です
 
 ## リリース
 
