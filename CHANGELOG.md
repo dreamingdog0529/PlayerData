@@ -6,6 +6,34 @@
 
 このファイルは、Conventional Commits をもとに [Release Please](https://github.com/googleapis/release-please) で自動的に更新しています。次のリリースの前に、利用する方へ特にお伝えしたいことがあれば、`[Unreleased]` のところに書き足してください。
 
+## [0.1.5](https://github.com/dreamingdog0529/PlayerData/compare/v0.1.4...v0.1.5) (2026-11-28)
+
+
+### Bug Fixes
+
+* disable GeneratePackageOnBuild during release pack ([#23](https://github.com/dreamingdog0529/PlayerData/issues/23)) ([8da3ae1](https://github.com/dreamingdog0529/PlayerData/commit/8da3ae157a0b338ac3e11770418375550bf93fe5))
+
+
+### Documentation
+
+* ドキュメントとコメントを日本語のやわらかい文体に書き換え ([#24](https://github.com/dreamingdog0529/PlayerData/issues/24)) ([cae3275](https://github.com/dreamingdog0529/PlayerData/commit/cae3275e8e37d4b7c0a3eb2b3f854f2f2d929696))
+* 定型文書を削除し案内を開発ドキュメントへ寄せる ([4e1fdea](https://github.com/dreamingdog0529/PlayerData/commit/4e1fdea50373f9db42a320baa89ea700f42d0983))
+
+
+### Miscellaneous
+
+* **deps:** bump actions/labeler from 6.2.0 to 7.0.0 ([#16](https://github.com/dreamingdog0529/PlayerData/issues/16)) ([961797d](https://github.com/dreamingdog0529/PlayerData/commit/961797d9395c9bf2ed67842ed20429ece5737343))
+* **deps:** bump github/codeql-action to 4.37.3 (init + analyze) ([#19](https://github.com/dreamingdog0529/PlayerData/issues/19)) ([e4ed7a4](https://github.com/dreamingdog0529/PlayerData/commit/e4ed7a4ad0e66e8c3d85a5a9155ebf2153880b1f))
+* **deps:** bump github/codeql-action/upload-sarif from 4.37.1 to 4.37.3 ([#15](https://github.com/dreamingdog0529/PlayerData/issues/15)) ([fa19184](https://github.com/dreamingdog0529/PlayerData/commit/fa19184563a6abf10e0372cc99d940c7074acb63))
+* **deps:** bump ossf/scorecard-action from 2.4.3 to 2.4.4 ([#13](https://github.com/dreamingdog0529/PlayerData/issues/13)) ([ca76d9a](https://github.com/dreamingdog0529/PlayerData/commit/ca76d9a2247d09ff9dd0e08bc173ee8c86c47cc4))
+* テンプレート由来のワークフローとリポジトリ設定を削除 ([fb75f03](https://github.com/dreamingdog0529/PlayerData/commit/fb75f03c715d31474ab7153c86c18bc9af675775))
+* フックとタスクからDCOとスペルチェックを外す ([b95f3d0](https://github.com/dreamingdog0529/PlayerData/commit/b95f3d0a4cb0607f0ec895eb0b66333404973e51))
+
+
+### Code Refactoring
+
+* organize PlayerData.Core into feature namespaces ([#22](https://github.com/dreamingdog0529/PlayerData/issues/22)) ([65cffa7](https://github.com/dreamingdog0529/PlayerData/commit/65cffa7924260dd6f5e2e1c2d9434906b90dbf11))
+
 ## [0.1.4](https://github.com/dreamingdog0529/PlayerData/compare/v0.1.3...v0.1.4) (2026-07-18)
 
 
