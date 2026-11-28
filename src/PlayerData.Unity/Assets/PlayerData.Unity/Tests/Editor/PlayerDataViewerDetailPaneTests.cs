@@ -35,7 +35,7 @@ namespace PlayerData.Unity.Editor.Tests
                 Directory.Delete(_root, recursive: true);
         }
 
-        // ---- element access ----
+        // ---- 要素へのアクセス ----
 
         private VisualElement DetailContent => _rootElement.Q<VisualElement>(ViewerUI.DetailContentName);
         private Label Header => _rootElement.Q<Label>(ViewerUI.DetailHeaderName);
@@ -51,7 +51,7 @@ namespace PlayerData.Unity.Editor.Tests
 
         private static bool IsShown(VisualElement element) => element.style.display.value == DisplayStyle.Flex;
 
-        // ---- fixtures ----
+        // ---- フィクスチャ ----
 
         private string ShowSampleSaves()
         {
@@ -61,8 +61,8 @@ namespace PlayerData.Unity.Editor.Tests
             return saveRoot;
         }
 
-        // SampleEditorSession is a test fixture and is filtered out of the dropdown, so it is
-        // selected directly rather than by dropdown index.
+        // SampleEditorSession はテスト用のフィクスチャで、ドロップダウンからは除外されるので、
+        // ドロップダウンのインデックスではなく、直接選ぶようにしています。
         private void SelectSampleSession() => _panel.SelectSessionByTypeForTests(typeof(SampleEditorSession));
 
         private static void Flatten(IEnumerable<TreeViewItemData<SaveTreeNode>> items, List<SaveTreeNode> into)
@@ -155,14 +155,14 @@ namespace PlayerData.Unity.Editor.Tests
             throw new InvalidOperationException("unreachable");
         }
 
-        // ---- header / selection ----
+        // ---- ヘッダー／選択 ----
 
         [Test]
         public void EmptyState_ShowsWhenNothingSelected_AndHidesOnSelection()
         {
             ShowSampleSaves();
 
-            // Nothing selected yet: the placeholder fills the pane, the detail content is hidden.
+            // まだ何も選ばれていません。プレースホルダがペインを埋めていて、詳細の中身は隠れています。
             Assert.That(IsShown(EmptyState), Is.True);
             Assert.That(IsShown(DetailContent), Is.False);
 
@@ -170,7 +170,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(IsShown(EmptyState), Is.False);
             Assert.That(IsShown(DetailContent), Is.True);
 
-            // Clearing the selection brings the placeholder back.
+            // 選択をクリアすると、プレースホルダが戻ってきます。
             _panel.SelectTreeNodeForTests(null);
             Assert.That(IsShown(EmptyState), Is.True);
             Assert.That(IsShown(DetailContent), Is.False);
@@ -188,7 +188,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(Header.text, Is.EqualTo("SampleProfile"));
             Assert.That(StateLabel.text, Is.EqualTo(ViewerDisplayNames.StateLabel(DocumentState.Editable)));
             Assert.That(PathLabel.text, Is.EqualTo(node.Location!.Directory));
-            // Editable, but untouched: both buttons wait for an actual change.
+            // 編集はできますが、まだ触っていません。どちらのボタンも、実際の変更があるまでは待ちます。
             Assert.That(ApplyButton.enabledSelf, Is.False);
             Assert.That(RevertButton.enabledSelf, Is.False);
         }
@@ -242,7 +242,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(IsShown(DetailContent), Is.False);
         }
 
-        // ---- shared working copy across view switches ----
+        // ---- ビューを切り替えても共有される作業用コピー ----
 
         [Test]
         public void FieldsEdit_SwitchToJsonView_KeepsTheEditedValue()
@@ -288,7 +288,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(ErrorBox.text, Does.StartWith("JSON error"));
         }
 
-        // ---- Apply / Revert ----
+        // ---- 適用／元に戻す ----
 
         [Test]
         public void Apply_FromFieldsView_WritesToDisk_AndPaneShowsPersistedState()
@@ -301,7 +301,7 @@ namespace PlayerData.Unity.Editor.Tests
 
             Assert.That(IsShown(ErrorBox), Is.False, ErrorBox.text);
             Assert.That(ReadProfileFromDisk(node.Location!).Level, Is.EqualTo(99));
-            // The pane reloaded the persisted document into a fresh working copy.
+            // ペインは、保存済みのドキュメントを新しい作業用コピーに読み直しています。
             Assert.That(_panel.FieldsModelForTests!.ToJson(), Does.Contain("99"));
             Assert.That(_panel.FieldsModelForTests.IsDirty, Is.False);
         }
@@ -339,8 +339,8 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void SwitchingDocumentSelection_DiscardsUnappliedEdits_ByDesign()
         {
-            // Deliberate rule: no confirmation dialogs exist in this UI, so changing the tree
-            // selection silently drops unapplied edits of the previous document.
+            // 意図的に決めたルールです。この UI には確認ダイアログがないので、ツリーの選択を変えると、
+            // 前のドキュメントの未適用の編集は、そのまま静かに破棄されます。
             ShowSampleSaves();
             SelectProfileInFieldsView();
             _panel.FieldsViewForTests!.SetTextForTests("Name", "lost-on-switch");
@@ -366,7 +366,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(ApplyButton.enabledSelf, Is.True);
         }
 
-        // ---- DocumentState gating ----
+        // ---- DocumentState によるゲート ----
 
         [Test]
         public void UnknownKeyAndUnreadableDocuments_AreReadOnly_WithApplyDisabled()
@@ -406,7 +406,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(StateLabel.text, Is.EqualTo(ViewerDisplayNames.StateLabel(DocumentState.ReadOnlyFormatVersion)));
             Assert.That(ApplyButton.enabledSelf, Is.False);
             Assert.That(JsonField.isReadOnly, Is.True);
-            // Round-trippable, so the Fields toggle stays usable; the editors themselves are disabled.
+            // 往復変換はできるので Fields の切り替えは使えますが、エディタ自体は無効になっています。
             Assert.That(FieldsToggle.enabledSelf, Is.True);
             _panel.SetViewModeForTests(json: false);
             Assert.That(_panel.FieldsViewForTests, Is.Not.Null);
@@ -433,12 +433,12 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(JsonField.isReadOnly, Is.True);
             Assert.That(ApplyButton.enabledSelf, Is.False);
 
-            // The toggle gate holds even when a switch to Fields is forced.
+            // Fields への切り替えを強制したときでも、切り替えのゲートは効いたままです。
             _panel.SetViewModeForTests(json: false);
             Assert.That(_panel.IsJsonViewActiveForTests, Is.True);
         }
 
-        // ---- collections ----
+        // ---- コレクション ----
 
         [Test]
         public void CollectionDocument_FieldsView_ShowsOneSubFormPerEntry()
@@ -451,9 +451,9 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(collection, Is.Not.Null, "collection documents get one field sub-form per entry");
             Assert.That(collection!.EntryKeysForTests, Has.Member("potion"));
             Assert.That(collection.EntryKeysForTests, Has.Member("sword"));
-            // Each entry exposes the entity's own members through the same editor kinds.
+            // 各エントリは、エンティティ自身のメンバーを、同じ種類のエディタを通して公開しています。
             Assert.That(collection.EntryModelForTests("potion").Rows.Count, Is.EqualTo(2));
-            // Untouched, so Apply waits for an actual edit.
+            // まだ触っていないので、Apply は実際の編集があるまで待ちます。
             Assert.That(ApplyButton.enabledSelf, Is.False);
         }
 
@@ -535,13 +535,13 @@ namespace PlayerData.Unity.Editor.Tests
             _panel.SelectTreeNodeForTests(FindDocument("Items"));
             _panel.SetViewModeForTests(json: false);
 
-            // Rename sword's key member onto potion's key.
+            // sword のキーメンバーを、potion のキーに合わせてリネームします。
             _panel.CollectionFieldsForTests!.EntryViewForTests("sword").SetTextForTests("ItemId", "potion");
 
             Assert.That(ApplyButton.enabledSelf, Is.False, "a duplicate key must block Apply");
         }
 
-        // ---- viewer-wide view mode preference ----
+        // ---- ビューア全体の表示モード設定 ----
 
         [Test]
         public void ViewModePreference_IsViewerWide_AndAppliesAcrossSelections()

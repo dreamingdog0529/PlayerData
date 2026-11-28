@@ -214,13 +214,12 @@ public class KeyedDocumentStoreTests
         Assert.That(captured.Value.Value, Is.EqualTo(new SampleItem("sword", 2)));
     }
 
-    // Regression test for the [ThreadStatic] capture slot SetCore uses to hand AddOrUpdate's
-    // existing value back out without a separate TryGetValue lookup (see KeyedDocumentStore.cs).
-    // A plain (non-thread-local) static field would let one thread's captured value leak into
-    // another thread's Changed event between the two threads' own AddOrUpdate calls. Each thread
-    // writes globally-unique Count values, so any Previous the store reports can be traced back
-    // to exactly the write that produced it; a crossed-thread bug would show up as a Previous
-    // value nothing ever legitimately wrote.
+    // 回帰テストです。SetCore が [ThreadStatic] のキャプチャ用のスロットを使って、AddOrUpdate の既存の値を、
+    // 別に TryGetValue で引かずに取り出す仕組みが対象です（KeyedDocumentStore.cs をご覧ください）。
+    // ふつうの（スレッドローカルではない）静的フィールドだと、あるスレッドが取り出した値が、2つのスレッドが
+    // それぞれ AddOrUpdate を呼ぶ合間に、別のスレッドの Changed イベントへ漏れてしまうことがあります。
+    // 各スレッドは全体で重ならない Count の値を書くので、ストアが報告する Previous はどれも、それを生んだ
+    // 書き込みまでたどれます。スレッドをまたぐ不具合があると、誰も正しく書いていないはずの Previous の値として表れます。
     [Test]
     public void Upsert_ConcurrentSameKey_PreviousNeverCrossesThreads()
     {
@@ -256,14 +255,13 @@ public class KeyedDocumentStoreTests
             Assert.That(writtenValues, Does.Contain(previous));
     }
 
-    // Regression test for the ABA hazard the ConcurrentDictionary-backed rewrite must avoid:
-    // ConcurrentDictionary.TryUpdate(key, newValue, comparisonValue) compares via
-    // EqualityComparer<T>.Default, which is structural equality for record T. Under heavy
-    // contention on one key, a stale-but-structurally-plausible read could otherwise silently
-    // win a compare-and-swap and discard concurrent updates. KeyedDocumentStore.TryUpdate must
-    // instead go through AddOrUpdate, whose updateValueFactory always sees the live value, so no
-    // update is ever lost regardless of how many times the count structurally revisits a value
-    // another thread already produced.
+    // 回帰テストです。ConcurrentDictionary を使う書き直しで避けなければならない、ABA の危険が対象です。
+    // ConcurrentDictionary.TryUpdate(key, newValue, comparisonValue) は EqualityComparer<T>.Default で
+    // 比べます。これは、レコード型の T では構造的な等しさになります。1つのキーを激しく取り合う状況では、
+    // 古いけれど構造的にはもっともらしい読み取りが、知らないうちに比較と交換に勝ってしまい、同時に行われた
+    // 更新を捨ててしまうことがあります。KeyedDocumentStore.TryUpdate はそうではなく、AddOrUpdate を
+    // 通らなければなりません。その updateValueFactory は常に生きている値を見るので、カウントが構造的に、
+    // 別のスレッドがすでに作った値へ何度戻ろうと、更新が失われることはありません。
     [Test]
     public void TryUpdate_ConcurrentSameKey_RecordType_NoLostUpdates()
     {
@@ -433,8 +431,8 @@ public class KeyedDocumentStoreTests
 
         Assert.That(store.Count, Is.EqualTo(1));
         Assert.That(store.Get("potion").Count, Is.EqualTo(1));
-        // ConcurrentDictionary.GetOrAdd may invoke factory more than once; our TryAdd path
-        // may also race-create and discard. Only the stored count must be exactly one.
+        // ConcurrentDictionary.GetOrAdd は、factory を複数回呼ぶことがあります。こちらの TryAdd の経路でも、
+        // 競合して作っては捨てることがあります。保持される件数がちょうど1つであることだけが大事です。
         Assert.That(store.Contains("potion"), Is.True);
     }
 

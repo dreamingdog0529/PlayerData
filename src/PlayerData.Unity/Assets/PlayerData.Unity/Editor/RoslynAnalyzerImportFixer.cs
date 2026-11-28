@@ -8,13 +8,13 @@ using UnityEngine;
 namespace PlayerData.Unity.Editor
 {
     /// <summary>
-    /// NuGetForUnity restores Roslyn source generators (PlayerData.SourceGenerator, MemoryPack.Generator,
-    /// …) under <c>**/analyzers/**</c>. Unity still treats those DLLs as managed plugins and fails
-    /// reference validation for <c>Microsoft.CodeAnalysis</c>, which spams the console even though the
-    /// assemblies are only used as Roslyn analyzers / source generators.
+    /// NuGetForUnity は、Roslyn のソースジェネレーター（PlayerData.SourceGenerator、MemoryPack.Generator、
+    /// など）を <c>**/analyzers/**</c> の下に復元します。Unity はそれらの DLL をマネージドプラグインとして扱ってしまい、
+    /// <c>Microsoft.CodeAnalysis</c> の参照検証に失敗します。そのため、それらのアセンブリが Roslyn のアナライザーや
+    /// ソースジェネレーターとしてだけ使われているのに、コンソールが煩くなってしまいます。
     /// <para>
-    /// This fixer disables plugin reference validation (and re-asserts analyzer-only import settings)
-    /// so the generators keep working without the false "Unable to resolve reference" errors.
+    /// この fixer は、プラグインの参照検証を無効にし（アナライザー専用のインポート設定も改めて適用し）、
+    /// ジェネレーターが「Unable to resolve reference」という誤ったエラーなしで動き続けられるようにします。
     /// </para>
     /// </summary>
     internal sealed class RoslynAnalyzerImportFixer : AssetPostprocessor
@@ -47,7 +47,7 @@ namespace PlayerData.Unity.Editor
         [InitializeOnLoadMethod]
         private static void FixExistingAnalyzersOnLoad()
         {
-            // Defer so AssetDatabase is ready and we do not contend with other startup importers.
+            // AssetDatabase の準備ができてからにし、起動時のほかのインポーターと競合しないよう、遅らせています。
             EditorApplication.delayCall += () =>
             {
                 try
@@ -106,7 +106,7 @@ namespace PlayerData.Unity.Editor
             }
 
             var labels = AssetDatabase.GetLabels(plugin);
-            // FixedLabel is the reimport guard: once set we never SaveAndReimport again for this asset.
+            // FixedLabel が再インポートのガードです。一度設定したら、そのアセットでは二度と SaveAndReimport しません。
             if (labels.Contains(FixedLabel))
             {
                 return;
@@ -123,7 +123,7 @@ namespace PlayerData.Unity.Editor
                 .ToArray();
             AssetDatabase.SetLabels(plugin, newLabels);
 
-            // Persist labels / ValidateReferences into the .meta and clear Unity's failed-load state.
+            // ラベルと ValidateReferences を .meta に保存し、Unity の読み込み失敗の状態を消します。
             plugin.SaveAndReimport();
         }
 

@@ -4,19 +4,19 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Benchmarks;
 
-// Proves the library's steady-state hot paths are allocation-free (Allocated = 0 B/op, or "-" in
-// the BenchmarkDotNet table). Unlike the other benchmark classes, every mutation here swaps in a
-// PRE-allocated instance instead of `new`-ing or `with`-ing one per call, so the measured
-// allocation is the store/session path's own - not the caller's payload construction, which is
-// the caller's choice and unavoidable for immutable data anyway.
+// ライブラリの定常状態の速い経路では、確保が起きないことを確かめます（Allocated = 0 B/op、
+// BenchmarkDotNet の表では "-" と出ます）。ほかのベンチマークのクラスと違って、ここでの変更はすべて、
+// 呼び出しのたびに `new` や `with` で新しいものを作るのではなく、あらかじめ確保しておいたインスタンスへ
+// 差し替える形にしています。そのため、測られる確保はストアやセッションの経路自身の分であり、
+// 呼び出し側がデータを組み立てる分ではありません。そちらは呼び出し側の選択で、不変なデータでは避けようがないものです。
 //
-// Covered paths and why they matter per-frame in a game loop:
-//   - Document Replace / collection Upsert-TryUpdate-GetOrAdd on a session-attached store: the
-//     per-mutation pipeline (CAS or ConcurrentDictionary in-place update -> version bump ->
-//     OnMutated suppression query -> DirtyChanged/Changed raise with struct payloads).
-//   - Value/TryGet reads and IsDirty: polled by autosave and UI binding every frame.
-//   - CommitAsync on a clean session: the autosave-tick no-op, which must not pay for the
-//     save it doesn't perform.
+// カバーしている経路と、ゲームのループで毎フレーム効いてくる理由です。
+//   - セッションにつながったストアでの、ドキュメントの Replace やコレクションの Upsert / TryUpdate / GetOrAdd:
+//     変更ごとのパイプラインです（CAS や ConcurrentDictionary でのその場の更新から、バージョンの増加、
+//     OnMutated での抑制状態の問い合わせ、構造体のデータを伴う DirtyChanged / Changed の発生まで）。
+//   - Value / TryGet の読み取りと IsDirty: 自動セーブや UI のバインドが毎フレーム確認します。
+//   - きれいな状態のセッションでの CommitAsync: 自動セーブの刻みの、何もしない回です。
+//     実行しないセーブの分のコストを、払わされないようにしなければなりません。
 [MemoryDiagnoser]
 [DisassemblyDiagnoser(maxDepth: 3, printSource: true)]
 [SimpleJob(launchCount: 1, warmupCount: 3, iterationCount: 5)]
@@ -72,8 +72,8 @@ public class ZeroAllocationBenchmarks
     [Benchmark]
     public bool CollectionTryUpdate_ExistingKey()
     {
-        // The updater swaps in the pre-allocated other instance, so the store's TryUpdate
-        // machinery (AddOrUpdate + UpdateContext + notification) is the only thing priced.
+        // updater は、あらかじめ確保しておいたもう一方のインスタンスへ差し替えます。そのため、ストアの TryUpdate の
+        // 仕組み（AddOrUpdate と UpdateContext と通知）だけに値段が付きます。
         return _items.TryUpdate(
             "item0",
             (++_flip & 1) == 0 ? _itemA : _itemB,

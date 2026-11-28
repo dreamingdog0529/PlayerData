@@ -7,7 +7,7 @@
   <PropertyGroup>
     <PackageId>PlayerData.R3</PackageId>
     <Version>0.1.1</Version>
-    <Description>Exposes PlayerData document-store changes as R3 Observable&lt;T&gt;.</Description>
+    <Description>PlayerData のドキュメントストアの変更を R3 の Observable&lt;T&gt; として扱えるようにします。</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
   <ItemGroup>

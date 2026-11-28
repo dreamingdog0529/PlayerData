@@ -10,11 +10,12 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Persistence;
 
-// Layout:
+// 配置はこうなっています：
 //   {root}/manifest.bin
 //   {root}/docs/{sanitized-key}.bin
-// Writes stage under {root}/.staging then promote docs and finally replace the manifest so a
-// crash mid-write leaves the previous manifest (and its doc files) as the recoverable state.
+// 書き込みはまず {root}/.staging の下に用意してから、文書を昇格させ、最後に manifest を
+// 置き換えます。書き込みの途中で落ちても、前の manifest（とその文書ファイル）が復旧できる
+// 状態として残るようにするためです。
 public sealed class DirectorySaveBackend : ISaveBackend
 {
     private readonly string _root;
@@ -32,11 +33,12 @@ public sealed class DirectorySaveBackend : ISaveBackend
         int formatVersion;
         string[] keys;
 
-        // The manifest byte[] is fully transient - consumed by ParseManifest and then discarded
-        // - unlike document bytes below, which SaveSession retains as its dirty-tracking cache
-        // (see CollectionParticipant/DocumentParticipant.LoadBytes). Only a transient buffer is
-        // safe to pool: an ArrayPool rental that outlived this method would risk another Rent()
-        // handing the same backing array to unrelated code while SaveSession still held it.
+        // manifest の byte[] は完全に一時的なもので、ParseManifest に消費されて捨てられます。
+        // 下の文書のバイト列とは違うところで、そちらは SaveSession が dirty 追跡のキャッシュとして
+        // 保持します（CollectionParticipant / DocumentParticipant の LoadBytes をご覧ください）。
+        // プールして安全なのは一時的なバッファだけです：このメソッドを越えて生き残った ArrayPool の
+        // 貸し出しがあると、SaveSession がまだ保持している間に、別の Rent() が同じ土台の配列を
+        // 関係のないコードへ渡してしまうおそれがあります。
         var (manifestBuffer, manifestLength) = await ReadPooledAsync(manifestPath, cancellationToken).ConfigureAwait(false);
         try
         {
@@ -47,9 +49,9 @@ public sealed class DirectorySaveBackend : ISaveBackend
             ArrayPool<byte>.Shared.Return(manifestBuffer);
         }
 
-        // Existence is checked up front for every key, then all document reads are issued
-        // concurrently: each file is independent, so total read latency is the slowest single
-        // file instead of the sum of all files.
+        // すべてのキーについて存在を先に確認してから、文書の読み取りをまとめて同時に発行します：
+        // 各ファイルは独立していますので、読み取り全体の待ち時間は全ファイルの合計ではなく、
+        // いちばん遅い1ファイル分で済みます。
         var readTasks = new Task<byte[]>[keys.Length];
         for (var i = 0; i < keys.Length; i++)
         {
@@ -81,10 +83,10 @@ public sealed class DirectorySaveBackend : ISaveBackend
         var stagingDocs = Path.Combine(staging, "docs");
         Directory.CreateDirectory(stagingDocs);
 
-        // ToFileName is computed exactly once per key (it used to run again for promotion and
-        // once per key per existing file in the cleanup scan below), and all staged document
-        // writes plus the manifest write are issued concurrently - they target distinct files,
-        // so total staging latency is the slowest single write instead of the sum.
+        // ToFileName はキーごとにちょうど1回だけ計算します（昇格や、下の後片付けの走査で何度も
+        // 計算し直さないためのものです）。ステージングした文書の書き込みと manifest の書き込みは
+        // すべて同時に発行します。対象のファイルがそれぞれ別ですので、ステージング全体の待ち時間は
+        // 合計ではなく、いちばん遅い1回の書き込み分で済みます。
         var count = bundle.Documents.Count;
         var keys = new string[count];
         var fileNames = new string[count];
@@ -116,8 +118,8 @@ public sealed class DirectorySaveBackend : ISaveBackend
             File.Move(src, dest);
         }
 
-        // O(existing + keys) via a set lookup, replacing the old O(existing x keys) scan that
-        // also re-ran ToFileName for every comparison.
+        // 集合での検索にして O(existing + keys) に収めます。キー全体との総当たりで比較する形に
+        // しないためのものです。
         var liveNames = new HashSet<string>(fileNames, StringComparer.Ordinal);
         foreach (var existing in Directory.GetFiles(docsDir, "*.bin"))
         {
@@ -137,9 +139,9 @@ public sealed class DirectorySaveBackend : ISaveBackend
     private string DocumentPath(string key) => Path.Combine(_root, "docs", ToFileName(key));
 
     /// <summary>
-    /// The on-disk path of a single document's file inside a save directory, following this
-    /// backend's layout ({root}/docs/{sanitized-key}.bin). Lets tooling locate one document's file
-    /// without re-deriving the name from the key.
+    /// セーブディレクトリの中にある、1つの文書のファイルのディスク上のパスです。このバックエンドの
+    /// 配置（{root}/docs/{sanitized-key}.bin）に従います。ツール側が、キーから名前を導き直さなくても
+    /// 1つの文書のファイルを見つけられるようにするためのものです。
     /// </summary>
     public static string DocumentFilePath(string rootDirectory, string key)
     {
@@ -147,32 +149,34 @@ public sealed class DirectorySaveBackend : ISaveBackend
         return Path.Combine(rootDirectory, "docs", ToFileName(key));
     }
 
-    // Portable invalid-filename set (union of Unix and Windows Path.GetInvalidFileNameChars),
-    // with '.' folded in so a key cannot collide with the ".bin" extension rule below. The host
-    // API is OS-specific - Unix only reports '\0' and '/', so backslash and Windows-reserved
-    // characters would otherwise survive into file names, break the EscapesPathSeparators test
-    // on Linux, and make on-disk layouts non-portable. A 128-entry bitmap answers each character
-    // in O(1) without allocating or scanning Path.GetInvalidFileNameChars() per key.
+    // 持ち運びできる、ファイル名に使えない文字の集合です（Unix と Windows の
+    // Path.GetInvalidFileNameChars の和集合）で、キーが下の ".bin" 拡張子の規則と衝突しないよう
+    // '.' も含めてあります。ホストの API は OS ごとに違います。Unix は '\0' と '/' しか報告しない
+    // ため、そのままではバックスラッシュや Windows で予約された文字がファイル名に残ってしまい、
+    // ディスク上の配置が OS 間で持ち運べなくなってしまいます。128エントリのビットマップにしておく
+    // ことで、キーごとに Path.GetInvalidFileNameChars() を確保したり走査したりせずに、各文字へ
+    // O(1) で答えられます。
     private static readonly bool[] InvalidFileNameCharMap = BuildInvalidFileNameCharMap();
 
     private static bool[] BuildInvalidFileNameCharMap()
     {
         var map = new bool[128];
-        // C0 controls are invalid on Windows and include '\0' (invalid everywhere).
+        // C0 の制御文字は Windows で使えず、その中には '\0'（どこでも使えません）も含まれます。
         for (var c = 0; c < 32; c++)
             map[c] = true;
-        // Both path separators (backslash is a legal file-name char on Unix) plus the rest of
-        // the Windows-reserved set, so generated names are safe on every supported host.
+        // パスの区切り文字は両方とも（バックスラッシュは Unix では正当なファイル名の文字ですが）と、
+        // Windows で予約された残りの文字です。生成される名前が、対応するどのホストでも安全になる
+        // ようにするためです。
         foreach (var c in "<>:\"/\\|?*")
             map[c] = true;
         map['.'] = true;
         return map;
     }
 
-    // Keep keys readable when they are type names; escape anything unsafe for file names.
-    // Clean keys (the overwhelmingly common case - keys are usually type names) take a scan-only
-    // fast path with a single string.Concat allocation; keys that need escaping build the result
-    // in-place via string.Create instead of ToCharArray + new string + concat (three allocations).
+    // キーが型名のときはそのまま読める形を保ち、ファイル名として安全でないものはエスケープします。
+    // きれいなキー（圧倒的に多いケースで、キーはたいてい型名です）は走査だけの高速な経路を通り、
+    // string.Concat のアロケーション1回で済みます。エスケープが必要なキーは、ToCharArray +
+    // new string + concat（アロケーション3回）ではなく、string.Create でその場に結果を組み立てます。
     internal static string ToFileName(string key)
     {
         if (string.IsNullOrEmpty(key)) throw new ArgumentException("Key must be non-empty.", nameof(key));
@@ -200,19 +204,19 @@ public sealed class DirectorySaveBackend : ISaveBackend
         });
     }
 
-    // Manifest binary layout (little-endian):
-    // int32 formatVersion | int32 keyCount | repeated: int32 utf8Length + utf8 bytes
+    // manifest のバイナリの並び（リトルエンディアン）：
+    // int32 formatVersion | int32 keyCount | 繰り返し： int32 utf8Length + utf8 bytes
     //
-    // Built directly into a single pre-sized byte[] through a fixed pointer instead of
-    // MemoryStream + BinaryWriter, which cost at least one internal buffer allocation (often
-    // several, as it grows to fit), one Encoding.UTF8.GetBytes(string) byte[] allocation per
-    // key, and a final ms.ToArray() copy. BinaryPrimitives.WriteInt32LittleEndian keeps the
-    // encoding explicitly little-endian (matching BinaryWriter's historical behavior) rather
-    // than relying on the host CPU happening to be little-endian.
-    // GetByteCount(key) used to run once per key while sizing the buffer and again per key while
-    // writing into it. Each key's count is computed once and held in `byteCounts` (stack-allocated
-    // up to MaxStackKeys, pooled beyond that - manifest key counts come from a session's
-    // registered documents/collections, which is normally a handful) and reused for the write pass.
+    // MemoryStream + BinaryWriter を使う形ではなく、大きさを先に決めた1つの byte[] へ fixed
+    // ポインター経由で直接組み立てます。その形にしないためのもので、MemoryStream + BinaryWriter
+    // では内部バッファのアロケーション（収まるまで伸びるので複数回になることもあります）や、
+    // キーごとの Encoding.UTF8.GetBytes(string) の byte[] アロケーション、最後の ms.ToArray() の
+    // コピーがかかってしまいます。BinaryPrimitives.WriteInt32LittleEndian を使うことで、ホストの
+    // CPU がたまたまリトルエンディアンであることに頼らず、エンコーディングを明示的に
+    // リトルエンディアンに保ちます。
+    // 各キーのバイト数は1回だけ計算して `byteCounts` に持たせ（MaxStackKeys まではスタック上に、
+    // それを超えたらプールから。manifest のキー数はセッションに登録された文書／コレクションの数で、
+    // ふつうは handful 程度です）、書き込みの回で使い回します。
     private const int MaxStackKeys = 64;
 
     internal static unsafe byte[] BuildManifest(int formatVersion, string[] keys)
@@ -286,8 +290,8 @@ public sealed class DirectorySaveBackend : ISaveBackend
         }
     }
 
-    // Bounds-checks against `length` using long arithmetic before touching the pointer, so a
-    // corrupted/adversarial length prefix can never push `basePtr + offset` out of the buffer.
+    // ポインターに触る前に、long の計算で `length` に対する範囲チェックをします。壊れた、あるいは
+    // 悪意のある長さの接頭辞があっても、`basePtr + offset` がバッファの外へ出ないようにするためです。
     private static unsafe int ReadInt32(byte* basePtr, long length, ref long offset)
     {
         if (offset + sizeof(int) > length) throw new EndOfStreamException("Unexpected end of manifest.");
@@ -296,11 +300,12 @@ public sealed class DirectorySaveBackend : ISaveBackend
         return value;
     }
 
-    // bufferSize: 1 disables FileStream's internal 4 KB buffer (the same trick the BCL's own
-    // File.ReadAllBytesAsync/WriteAllBytesAsync use): every read here is a single full-length
-    // read into an exact-size destination and every write is one full-payload write, so the
-    // intermediate buffer would only add an allocation plus a memcpy for payloads smaller than
-    // it. SequentialScan hints the OS cache that each file is read front-to-back exactly once.
+    // bufferSize: 1 にすると FileStream の内部の 4 KB バッファが無効になります（BCL 自身の
+    // File.ReadAllBytesAsync / WriteAllBytesAsync も使うやり方です）：ここでの読み取りはすべて、
+    // ちょうどの大きさの宛先への全長1回の読み取りで、書き込みもペイロード全体を1回で書きますので、
+    // 中間のバッファは、それより小さいペイロードに対してアロケーションと memcpy を増やすだけに
+    // なってしまいます。SequentialScan は、各ファイルが先頭から末尾までちょうど1回読まれることを
+    // OS のキャッシュへ伝えるためのものです。
     private static FileStream OpenRead(string path) =>
         new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1,
             FileOptions.Asynchronous | FileOptions.SequentialScan);

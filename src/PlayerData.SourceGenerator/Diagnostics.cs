@@ -4,11 +4,11 @@ namespace PlayerData.SourceGenerator;
 
 internal static class Diagnostics
 {
-    // PD0003 (property cannot be marked with both [PlayerDataSingle] and [PlayerDataCollection]),
-    // PD0004 (document property type must be IDoc<T>/IBag<TKey,T>) and PD0007 (document property
-    // must be partial) were retired when document declarations moved from partial properties to
-    // class-level attributes (Unity's bundled Roslyn caps at C# 12 and cannot parse C# 13 partial
-    // properties). The IDs are not reused for different diagnostics.
+    // PD0003（プロパティに [PlayerDataSingle] と [PlayerDataCollection] の両方は付けられない）、
+    // PD0004（ドキュメントのプロパティの型は IDoc<T> / IBag<TKey,T> でなければならない）と PD0007（ドキュメントの
+    // プロパティは partial でなければならない）は、ドキュメントの宣言の仕方が partial プロパティから
+    // クラスレベルの属性へ移ったときに廃止しました（Unity に同梱されている Roslyn は C# 12 までしか対応しておらず、
+    // C# 13 の partial プロパティを解析できないためです）。これらの ID は、別の診断には使い回していません。
 
     public static readonly DiagnosticDescriptor MissingVersionTolerantMemoryPackable = new(
         id: "PD0001",

@@ -1,38 +1,34 @@
-# Security Policy
+# セキュリティについて
 
-## Reporting a vulnerability
+## 脆弱性を見つけたとき
 
-Please **do not** open a public issue for security vulnerabilities.
+セキュリティに関わる脆弱性については、公開の Issue では報告しないでください。できるだけ早く、次のどちらかの方法で教えてください。
 
-Report security issues as soon as they are discovered using one of the following:
+1. **GitHub Security Advisories**（おすすめです）：このリポジトリの [Report a vulnerability](https://github.com/dreamingdog0529/PlayerData/security/advisories/new) から報告してください。
+2. 非公開での報告が使えない場合は、この文書のことを添えて、メンテナーへ非公開の方法で連絡してください。
 
-1. **GitHub Security Advisories** (recommended): use [Report a vulnerability](https://github.com/dreamingdog0529/PlayerData/security/advisories/new) on this repository.
-2. If private reporting is unavailable, contact the maintainers through a private channel and reference this document.
+このプロジェクトでは、運用にかかる負担を抑えるため、できるところでは実行時の依存関係を絞っています。ただ、利用してくださる方も油断はせず、このプロジェクトのようなサードパーティ製品（3PP）やその依存関係については、セキュリティの担当の方にも確認してもらうようにしてください。
 
-This project limits its runtime dependencies where practical in order to reduce the total cost of ownership, but all consumers should remain vigilant and have their security stakeholders review third-party products (3PP) like this one and their dependencies.
+メンテナーの方へ：サプライチェーンまわりの堅牢化（アクションのピン留め、依存関係の監査、シークレットのローテーション、AI エージェントの審査など）については、[docs/security-hardening.md](../docs/security-hardening.md) をご覧ください。
 
-Maintainers: see [docs/security-hardening.md](../docs/security-hardening.md) for supply-chain hardening guidance (action pinning, dependency auditing, secret rotation, AI agent vetting).
+### 書いていただきたいこと
 
-### What to include
+- 問題の内容と、考えられる影響
+- 再現の手順、または実証コード（あれば）
+- 影響を受けるバージョンやコミット（分かれば）
+- 修正案（任意です）
 
-- Description of the issue and potential impact
-- Steps to reproduce or a proof of concept (if available)
-- Affected version / commit (if known)
-- Suggested fix (optional)
+### そのあとの流れ
 
-### What to expect
+メンテナーが報告を確認したらその旨をお知らせし、問題が確認できたら修正や緩和策の計画をお伝えします。希望される場合は、アドバイザリや変更履歴で謝辞に名前を載せます（報告のときにその旨を書いてください）。
 
-- Acknowledgement when maintainers see the report
-- A fix or mitigation plan when the issue is confirmed
-- Credit in the advisory or changelog if you want it (say so in the report)
+## サポートしているバージョン
 
-## Supported versions
+セキュリティ修正は、デフォルトブランチ上の最新のリリース版に対して行います。古いリリースへのバックポートは、修正が小さく、今でも関係がある場合を除いて、基本的には行いません。
 
-Security fixes are applied to the latest released version on the default branch. Older releases may not receive backports unless a fix is trivial and still relevant.
-
-| Version | Supported |
+| バージョン | サポート |
 |---------|-----------|
-| Latest release | Yes |
-| Older releases | Best effort |
+| 最新のリリース | 対応します |
+| それより古いリリース | できる範囲で対応します |
 
-Thank you for helping keep PlayerData and its users safe.
+PlayerData と利用してくださる方を守るためにご協力いただき、ありがとうございます。

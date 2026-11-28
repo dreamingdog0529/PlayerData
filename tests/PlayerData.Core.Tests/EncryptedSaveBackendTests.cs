@@ -75,7 +75,7 @@ public class EncryptedSaveBackendTests
 
         var path = Path.Combine(_directory, "docs", "doc.bin");
         var raw = await File.ReadAllBytesAsync(path);
-        raw[raw.Length - 1] ^= 0xFF; // flip a byte inside the HMAC tag
+        raw[raw.Length - 1] ^= 0xFF; // HMAC タグの中のバイトを1つひっくり返します
         await File.WriteAllBytesAsync(path, raw);
 
         var reader = new EncryptedSaveBackend(new DirectorySaveBackend(_directory), Key);
@@ -101,7 +101,7 @@ public class EncryptedSaveBackendTests
         await backend.WriteAsync(new SaveBundle(1, new Dictionary<string, byte[]> { ["doc"] = plaintext }));
 
         var path = Path.Combine(_directory, "docs", "doc.bin");
-        await File.WriteAllBytesAsync(path, new byte[10]); // shorter than the minimum 49-byte payload
+        await File.WriteAllBytesAsync(path, new byte[10]); // 最小の49バイトのデータより短いです
 
         var reader = new EncryptedSaveBackend(new DirectorySaveBackend(_directory), Key);
         Assert.ThrowsAsync<SaveTamperDetectedException>(async () => await reader.ReadAsync());
@@ -110,9 +110,9 @@ public class EncryptedSaveBackendTests
     [Test]
     public async Task ReadAsync_SwappedDocumentCiphertexts_ThrowsSaveTamperDetectedException()
     {
-        // Guards against the document-substitution attack flagged in the plan's Decided D2:
-        // swapping which key an encrypted payload is stored under must be detected, since the
-        // document key is bound into the HMAC as associated data.
+        // 計画で Decided D2 として挙げられた、ドキュメントの差し替え攻撃への備えです。
+        // 暗号化されたデータがどのキーの下に保持されているかを入れ替えたら、検出されなければなりません。
+        // ドキュメントのキーが、関連データとして HMAC に結び付けられているためです。
         var plaintextA = MakePlaintext(20);
         var plaintextB = MakePlaintext(21);
         var backend = new EncryptedSaveBackend(new DirectorySaveBackend(_directory), Key);
@@ -193,8 +193,8 @@ public class EncryptedSaveBackendTests
     [Test]
     public async Task ReadAsync_FormatVersionTamper_ThrowsSaveTamperDetectedException()
     {
-        // HMAC binds FormatVersion as associated data. Changing only the manifest's version
-        // must fail authentication even when ciphertext bytes are untouched.
+        // HMAC は FormatVersion を関連データとして結び付けます。マニフェストのバージョンだけを変えても、
+        // 暗号文のバイト列に触れていなくても、認証は失敗しなければなりません。
         using (var writer = new EncryptedSaveBackend(new DirectorySaveBackend(_directory), Key))
         {
             await writer.WriteAsync(new SaveBundle(1, new Dictionary<string, byte[]>
@@ -203,7 +203,7 @@ public class EncryptedSaveBackendTests
             }));
         }
 
-        // Rewrite manifest with a different format version while keeping document ciphertext.
+        // ドキュメントの暗号文はそのままに、マニフェストを別のフォーマットのバージョンで書き直します。
         var docs = await File.ReadAllBytesAsync(Path.Combine(_directory, "docs", "doc.bin"));
         var inner = new DirectorySaveBackend(_directory);
         await inner.WriteAsync(new SaveBundle(2, new Dictionary<string, byte[]> { ["doc"] = docs }));

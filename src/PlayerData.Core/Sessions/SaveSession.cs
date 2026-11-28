@@ -24,27 +24,30 @@ public sealed class SaveSession : ISaveSession
     private bool _isLoaded;
     private bool _lastDirtyNotified;
 
-    // Copy-on-add arrays instead of List<T> + cached snapshot: AddDocument/AddCollection/
-    // AddValidator (rare, session-setup-time) rebuild the array under _gate and publish it with
-    // a volatile write; every read path (IsDirty via AnyDirty, LoadAsync, CommitAsync,
-    // EndSuppress) takes a lock-free Volatile.Read of the current array. This removes the lock
-    // from IsDirty entirely - which OnMutated/PublishDirty hit once per store mutation, making
-    // it the hottest read in the library. A published array is never mutated in place (only the
-    // field reference is swapped), so iterating it outside any lock is safe.
+    // List<T> とキャッシュしたスナップショットの組み合わせではなく、追加時にコピーする配列を
+    // 使います：AddDocument / AddCollection / AddValidator（まれで、セッションの準備時にだけ
+    // 呼ばれます）が _gate の下で配列を作り直し、volatile な書き込みで公開します。読み取りの経路
+    // （AnyDirty 経由の IsDirty、LoadAsync、CommitAsync、EndSuppress）はすべて、現在の配列を
+    // ロックなしの Volatile.Read で取ります。おかげで IsDirty からロックが完全に外れます。
+    // IsDirty は OnMutated / PublishDirty がストアの変更のたびに触る、このライブラリでいちばん
+    // 熱い読み取りです。公開された配列がその場で書き換えられることは決してありません（入れ替わる
+    // のはフィールドの参照だけです）ので、ロックの外で列挙しても安全です。
     private ISessionParticipant[] _participants = Array.Empty<ISessionParticipant>();
     private ISaveValidator[] _validators = Array.Empty<ISaveValidator>();
 
-    // CommitAsync's snapshot array, recycled between commits so a steady-state commit's fixed
-    // overhead does not include re-allocating it every time. Interlocked.Exchange hands the
-    // array to at most one in-flight commit; a concurrent commit (or a participant-count change)
-    // simply allocates a fresh array, so correctness never depends on the cache being available.
+    // CommitAsync のスナップショット用配列で、コミットの合間に使い回すためのものです。定常状態の
+    // コミットの固定の負担に、毎回の再確保が含まれないようにするためです。Interlocked.Exchange は
+    // この配列を同時に進行中のコミットの最大で1つにだけ渡します。競合したコミット（や参加者の数が
+    // 変わった場合）は素直に新しい配列を確保しますので、正しさがキャッシュの有無に依存することは
+    // ありません。
     private (ISessionParticipant Participant, long Version, byte[] Bytes)[]? _snapshotScratch;
 
-    // CommitAsync's document-payload dictionary, recycled between commits with the same
-    // Interlocked.Exchange handoff as _snapshotScratch. Recycling is safe even though the
-    // dictionary escapes into the SaveBundle handed to the backend: ISaveBackend's ownership
-    // contract makes the bundle valid only for the duration of WriteAsync, so by the time the
-    // next commit reuses the instance no conforming backend still holds it.
+    // CommitAsync の文書ペイロード用ディクショナリで、_snapshotScratch と同じ
+    // Interlocked.Exchange の受け渡しでコミットの合間に使い回します。このディクショナリは
+    // バックエンドへ渡す SaveBundle の中に入って外へ出ますが、使い回しても安全です：
+    // ISaveBackend の所有権の約束ごとによりバンドルは WriteAsync の間だけ有効ですので、次の
+    // コミットがこのインスタンスを再利用するころには、約束を守るバックエンドはどれも保持して
+    // いません。
     private Dictionary<string, byte[]>? _documentsScratch;
 
     public SaveSession(ISaveBackend backend, IEnumerable<ISaveMigration>? migrations = null)
@@ -147,11 +150,11 @@ public sealed class SaveSession : ISaveSession
         }
         else
         {
-            // Each participant's MemoryPack deserialization is CPU-bound and touches only that
-            // participant's own store, so with several documents registered they deserialize
-            // concurrently; total load CPU time becomes the largest single document instead of
-            // the sum. TryGetValue runs on the calling thread before any task starts - only
-            // LoadBytes itself fans out.
+            // 各参加者の MemoryPack のデシリアライズは CPU 主体で、その参加者自身のストアにしか
+            // 触りません。ですので、文書が複数登録されているときは同時にデシリアライズでき、読み込み
+            // 全体の CPU 時間は合計ではなく、いちばん大きい1つの文書分で済みます。TryGetValue は
+            // どのタスクが始まるよりも前に呼び出し側のスレッドで走ります。広がるのは LoadBytes
+            // 自体だけです。
             var tasks = new List<Task>(participants.Length);
             foreach (var participant in participants)
             {
@@ -169,7 +172,7 @@ public sealed class SaveSession : ISaveSession
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
 
-        // Participants present on disk but not registered are ignored (forward-compatible).
+        // ディスク上にあっても登録されていない参加者は無視します（前方互換のためです）。
 
         _isLoaded = true;
         Loaded?.Invoke();
@@ -179,12 +182,12 @@ public sealed class SaveSession : ISaveSession
 
     public ValueTask CommitAsync(CancellationToken cancellationToken = default)
     {
-        // The autosave-tick no-op: a clean session returns a completed ValueTask without ever
-        // entering the async state machine below, so polling CommitAsync every frame prices only
-        // the participant dirty scan (a few ns), not the state-machine setup (~10 ns). The dirty
-        // re-check inside CommitCoreAsync (after validation) remains the correctness gate; this
-        // check is purely an early-out, so the race where a store turns clean/dirty in between
-        // resolves exactly as it would have with the single in-method check.
+        // 自動セーブの刻みでの何もしない経路です：clean なセッションは、下の非同期ステートマシンに
+        // 入ることなく完了済みの ValueTask を返します。ですので、フレームごとに CommitAsync を
+        // 確認しても、かかるのは参加者の dirty 走査（数 ns）だけで、ステートマシンの準備
+        // （約10 ns）はかかりません。正しさの関門は、CommitCoreAsync の中（検証のあと）にある
+        // dirty の再確認が担います。ここの確認は純粋に早期退出のためのもので、その間にストアが
+        // clean / dirty に切り替わる競合があっても、結果はそちらの再確認で決まります。
         if (!AnyDirty(Volatile.Read(ref _participants)))
             return default;
 
@@ -200,18 +203,18 @@ public sealed class SaveSession : ISaveSession
         if (!AnyDirty(participants))
             return;
 
-        // Fail-fast validation before any I/O or serialization snapshot.
+        // I/O やシリアライズのスナップショットより前に、fail-fast の検証を行います。
         foreach (var participant in participants)
             participant.Validate();
         foreach (var validator in Volatile.Read(ref _validators))
             validator.Validate(this);
 
         {
-            // Re-read rather than reusing `participants`: AddDocument/AddCollection could have
-            // registered a new participant while validation above ran.
+            // `participants` を使い回さずに読み直します：上の検証が走っている間に、
+            // AddDocument / AddCollection で新しい参加者が登録されているかもしれないためです。
             var current = Volatile.Read(ref _participants);
 
-            // Re-check dirty after validation (validation is pure by contract).
+            // 検証のあとに dirty を確認し直します（検証は約束ごととして純粋なものです）。
             if (!AnyDirty(current))
                 return;
 
@@ -234,7 +237,7 @@ public sealed class SaveSession : ISaveSession
                 {
                     var p = current[i];
                     var version = p.Version;
-                    // Dirty documents re-serialize; clean ones reuse cached bytes (dirty-only serialize).
+                    // dirty な文書はシリアライズし直し、clean なものはキャッシュしたバイト列を使い回します（dirty なものだけをシリアライズします）。
                     var bytes = p.GetBytes();
                     snapshot[i] = (p, version, bytes);
                     allDocuments[p.Key] = bytes;
@@ -242,17 +245,17 @@ public sealed class SaveSession : ISaveSession
             }
             else
             {
-                // With two or more dirty documents their MemoryPack serializations - independent
-                // per-participant CPU work - fan out, so total serialize time becomes the largest
-                // single document instead of the sum. Clean participants stay inline: their
-                // GetBytes just returns cached bytes, never worth a task. The dirtyCount gate
-                // keeps the overwhelmingly common one-dirty-document commit on the sequential
-                // path with zero task overhead. Version is captured before GetBytes inside each
-                // task, preserving the sequential path's ordering guarantee: a mutation racing
-                // the serialize bumps the version past the captured one, so MarkCleanAt below
-                // leaves that store dirty for the next commit rather than marking newer bytes
-                // clean. (IsDirty can flip between the count above and this loop; that only
-                // shifts work between the task and inline paths, both of which are correct.)
+                // dirty な文書が2つ以上あるときは、それぞれの MemoryPack のシリアライズ（参加者
+                // ごとに独立した CPU の仕事です）を広げて同時に行いますので、シリアライズ全体の時間は
+                // 合計ではなく、いちばん大きい1つの文書分で済みます。clean な参加者はその場に残します：
+                // その GetBytes はキャッシュしたバイト列を返すだけで、タスクにする価値はありません。
+                // dirtyCount の関門により、圧倒的に多い「dirty な文書が1つ」のコミットは、タスクの
+                // 負担がゼロの逐次経路に保たれます。各タスクの中では GetBytes の前に Version を
+                // 捕らえますので、逐次経路の順序の保証が保たれます：シリアライズと競合した変更は
+                // バージョンを捕らえた値より先へ進めますので、下の MarkCleanAt はそのストアを次の
+                // コミットのために dirty のまま残し、新しいバイト列を clean とはしません。（上の数え
+                // 上げとこのループの間で IsDirty が切り替わることもありますが、それで仕事がタスクの
+                // 経路とその場の経路の間で移るだけで、どちらも正しいものです。）
                 var tasks = new List<Task<(int Index, long Version, byte[] Bytes)>>(dirtyCount);
                 for (var i = 0; i < current.Length; i++)
                 {
@@ -290,19 +293,20 @@ public sealed class SaveSession : ISaveSession
         var bundle = new SaveBundle(CurrentFormatVersion, allDocuments);
         await _backend.WriteAsync(bundle, cancellationToken).ConfigureAwait(false);
 
-        // No lock needed: MarkCleanAt is version-gated per store (a concurrent mutation that
-        // bumped the version past the snapshot leaves the store dirty), and `snapshot` is local.
+        // ロックは要りません：MarkCleanAt はストアごとにバージョンで判定します（スナップショットより
+        // 先へバージョンを進めた同時の変更があると、そのストアは dirty のまま残ります）し、
+        // `snapshot` はローカルなものだからです。
         foreach (var (participant, version, bytes) in snapshot)
             participant.MarkCleanAt(version, bytes);
 
-        // Recycle the snapshot array for the next commit. Cleared first so it doesn't pin
-        // participant/byte[] references from a session whose registrations later change.
+        // スナップショット用配列を、次のコミットで使い回せるように戻しておきます。先にクリアするのは、
+        // あとで登録が変わるセッションの参加者や byte[] への参照を掴んだままにしないためです。
         Array.Clear(snapshot, 0, snapshot.Length);
         Volatile.Write(ref _snapshotScratch, snapshot);
 
-        // The documents dictionary is recycled too: WriteAsync completed above, and the
-        // ownership contract bars backends from holding the bundle past that point. Cleared so
-        // it doesn't pin byte[] payloads beyond what the participants cache themselves.
+        // 文書のディクショナリも使い回します：上の WriteAsync は完了していて、所有権の約束ごとにより
+        // バックエンドがその時点を越えてバンドルを保持することはありません。クリアするのは、参加者
+        // 自身がキャッシュしている分を越えて byte[] のペイロードを掴んだままにしないためです。
         allDocuments.Clear();
         Volatile.Write(ref _documentsScratch, allDocuments);
 
@@ -331,17 +335,17 @@ public sealed class SaveSession : ISaveSession
         PublishDirty(force: true);
     }
 
-    // Passed to DocumentStore/KeyedDocumentStore as their single onMutated callback. Queries
-    // suppression state exactly once per mutation and hands the answer back to the store (which
-    // reuses it for its own Changed-coalescing decision instead of querying separately), while
-    // also driving the dirty-notification path here when not suppressed.
+    // DocumentStore / KeyedDocumentStore へ、その唯一の onMutated コールバックとして渡すものです。
+    // 変更のたびに抑制状態をちょうど1回だけ問い合わせて、その答えをストアへ返します（ストアは
+    // それを、別に問い合わせ直す代わりに、自分の Changed をまとめるかどうかの判断に使い回します）。
+    // あわせて、抑えられていないときは dirty 通知の経路もここで進めます。
     //
-    // A mutation always dirties its own store, so the session is necessarily dirty after this
-    // returns. That lets us notify DirtyChanged on the clean→dirty edge without scanning every
-    // participant (PublishDirty/IsDirty), which was the previous per-mutation cost once the
-    // session was already dirty - the steady state for any game loop that mutates between
-    // autosaves. Clean transitions (Load/Commit/EndSuppress) still go through PublishDirty with
-    // force:true and recompute IsDirty from the participants.
+    // 変更は常にそのストア自身を dirty にしますので、このメソッドが返った時点でセッションは必ず
+    // dirty です。おかげで、すべての参加者を走査する（PublishDirty / IsDirty）ことなく、
+    // clean から dirty への境目で DirtyChanged を通知できます。自動セーブの合間に変更が入る
+    // 使い方では、セッションがすでに dirty な状態が定常ですので、変更ごとの負担を抑えるための
+    // 形です。clean への移行（Load / Commit / EndSuppress）は PublishDirty を
+    // force:true で通し、参加者から IsDirty を計算し直します。
     private bool OnMutated()
     {
         var suppressed = IsNotificationSuppressed();
@@ -370,7 +374,7 @@ public sealed class SaveSession : ISaveSession
         }
     }
 
-    // Caller must hold _gate.
+    // 呼び出し側は _gate を保持している必要があります。
     private void AppendParticipant(ISessionParticipant participant)
     {
         var current = _participants;
@@ -525,10 +529,11 @@ public sealed class SaveSession : ISaveSession
             if (!IsDirty && _cachedBytes is not null)
                 return _cachedBytes;
 
-            // MemoryPack's ConcurrentDictionaryFormatter writes the same collection-header-plus-
-            // KeyValuePairs wire layout as Dictionary<TKey,TValue> (and ImmutableDictionary before
-            // it), so this serializes the store's live backing dictionary directly instead of
-            // copying it into a Dictionary first. Verified byte-identical by round-trip test.
+            // MemoryPack の ConcurrentDictionaryFormatter は、Dictionary<TKey,TValue> と同じ
+            // 「コレクションのヘッダー＋ KeyValuePairs」というワイヤ上の並びで書きます（ImmutableDictionary
+            // も同じです）。ですので、まず Dictionary へコピーするのではなく、ストアの生きている土台の
+            // ディクショナリを直接シリアライズできます。往復テストでバイト単位に同一であることを
+            // 確認してあります。
             var bytes = MemoryPackSerializer.Serialize(_store.SnapshotItems);
             _cachedBytes = bytes;
             return bytes;
@@ -536,10 +541,10 @@ public sealed class SaveSession : ISaveSession
 
         public void LoadBytes(byte[] bytes)
         {
-            // Deserializing straight into ConcurrentDictionary<TKey,T> avoids a Dictionary
-            // round-trip; it reads Dictionary/ImmutableDictionary-formatted bytes from older saves
-            // identically, since all three formatters share the same wire layout (verified by
-            // round-trip test).
+            // ConcurrentDictionary<TKey,T> へ直接デシリアライズすることで、Dictionary を経由する
+            // 往復を避けられます。3つのフォーマッターはすべて同じワイヤ上の並びを共有していますので、
+            // Dictionary / ImmutableDictionary の形式で書かれたバイト列も同じように読めます
+            // （往復テストで確認してあります）。
             var loaded = MemoryPackSerializer.Deserialize<ConcurrentDictionary<TKey, T>>(bytes)
                 ?? throw new InvalidDataException($"Save data for key '{Key}' deserialized to null.");
             _store.ReplaceFromLoad(loaded);
@@ -557,10 +562,10 @@ public sealed class SaveSession : ISaveSession
 
         public void Validate()
         {
-            // Enumerates key-value pairs directly instead of SnapshotItems.Values, which would
-            // allocate a ReadOnlyCollection<T> wrapper on ConcurrentDictionary. Weakly consistent
-            // (see KeyedDocumentStore.Snapshot doc) - acceptable here since each item's own
-            // internal validation doesn't depend on the other items in the collection.
+            // SnapshotItems.Values ではなく、キーと値の組を直接列挙します。Values のほうは
+            // ConcurrentDictionary の上に ReadOnlyCollection<T> のラッパーを確保してしまうためです。
+            // 弱い整合性です（KeyedDocumentStore.Snapshot の説明をご覧ください）が、ここでは問題に
+            // なりません。各項目自身の内部の検証は、コレクション内のほかの項目に依存しないためです。
             foreach (var kvp in _store.SnapshotItems)
             {
                 if (kvp.Value is IValidatable validatable)

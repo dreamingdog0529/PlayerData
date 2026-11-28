@@ -1,84 +1,84 @@
-## Summary
+## 概要
 
-<!-- Provide a brief description of what this PR does -->
+<!-- この PR で何をするのか、短く書いてください -->
 
-## Related Issues
+## 関連する Issue
 
-<!-- Link to related issues: Fixes #123, Relates to #456 -->
+<!-- 関連する Issue へのリンクを書いてください。例: Fixes #123, Relates to #456 -->
 
-## Type of Change
+## 変更の種類
 
-<!-- Check all that apply -->
+<!-- 当てはまるものすべてにチェックを入れてください -->
 
-- [ ] Bug fix (non-breaking change that fixes an issue)
-- [ ] New feature (non-breaking change that adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to change)
-- [ ] Documentation update
-- [ ] Refactoring (no functional changes)
-- [ ] CI/CD or build changes
-- [ ] Dependencies update
+- [ ] バグ修正（Issue を直す、破壊的でない変更）
+- [ ] 新しい機能（機能を足す、破壊的でない変更）
+- [ ] 破壊的変更（今までの機能の動きが変わってしまう修正や機能）
+- [ ] ドキュメントの更新
+- [ ] リファクタリング（機能の変更はありません）
+- [ ] CI/CD やビルドまわりの変更
+- [ ] 依存関係の更新
 
-## Conventional Commit
+## Conventional Commit について
 
 <!--
-Your PR title should follow Conventional Commits format:
-- feat: add new feature
-- fix: resolve bug
-- docs: update documentation
-- refactor: code refactoring
-- test: add tests
-- chore: maintenance tasks
-- ci: CI/CD changes
+PR のタイトルは Conventional Commits の形にしてください。
+- feat: 新しい機能を足します
+- fix: バグを直します
+- docs: ドキュメントを更新します
+- refactor: コードのリファクタリングです
+- test: テストを足します
+- chore: メンテナンス作業です
+- ci: CI/CD まわりの変更です
 
-For breaking changes, add ! after the type: feat!: breaking change
+破壊的変更のときは、種類のあとに ! を付けてください。例: feat!: 破壊的変更
 
-With squash merge, the PR title becomes the commit on the default branch.
+スカッシュマージでは、PR のタイトルがそのままデフォルトブランチ上のコミットになります。
 -->
 
-## Testing
+## テスト
 
-<!-- Describe how you tested your changes -->
+<!-- 変更をどうテストしたか書いてください -->
 
-- [ ] Build succeeds (`dotnet build PlayerData.slnx -c Release`)
-- [ ] Tests pass (`dotnet test PlayerData.slnx`) (or N/A for docs-only)
-- [ ] Tests added/updated
-- [ ] Manual testing performed
+- [ ] ビルドが通ります（`dotnet build PlayerData.slnx -c Release`）
+- [ ] テストが通ります（`dotnet test PlayerData.slnx`）（ドキュメントだけの変更なら対象外で大丈夫です）
+- [ ] テストを足したか、更新しました
+- [ ] 手動での確認もしました
 
 <details>
-<summary>Test details</summary>
+<summary>テストの詳しい内容</summary>
 
-<!-- Describe your test cases here -->
+<!-- テストケースをここに書いてください -->
 
 </details>
 
-## Documentation
+## ドキュメント
 
-- [ ] README updated (if applicable)
-- [ ] User documentation updated (if applicable)
-- [ ] User-facing changes noted in `CHANGELOG.md` under `[Unreleased]` (or N/A)
-- [ ] No documentation changes needed
+- [ ] README を更新しました（必要な場合）
+- [ ] 利用者向けドキュメントを更新しました（必要な場合）
+- [ ] 利用者に関わる変更を `CHANGELOG.md` の `[Unreleased]` に書きました（または対象外です）
+- [ ] ドキュメントの変更は必要ありません
 
-## Security
+## セキュリティ
 
-- [ ] No security implications
-- [ ] Security implications considered and addressed
-- [ ] Security review requested
+- [ ] セキュリティへの影響はありません
+- [ ] セキュリティへの影響を考えて、対応しました
+- [ ] セキュリティレビューをお願いしたいです
 
-## Breaking Changes
+## 破壊的変更
 
-<!-- If this is a breaking change, describe the impact and migration path -->
+<!-- 破壊的変更の場合は、影響と移行のしかたを書いてください -->
 
-## Checklist
+## チェックリスト
 
-- [ ] My code follows the project's style guidelines
-- [ ] I have performed a self-review of my code
-- [ ] I have commented my code, particularly in hard-to-understand areas
-- [ ] My changes generate no new warnings
-- [ ] I have added tests that prove my fix is effective or my feature works
-- [ ] New and existing tests pass locally with my changes
-- [ ] No secrets, credentials, or build artifacts (`bin/`, `obj/`, `dist/`, `build/`) included
-- [ ] I have signed off my commits (DCO) — `git commit -s`
+- [ ] コードがプロジェクトのスタイルに沿っています
+- [ ] 自分のコードを自分で見直しました
+- [ ] 分かりにくいところにはコメントを付けました
+- [ ] 変更で新しい警告は出ていません
+- [ ] 修正が効いていること、または機能が動くことを示すテストを足しました
+- [ ] 変更後に、新しいテストも既存のテストもローカルで通ります
+- [ ] シークレットや認証情報、ビルド成果物（`bin/`、`obj/`、`dist/`、`build/`）は含まれていません
+- [ ] コミットにサインオフしました（DCO）— `git commit -s`
 
-## Screenshots
+## スクリーンショット
 
-<!-- If applicable, add screenshots to help explain your changes -->
+<!-- あれば、変更が分かりやすくなるスクリーンショットを添えてください -->

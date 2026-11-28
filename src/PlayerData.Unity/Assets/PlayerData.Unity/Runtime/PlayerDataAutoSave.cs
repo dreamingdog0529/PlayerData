@@ -5,8 +5,8 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Unity
 {
-    // Commits a dirty ISaveSession on pause/quit and optionally on an interval.
-    // Attach to a bootstrap GameObject after constructing the session.
+    // 変更がある ISaveSession を、一時停止や終了のときにコミットします。間隔を指定して定期的にコミットすることもできます。
+    // セッションを作ったあとで、ブートストラップ用の GameObject に付けて使います。
     [DisallowMultipleComponent]
     public sealed class PlayerDataAutoSave : MonoBehaviour
     {

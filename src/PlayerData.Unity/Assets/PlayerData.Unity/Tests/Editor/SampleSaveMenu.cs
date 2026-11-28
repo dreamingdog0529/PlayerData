@@ -8,9 +8,9 @@ using PlayerData.Sessions;
 namespace PlayerData.Unity.Editor.Tests
 {
     /// <summary>
-    /// Creates a disposable sample save tree under persistentDataPath for manually exercising the
-    /// viewer window: a direct save plus a slot_1 save, each containing editable documents, an
-    /// unknown key and a corrupt (unreadable) payload under a known key.
+    /// persistentDataPath の下に、使い捨てのサンプルセーブツリーを作ります。ビューアウィンドウを手で試すためのもので、
+    /// 直接のセーブと slot_1 のセーブが入っていて、それぞれに編集できるドキュメントと、
+    /// 不明なキー、そして既知のキーの下にある壊れた（読めない）ペイロードが含まれます。
     /// </summary>
     public static class SampleSaveMenu
     {

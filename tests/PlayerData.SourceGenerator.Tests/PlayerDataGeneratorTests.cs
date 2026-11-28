@@ -395,7 +395,7 @@ public class PlayerDataGeneratorTests
     [Test]
     public void Single_MissingDefaultFactory_ReportsPD0005()
     {
-        // No parameterless ctor and no Default= factory → PD0005.
+        // 引数なしのコンストラクタも、Default= のファクトリもありません → PD0005 です。
         const string source = """
             using MemoryPack;
             using PlayerData;

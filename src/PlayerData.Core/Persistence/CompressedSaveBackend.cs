@@ -10,34 +10,35 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Persistence;
 
-// Wraps an ISaveBackend to compress each document's bytes with Deflate (raw DEFLATE, no
-// GZip/zlib header). This is a size optimization only: it provides no confidentiality or
-// integrity. Stack with EncryptedSaveBackend when those are required, and compress first so
-// the ciphertext is not fed into the compressor (e.g. EncryptedSaveBackend(Compressed(...))).
+// ISaveBackend を包んで、各文書のバイト列を Deflate で圧縮するためのものです（生の DEFLATE で、
+// GZip / zlib のヘッダーは付きません）。これはサイズを小さくするためだけのもので、秘匿性や
+// 完全性は提供しません。そうしたものが必要なときは EncryptedSaveBackend と重ねて使い、
+// 暗号文を圧縮器に渡さないよう、先に圧縮する順番にしてください
+// （たとえば EncryptedSaveBackend(Compressed(...)) のようにします）。
 //
-// Payload layout per document: [FormatTag(1)] [UncompressedLength(LE u32)] [deflate body].
-// Storing the original length lets Decompress allocate the exact output buffer once.
+// 文書ごとのペイロードの並びは [FormatTag(1)] [UncompressedLength(LE u32)] [deflate body] です。
+// 元の長さを保存しておくことで、Decompress が出力バッファをちょうどの大きさで1回だけ確保できます。
 public sealed class CompressedSaveBackend : ISaveBackend
 {
     private const byte FormatTag = 0x01;
     private const int HeaderSize = 1 + 4; // FormatTag + UncompressedLength
-    private const int MaxUncompressedLength = 512 * 1024 * 1024; // 512 MiB safety cap
+    private const int MaxUncompressedLength = 512 * 1024 * 1024; // 512 MiB の安全上限です
     private const int MaxInitialCompressionBufferSize = 64 * 1024;
 
     private readonly ISaveBackend _inner;
     private readonly CompressionLevel _compressionLevel;
 
-    // Write-path transformed-document dictionary, recycled between writes via the same
-    // Interlocked.Exchange handoff the other wrapper backends use: at most one in-flight
-    // write holds it, a concurrent write just allocates fresh, and it is only recycled after
-    // the inner WriteAsync completed. Dropped, not recycled, when the write throws.
+    // 書き込み経路で変換後の文書を入れるディクショナリで、ほかのラッパーバックエンドと同じ
+    // Interlocked.Exchange の受け渡しで書き込みの合間に使い回します：同時に進行中の書き込みで
+    // これを持つのは最大で1つだけで、競合した書き込みは新しく確保します。再利用するのは内側の
+    // WriteAsync が完了したあとだけです。書き込みが例外を投げたときは、使い回さずに捨てます。
     private Dictionary<string, byte[]>? _writeScratch;
 
-    // Defaults to Fastest, not Optimal: for realistic (compressible) save payloads Fastest writes
-    // ~30-40% faster with negligible size difference and no read penalty, and the deflater's CPU
-    // cost dominates the whole operation. Pass CompressionLevel.Optimal explicitly to trade write
-    // latency for a smaller payload. The stored format is level-agnostic, so saves written at
-    // either level round-trip regardless of which level a later reader is constructed with.
+    // 既定は Optimal ではなく Fastest です：現実的な（圧縮の効く）セーブのペイロードでは、Fastest は
+    // サイズの差がごくわずかで読み取りの不利もなく、書き込みがおよそ30〜40%速くなりますし、処理全体の
+    // 支配的なコストは deflater の CPU 時間です。書き込みの遅さと引き換えにペイロードを小さくしたい
+    // ときは、CompressionLevel.Optimal を明示的に渡してください。保存形式はレベルに依存しませんので、
+    // どちらのレベルで書いたセーブも、あとから読む側がどちらのレベルで作られていても往復できます。
     public CompressedSaveBackend(ISaveBackend inner)
         : this(inner, CompressionLevel.Fastest)
     {
@@ -67,8 +68,8 @@ public sealed class CompressedSaveBackend : ISaveBackend
     {
         if (bundle is null) throw new ArgumentNullException(nameof(bundle));
 
-        // The input arrays are the caller's (SaveSession caches them as clean-state bytes), so
-        // the write path must compress into fresh arrays - only the dictionary is recycled.
+        // 入力の配列は呼び出し側のものです（SaveSession が clean な状態のバイト列としてキャッシュして
+        // います）ので、書き込み経路では新しい配列へ圧縮します。使い回すのはディクショナリだけです。
         var documents = Interlocked.Exchange(ref _writeScratch, null)
             ?? new Dictionary<string, byte[]>(bundle.Documents.Count);
         foreach (var pair in bundle.Documents)
@@ -80,9 +81,9 @@ public sealed class CompressedSaveBackend : ISaveBackend
         Volatile.Write(ref _writeScratch, documents);
     }
 
-    // Builds [FormatTag][UncompressedLength][deflate body]. Empty plaintext yields a
-    // header-only payload (FormatTag + LE length 0, no deflate body), matching Decompress
-    // which rejects trailing bytes when the declared length is 0.
+    // [FormatTag][UncompressedLength][deflate body] を組み立てます。空の平文ではヘッダーだけの
+    // ペイロード（FormatTag + 長さ 0 の LE で、deflate の本体はありません）になります。これは、
+    // 宣言された長さが 0 のときに末尾の余分なバイトを拒む Decompress の扱いと揃えてあります。
     internal byte[] Compress(byte[] plaintext)
     {
         if (plaintext is null) throw new ArgumentNullException(nameof(plaintext));
@@ -127,7 +128,7 @@ public sealed class CompressedSaveBackend : ISaveBackend
         var result = new byte[uncompressedLength];
         if (uncompressedLength == 0)
         {
-            // Length 0 payloads must not carry a deflate body; anything else is corrupt.
+            // 長さ 0 のペイロードに deflate の本体が付いていたら壊れているものとして扱います。
             if (payload.Length != HeaderSize)
                 throw new InvalidDataException(
                     $"Compressed document '{documentKey}' has uncompressed length 0 but carries {payload.Length - HeaderSize} trailing bytes.");
@@ -148,8 +149,8 @@ public sealed class CompressedSaveBackend : ISaveBackend
             throw new InvalidDataException(
                 $"Compressed document '{documentKey}' inflated to {totalRead} bytes, expected {result.Length}.");
 
-        // Ensure the stream is fully consumed: extra inflated bytes would mean the stored
-        // length was wrong or the payload was concatenated with foreign data.
+        // ストリームを最後まで読み切ったかを確認します：膨らんだバイトが余るようなら、保存された
+        // 長さが間違っているか、ペイロードに余計なデータがくっついているということです。
         Span<byte> overflow = stackalloc byte[1];
         if (deflate.Read(overflow) != 0)
             throw new InvalidDataException(

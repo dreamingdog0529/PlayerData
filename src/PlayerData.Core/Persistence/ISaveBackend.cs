@@ -3,27 +3,27 @@ using System.Threading.Tasks;
 
 namespace PlayerData.Persistence;
 
-/// <summary>Persists and restores a <see cref="SaveBundle"/>.</summary>
+/// <summary><see cref="SaveBundle"/> を保存したり復元したりします。</summary>
 /// <remarks>
-/// Ownership contract:
+/// 所有権の約束ごとです：
 /// <list type="bullet">
-/// <item><description><see cref="ReadAsync"/>: ownership of the returned bundle - its Documents
-/// dictionary and every byte[] value in it - transfers to the caller. The implementation must
-/// not retain or reuse references to them after returning; the caller is free to mutate the
-/// contents in place.</description></item>
-/// <item><description><see cref="WriteAsync"/>: the bundle argument (including its Documents
-/// dictionary and byte[] values) is read-only and only valid for the duration of the call. The
-/// caller may recycle those objects as soon as the call completes, so an implementation that
-/// wants to keep the data must copy it.</description></item>
+/// <item><description><see cref="ReadAsync"/>：返したバンドルの所有権（その Documents
+/// ディクショナリと、中のすべての byte[] の値を含みます）は呼び出し側へ移ります。実装側は
+/// 返したあとにそれらへの参照を持ち続けたり再利用したりしないでください。呼び出し側は
+/// 中身をその場で書き換えても大丈夫です。</description></item>
+/// <item><description><see cref="WriteAsync"/>：バンドルの引数（その Documents ディクショナリと
+/// byte[] の値を含みます）は読み取り専用で、呼び出しの間だけ有効です。呼び出しが終われば
+/// 呼び出し側はそれらのオブジェクトを再利用してかまいませんので、データを手元に残したい
+/// 実装はコピーを取るようにしてください。</description></item>
 /// </list>
 /// </remarks>
 public interface ISaveBackend
 {
-    /// <summary>Reads the persisted bundle, or null when no save is present. Ownership of the
-    /// returned bundle transfers to the caller (see the ownership contract on this interface).</summary>
+    /// <summary>保存されているバンドルを読みます。セーブがないときは null です。返したバンドルの
+    /// 所有権は呼び出し側へ移ります（このインターフェースの所有権の約束ごとをご覧ください）。</summary>
     ValueTask<SaveBundle?> ReadAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Persists the bundle. The bundle is only valid for the duration of the call
-    /// (see the ownership contract on this interface).</summary>
+    /// <summary>バンドルを保存します。バンドルは呼び出しの間だけ有効です
+    /// （このインターフェースの所有権の約束ごとをご覧ください）。</summary>
     ValueTask WriteAsync(SaveBundle bundle, CancellationToken cancellationToken = default);
 }

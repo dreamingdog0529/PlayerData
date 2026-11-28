@@ -7,7 +7,7 @@
   <PropertyGroup>
     <PackageId>PlayerData.MessagePipe</PackageId>
     <Version>0.1.1</Version>
-    <Description>Publishes PlayerData store changes via MessagePipe.</Description>
+    <Description>PlayerData のストアの変更を MessagePipe で配信します。</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
   <ItemGroup>

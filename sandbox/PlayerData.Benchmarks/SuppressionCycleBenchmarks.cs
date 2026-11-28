@@ -4,14 +4,14 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Benchmarks;
 
-// Measures one whole SuppressNotifications cycle (open scope -> mutate -> Dispose/flush) as a
-// single op, pricing the pieces the per-mutation benchmarks can't see: the scope instance
-// itself and the pending-change list the collection store coalesces into while suppressed.
-// Mutations swap pre-allocated instances (same technique as ZeroAllocationBenchmarks) so caller
-// payload construction stays out of the measurement, and handlers are subscribed so the flush
-// actually invokes them, like a UI-bound session would.
-// These cycles sit in the tens-of-nanoseconds-to-microsecond range, where single-process JIT
-// tiering variance can swamp the effect; launchCount 3 averages across separate processes.
+// SuppressNotifications の周期全体（スコープを開く、変更する、Dispose して流し切るまで）を1つの処理として
+// 測ります。変更ごとのベンチマークでは見えない部分、つまりスコープのインスタンス自身と、抑制されている間に
+// コレクションのストアがため込んでまとめる、保留中の変更のリストに値段を付けます。
+// 変更では、あらかじめ確保しておいたインスタンスへ差し替えます（ZeroAllocationBenchmarks と同じやり方です）。
+// これで、呼び出し側がデータを組み立てる分は計測から外れます。また、ハンドラを購読しておくことで、
+// UI につながったセッションと同じように、流し切るときに実際にハンドラが呼ばれます。
+// これらの周期は数十ナノ秒からマイクロ秒の範囲にあるので、1プロセスだけだと JIT の段階的な最適化の
+// ばらつきに効果が埋もれてしまうことがあります。launchCount 3 で、別プロセスの平均を取ります。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 3, warmupCount: 5, iterationCount: 10)]
 public class SuppressionCycleBenchmarks
@@ -36,7 +36,7 @@ public class SuppressionCycleBenchmarks
         _items.Upsert(_itemA);
     }
 
-    // Open + immediately dispose: isolates the cost of the scope itself.
+    // 開いてすぐに破棄します。スコープ自身のコストだけを切り出します。
     [Benchmark(Baseline = true)]
     public void SuppressAndFlush_Empty()
     {
@@ -45,7 +45,7 @@ public class SuppressionCycleBenchmarks
         }
     }
 
-    // A representative batch mutation: BurstSize coalesced collection changes flushed on dispose.
+    // 代表的な、まとめての変更です。BurstSize 件の、まとめられたコレクションの変更が、破棄のときに流し切られます。
     [Benchmark]
     public void SuppressAndFlush_CollectionBurst()
     {

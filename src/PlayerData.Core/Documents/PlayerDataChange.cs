@@ -20,7 +20,7 @@ public readonly record struct BagChange<TKey, T>(TKey Key, PlayerDataChangeKind 
     where TKey : notnull
     where T : class;
 
-// Retained alias for adapter packages that previously used PlayerDataChange.
+// アダプターパッケージが PlayerDataChange の形で変更を受け取れるようにするための別名です。
 public readonly record struct PlayerDataChange<TKey, T>(TKey Key, PlayerDataChangeKind Kind, T? Value)
     where TKey : notnull
     where T : class

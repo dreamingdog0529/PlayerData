@@ -6,15 +6,15 @@ public interface IDoc<T> where T : class
 {
     T Value { get; }
 
-    // updater may run more than once under CAS contention - it must be pure (no side effects).
+    // updater は CAS の競合時に複数回実行されることがありますので、純粋に（副作用なしで）書いてください。
     T Update(Func<T, T> updater);
 
-    // Same as Update(Func<T,T>) but threads state through instead of relying on a capturing
-    // closure, so callers with per-call data can update without allocating.
+    // Update(Func<T,T>) と同じものですが、キャプチャするクロージャに頼る代わりに状態を引き回します。
+    // 呼び出しごとのデータがある場合でも、アロケーションなしに更新できます。
     T Update<TState>(TState state, Func<TState, T, T> updater);
 
     T Replace(T value);
 
-    // Fires on user writes only by default. Load does not raise this.
+    // 既定ではユーザーの書き込みのときだけ発火します。読み込みでは発火しません。
     event Action<DocChange<T>>? Changed;
 }

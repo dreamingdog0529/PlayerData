@@ -9,7 +9,7 @@ using PlayerData.Schema;
 
 namespace PlayerData.Unity.Editor
 {
-    /// <summary>One IDoc&lt;&gt;/IBag&lt;,&gt; property discovered on a live session instance.</summary>
+    /// <summary>ライブセッションのインスタンス上で見つけた IDoc&lt;&gt;/IBag&lt;,&gt; プロパティ 1 件です。</summary>
     public sealed class LiveDocumentDescriptor
     {
         public LiveDocumentDescriptor(string propertyName, bool isCollection, Type entityType, Type? keyType)
@@ -24,18 +24,18 @@ namespace PlayerData.Unity.Editor
 
         public bool IsCollection { get; }
 
-        /// <summary>T of IDoc&lt;T&gt;, or the element T of IBag&lt;TKey, T&gt;.</summary>
+        /// <summary>IDoc&lt;T&gt; の T、または IBag&lt;TKey, T&gt; の要素の T です。</summary>
         public Type EntityType { get; }
 
-        /// <summary>TKey of IBag&lt;TKey, T&gt;; null for single documents.</summary>
+        /// <summary>IBag&lt;TKey, T&gt; の TKey です。単一ドキュメントでは null になります。</summary>
         public Type? KeyType { get; }
     }
 
     /// <summary>
-    /// UI-independent adapter over one live ISaveSession instance: enumerates its generated
-    /// IDoc&lt;&gt;/IBag&lt;,&gt; properties, reads values as pretty JSON and applies JSON edits
-    /// exclusively through the runtime APIs (Replace/Set/Upsert/Remove), so the game observes
-    /// edits via its existing Changed subscriptions. Never writes entity members directly.
+    /// ライブの ISaveSession インスタンス 1 件に対する、UI に依存しないアダプターです。生成された
+    /// IDoc&lt;&gt;/IBag&lt;,&gt; プロパティを列挙し、値を整えた JSON として読み、JSON の編集は
+    /// ランタイム API（Replace/Set/Upsert/Remove）を通してだけ適用します。なので、ゲーム側では
+    /// 既存の Changed の購読を通して編集に気づけます。entity のメンバーを直接書くことは決してしません。
     /// </summary>
     public sealed class LiveSessionView : IDisposable
     {
@@ -92,26 +92,26 @@ namespace PlayerData.Unity.Editor
 
         public IReadOnlyList<LiveDocumentDescriptor> Documents => _documents;
 
-        // ---- Whole documents (singles and collections) ----
+        // ---- ドキュメント全体（単一とコレクション） ----
 
         /// <summary>
-        /// Current value as pretty JSON: the single document's Value, or for collections the
-        /// whole bag as one JSON object (key → entity), matching the on-disk collection shape.
+        /// 現在の値を整えた JSON で返します。単一ドキュメントではその Value、コレクションでは
+        /// bag 全体を 1 つの JSON オブジェクト（キー → entity）として返し、ディスク上のコレクションの形に合わせます。
         /// </summary>
         public string GetJson(string propertyName) => GetHandle(propertyName).GetJson();
 
         /// <summary>
-        /// Editability gate: the current value must survive bytes → JSON → bytes losslessly,
-        /// same philosophy as the on-disk viewer. When false the document is view-only and
-        /// <paramref name="failureReason"/> says why.
+        /// 編集できるかどうかのガードです。現在の値が、バイト列 → JSON → バイト列と変換しても無損失で残らないといけません。
+        /// ディスク上のビューワーと同じ考え方です。false のとき、そのドキュメントは表示だけになり、
+        /// <paramref name="failureReason"/> にその理由が入ります。
         /// </summary>
         public bool CanEdit(string propertyName, out string? failureReason) =>
             GetHandle(propertyName).CanEdit(out failureReason);
 
         /// <summary>
-        /// Parses JSON and applies it via IDoc.Replace (singles) or an IBag Set/Remove diff
-        /// (collections). Returns false with the error message (parse error, unknown property
-        /// name, or view-only reason); parse and gate failures never mutate the session.
+        /// JSON をパースして、IDoc.Replace（単一の場合）または IBag の Set/Remove の差分（コレクションの場合）で適用します。
+        /// 失敗したときはエラーメッセージとともに false を返します（パースエラー、未知のプロパティ名、
+        /// 表示だけである理由などです）。パースやガードで失敗したときは、セッションを決して変更しません。
         /// </summary>
         public bool ApplyJson(string propertyName, string json, out string? error)
         {
@@ -132,28 +132,28 @@ namespace PlayerData.Unity.Editor
             }
             catch (Exception ex)
             {
-                // Deserialization runs before Replace, so a single-doc failure here never
-                // mutated the doc. A collection diff can stop partway on a key mismatch; the
-                // caller re-reads the snapshot to show the actual state.
+                // デシリアライズは Replace の前に動くので、単一ドキュメントでここで失敗しても、そのドキュメントが
+                // 変更されることはありません。コレクションの差分は、キーが合わないところで途中で止まることがあります。
+                // 呼び出し側では、スナップショットを読み直して実際の状態を表示します。
                 error = ex.Message;
                 return false;
             }
         }
 
-        // ---- Collections ----
+        // ---- コレクション ----
 
-        /// <summary>Keys currently present in the bag's Snapshot (boxed).</summary>
+        /// <summary>bag の Snapshot に現在あるキーです（ボックス化してあります）。</summary>
         public IReadOnlyList<object> GetEntryKeys(string propertyName) =>
             GetCollection(propertyName).GetEntryKeys();
 
-        /// <summary>One entry as pretty JSON. Throws KeyNotFoundException when the key is missing.</summary>
+        /// <summary>エントリ 1 件を整えた JSON で返します。キーがないときは KeyNotFoundException を投げます。</summary>
         public string GetEntryJson(string propertyName, object key) =>
             GetCollection(propertyName).GetEntryJson(key);
 
         /// <summary>
-        /// Parses JSON and applies it via IBag.Set(key, entity). Returns false with the error
-        /// message without mutating the bag — including when the payload's key member differs
-        /// from <paramref name="key"/> (the key of an existing entry cannot be changed).
+        /// JSON をパースして、IBag.Set(key, entity) で適用します。失敗したときはエラーメッセージとともに false を返し、bag は変更しません。
+        /// ペイロードのキーメンバーが <paramref name="key"/> と違うとき（既存エントリのキーは変えられません）も含みます。
+        /// 
         /// </summary>
         public bool ApplyEntryJson(string propertyName, object key, string json, out string? error)
         {
@@ -168,13 +168,13 @@ namespace PlayerData.Unity.Editor
             }
             catch (Exception ex)
             {
-                // Set validates the key before touching the dictionary, so nothing was mutated.
+                // Set は辞書に触る前にキーを検証するので、何も変更されていません。
                 error = ex.Message;
                 return false;
             }
         }
 
-        /// <summary>Parses JSON and adds/replaces the entry via IBag.Upsert (key comes from the payload).</summary>
+        /// <summary>JSON をパースして、IBag.Upsert でエントリを追加または置き換えます（キーはペイロードから来ます）。</summary>
         public bool AddEntryJson(string propertyName, string json, out string? error)
         {
             if (json is null) throw new ArgumentNullException(nameof(json));
@@ -193,15 +193,15 @@ namespace PlayerData.Unity.Editor
             }
         }
 
-        /// <summary>Removes the entry via IBag.Remove. False when the key was not present.</summary>
+        /// <summary>IBag.Remove でエントリを削除します。キーがなかったときは false です。</summary>
         public bool RemoveEntry(string propertyName, object key) =>
             GetCollection(propertyName).RemoveEntry(key);
 
-        // ---- Change flag ----
+        // ---- 変更フラグ ----
 
         /// <summary>
-        /// True when any subscribed document/bag/session event fired since the last call.
-        /// Intended for throttled UI refresh: poll this instead of repainting per event.
+        /// 前回の呼び出し以降、購読しているドキュメント、bag、セッションのどれかのイベントが発火したら true です。
+        /// UI の更新を間引くためのものです。イベントごとに再描画するのではなく、これをポーリングしてください。
         /// </summary>
         public bool ConsumeChangeFlag() => Interlocked.Exchange(ref _changeFlag, 0) != 0;
 
@@ -222,9 +222,9 @@ namespace PlayerData.Unity.Editor
 
         private void OnSessionDirtyChanged(bool dirty) => SetChangeFlag();
 
-        // The generic handle classes give us statically typed access to Value/Replace/Set/Upsert/
-        // Remove and to the Changed event (whose delegate type is generic); only this one
-        // construction step needs reflection.
+        // ジェネリックなハンドルクラスがあるおかげで、Value/Replace/Set/Upsert/
+        // Remove と Changed イベント（デリゲート型がジェネリックです）に、静的に型付けされた形でアクセスできます。リフレクションが
+        // 必要なのは、この構築のステップだけです。
         private static Handle CreateHandle(Type handleType, ISaveSession session, PropertyInfo property, Action notify)
         {
             object store = property.GetValue(session);
@@ -341,9 +341,9 @@ namespace PlayerData.Unity.Editor
 
             public override void ApplyJson(string json)
             {
-                // Parse fully first so JSON errors mutate nothing. Set (not Upsert) so a JSON
-                // key that disagrees with the payload's [PlayerDataKey] member fails loudly
-                // instead of silently landing under a different key.
+                // まず全体をパースして、JSON エラーでは何も変更されないようにします。Set（Upsert ではなく）を使うので、JSON の
+                // キーがペイロードの [PlayerDataKey] メンバーと食い違うときは、違うキーの下に静かに入ってしまうのではなく、
+                // はっきり失敗します。
                 Dictionary<TKey, T>? desired =
                     (Dictionary<TKey, T>?)MemoryPackJsonConverter.ObjectFromJson(json, typeof(Dictionary<TKey, T>));
                 if (desired is null)

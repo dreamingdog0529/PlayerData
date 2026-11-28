@@ -34,9 +34,9 @@ namespace PlayerData.Unity.Editor
         }
     }
 
-    // UI construction is separated from the EditorWindow lifecycle so EditMode tests can build
-    // and inspect the hierarchy without relying on window layout callbacks (which are not
-    // guaranteed to run in batch mode).
+    // UI の構築は EditorWindow のライフサイクルから分けてあります。EditMode テストが、ウィンドウのレイアウト用コールバックに頼らずに
+    // 階層を作って確認できるようにするためです（そのコールバックは、バッチモードでは
+    // 動く保証がありません）。
     internal static class ViewerUI
     {
         internal const string RootMenuName = "root-menu";
@@ -59,10 +59,10 @@ namespace PlayerData.Unity.Editor
         internal const string ErrorBoxName = "error-box";
         internal const string EmptyStateName = "empty-state";
 
-        // Per-project key so projects sharing this machine keep independent viewer roots.
+        // プロジェクトごとのキーです。このマシンを共有するプロジェクト同士で、ビューワーのルートが独立したままになるようにしています。
         internal static string RootPathPrefsKey => "PlayerData.Viewer.RootPath." + PlayerSettings.productGUID;
 
-        // One viewer-wide preference (not per document): true = JSON view.
+        // ビューワー全体で 1 つの設定です（ドキュメントごとではありません）。true なら JSON ビューです。
         internal static string JsonViewPrefsKey => "PlayerData.Viewer.JsonView." + PlayerSettings.productGUID;
 
         internal static ViewerPanel BuildInto(VisualElement root, PlayerDataViewerController controller, string initialRootPath)
@@ -120,8 +120,8 @@ namespace PlayerData.Unity.Editor
             controller.RefreshSessionTypes();
             root.Clear();
 
-            // Located by search, not a literal path, so it resolves both when the package lives
-            // under Assets/ (this repo) and when consumed from Packages/ via UPM.
+            // リテラルのパスではなく検索で見つけています。パッケージが Assets/ の下にあるとき（このリポジトリです）も、
+            // UPM 経由で Packages/ から使うときも、どちらでも解決できるようにするためです。
             string[] styleGuids = AssetDatabase.FindAssets("PlayerDataViewerWindow t:StyleSheet");
             if (styleGuids.Length > 0)
                 root.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(AssetDatabase.GUIDToAssetPath(styleGuids[0])));
@@ -133,7 +133,7 @@ namespace PlayerData.Unity.Editor
 
             _rootMenu = new ToolbarMenu();
             _rootMenu.name = ViewerUI.RootMenuName;
-            // Long custom paths must not push the other toolbar controls out of view.
+            // 長いカスタムパスが、ほかのツールバーのコントロールを見えないところへ押し出してしまわないようにします。
             _rootMenu.style.flexShrink = 1;
             _rootMenu.style.overflow = Overflow.Hidden;
             toolbar.Add(_rootMenu);
@@ -156,10 +156,10 @@ namespace PlayerData.Unity.Editor
             _searchField.RegisterValueChangedCallback(evt => OnSearchChanged(evt.newValue));
             toolbar.Add(_searchField);
 
-            // Plain flex row + a hand-rolled drag handle instead of TwoPaneSplitView: in a
-            // code-built editor window that control collapsed its fixed pane to 0 width on the
-            // first zero-size layout pass and its dragger stopped resizing the panes, so the
-            // split is laid out and dragged explicitly here.
+            // TwoPaneSplitView ではなく、素の flex の行と手作りのドラッグハンドルを使っています。コードで組み立てた
+            // エディターウィンドウでは、そのコントロールはサイズゼロの最初のレイアウトパスで、固定ペインを幅 0 に潰してしまい、
+            // ドラッガーでペインのサイズを変えられなくなってしまったためです。なので、分割は
+            // ここで明示的にレイアウトし、ドラッグも扱っています。
             VisualElement splitView = new VisualElement();
             splitView.name = ViewerUI.SplitViewName;
             splitView.style.flexGrow = 1;
@@ -173,14 +173,14 @@ namespace PlayerData.Unity.Editor
                 autoExpand = true,
             };
             _treeView.name = ViewerUI.TreeViewName;
-            // flexBasis, not width: TreeView's own stylesheet sets flex-grow/flex-basis, which
-            // wins over an inline width on the flex main axis (both panes end up ~equal halves).
+            // width ではなく flexBasis です。TreeView 自身のスタイルシートが flex-grow/flex-basis を設定していて、そちらのほうが
+            // flex の主軸ではインラインの width より優先されてしまいます（両方のペインがほぼ半々になってしまいます）。
             _treeView.style.flexBasis = 260;
             _treeView.style.flexGrow = 0;
             _treeView.style.flexShrink = 0;
             _treeView.style.minWidth = 120;
-            // A row is icon + name + status dot: the icon distinguishes the node kind and the dot
-            // flags the document's state at a glance (its tooltip carries the state text).
+            // 行は、アイコン + 名前 + ステータスドットです。アイコンでノードの種類がわかり、ドットで
+            // ドキュメントの状態がひと目でわかります（ツールチップに状態のテキストが入っています）。
             _treeView.makeItem = static () =>
             {
                 VisualElement row = new VisualElement();
@@ -198,8 +198,8 @@ namespace PlayerData.Unity.Editor
                 dot.AddToClassList("playerdata-viewer__tree-dot");
                 row.Add(dot);
 
-                // Right-click a folder or file row to open its location; the menu reads the bound
-                // node from the row's userData (refreshed on each bind).
+                // フォルダーやファイルの行を右クリックすると、その場所を開けます。メニューは、行の userData から
+                // バインドされたノードを読みます（バインドのたびに更新されます）。
                 row.AddManipulator(new ContextualMenuManipulator(PopulateTreeContextMenu));
                 return row;
             };
@@ -229,7 +229,7 @@ namespace PlayerData.Unity.Editor
             _detailContent.style.display = DisplayStyle.None;
             detailPane.Add(_detailContent);
 
-            // Header row: the document name, with its status badge pinned alongside.
+            // ヘッダーの行です。ドキュメント名と、そのステータスバッジを並べて固定しています。
             VisualElement headerRow = new VisualElement();
             headerRow.AddToClassList("playerdata-viewer__detail-headerrow");
             _detailHeader = new Label();
@@ -257,7 +257,7 @@ namespace PlayerData.Unity.Editor
                 if (evt.newValue)
                     SetViewMode(json: false, persist: true);
                 else
-                    SyncViewToggles(); // clicking the active toggle is a no-op
+                    SyncViewToggles(); // 有効になっているトグルをクリックしても何もしません
             });
             viewModeBar.Add(_fieldsToggle);
             _jsonToggle = new ToolbarToggle { text = ViewerDisplayNames.JsonTabLabel };
@@ -271,8 +271,8 @@ namespace PlayerData.Unity.Editor
             });
             viewModeBar.Add(_jsonToggle);
 
-            // Apply/Revert live in this top bar (right-aligned) so they stay reachable without
-            // scrolling past a long document.
+            // Apply/Revert はこの上のバー（右寄せ）に置いてあります。長いドキュメントをスクロールしなくても
+            // 届くようにするためです。
             VisualElement viewModeSpacer = new VisualElement();
             viewModeSpacer.style.flexGrow = 1;
             viewModeBar.Add(viewModeSpacer);
@@ -303,14 +303,14 @@ namespace PlayerData.Unity.Editor
             _jsonScroll.Add(_jsonField);
             _detailContent.Add(_jsonScroll);
 
-            // Outside the content block so load failures are visible while the pane is empty.
+            // コンテンツブロックの外に置いてあります。ペインが空のときでも、読み込みの失敗が見えるようにするためです。
             _errorBox = new HelpBox(string.Empty, HelpBoxMessageType.Error);
             _errorBox.name = ViewerUI.ErrorBoxName;
             _errorBox.style.display = DisplayStyle.None;
             detailPane.Add(_errorBox);
 
-            // Fills the pane while nothing is selected (and no error is showing) so it guides
-            // instead of sitting blank.
+            // 何も選ばれていない（エラーも出ていない）ときはペインを埋めて、白紙のまま放っておくのではなく、
+            // 案内が出るようにします。
             _emptyState = new VisualElement();
             _emptyState.name = ViewerUI.EmptyStateName;
             _emptyState.AddToClassList("playerdata-viewer__empty");
@@ -352,15 +352,15 @@ namespace PlayerData.Unity.Editor
 
         private void OnPlayModeStateChanged(PlayModeStateChange change)
         {
-            // Entered* only: during Exiting* the scene is mid-teardown, and the registry raises
-            // Changed itself when it clears its entries on play-mode exit.
+            // Entered* のときだけです。Exiting* の間はシーンが撤収の途中ですし、レジストリはプレイモードを抜けるときに
+            // エントリを消す際に自分で Changed を上げます。
             if (change == PlayModeStateChange.EnteredPlayMode || change == PlayModeStateChange.EnteredEditMode)
                 Rescan();
         }
 
-        // Dragging the divider resizes the tree; the detail pane flexes to take the rest.
-        // Look and hover cursor come from PlayerDataViewerWindow.uss (inline styles cannot set
-        // the built-in resize cursor).
+        // 仕切りをドラッグするとツリーのサイズが変わり、詳細ペインが伸びて残りを受け持ちます。
+        // 見た目とホバー時のカーソルは PlayerDataViewerWindow.uss から来ます（インラインスタイルでは、組み込みの
+        // リサイズ用カーソルを設定できないためです）。
         private VisualElement BuildSplitDivider(VisualElement splitContainer)
         {
             VisualElement divider = new VisualElement();
@@ -381,7 +381,7 @@ namespace PlayerData.Unity.Editor
             {
                 if (!divider.HasPointerCapture(evt.pointerId))
                     return;
-                // Keeps the detail pane's minWidth (160) plus the divider itself (5) reachable.
+                // 詳細ペインの minWidth（160）と仕切りそのもの（5）に届く状態を保ちます。
                 float max = Mathf.Max(120f, splitContainer.resolvedStyle.width - 165f);
                 _treeView.style.flexBasis = Mathf.Clamp(dragStartWidth + evt.position.x - dragStartX, 120f, max);
             });
@@ -406,9 +406,9 @@ namespace PlayerData.Unity.Editor
             Rescan();
         }
 
-        // The dropdown's face answers "which folder am I looking at?" without exposing a raw
-        // path in the common case: the game's own save folder reads as a plain-language label,
-        // anything else shows the path itself. The tooltip always carries the resolved path.
+        // ドロップダウンの表示面は、「今見ているのはどのフォルダーか」に、生のパスを見せずに答えます。
+        // よくあるケースではそうです。ゲーム自身のセーブフォルダーはわかりやすい言葉のラベルとして読め、
+        // それ以外ではパスそのものを表示します。ツールチップには、いつも解決済みのパスが入っています。
         private void UpdateRootMenu()
         {
             bool isDefault = string.Equals(
@@ -426,11 +426,11 @@ namespace PlayerData.Unity.Editor
                 isDefault ? DropdownMenuAction.Status.Checked : DropdownMenuAction.Status.Normal);
             if (!isDefault)
             {
-                // DropdownMenu treats '/' in an item name as a submenu separator, so the
-                // active custom path is shown with backslashes to stay a single item.
+                // DropdownMenu は、項目名の中の '/' をサブメニューの区切りとして扱います。なので、
+                // 有効なカスタムパスは、1 つの項目のままになるよう、バックスラッシュで表示します。
                 _rootMenu.menu.AppendAction(
                     _rootPath.Replace('/', '\\'),
-                    _ => { }, // already active; selecting it keeps the current root
+                    _ => { }, // すでに有効です。選んでも現在のルートのままです
                     DropdownMenuAction.Status.Checked);
             }
 
@@ -440,7 +440,7 @@ namespace PlayerData.Unity.Editor
                 DropdownMenuAction.Status.Normal);
         }
 
-        // Forward slashes, no trailing separator: "C:\X\" and "C:/X" name the same folder.
+        // スラッシュで統一し、末尾の区切りは付けません。もとの表記が違っても、同じフォルダーとして比べます。
         private static string NormalizePathForComparison(string path) =>
             path.Replace('\\', '/').TrimEnd('/');
 
@@ -461,9 +461,9 @@ namespace PlayerData.Unity.Editor
             _treeRoots = SaveTreeModel.Build(
                 _rootPath, _controller.LoadScannedSaves(), CollectLiveSessions());
             RebuildTree();
-            // Scanning reloads every save (and recreates the live views), so the shown document
-            // is re-resolved by identity: still present → re-shown freshly loaded (pending edits
-            // are discarded, same as selecting another node), gone → the detail stays cleared.
+            // スキャンすると、すべてのセーブを読み直し（ライブビューも作り直し）ます。なので、表示中のドキュメントは
+            // 同一性で解決し直します。まだあれば、新しく読み込んで再表示し（未適用の編集は、ほかのノードを選んだときと
+            // 同じように破棄されます）、なければ、詳細は消えたままにします。
             ClearDetail();
             if (previous is not null && TryFindSameDocument(_visibleItems, previous, out SaveTreeNode match))
             {
@@ -472,7 +472,7 @@ namespace PlayerData.Unity.Editor
             }
         }
 
-        // Identity, not tree id: ids are positional and shift when saves appear or disappear.
+        // ツリーの id ではなく、同一性で見ます。id は位置によるものなので、セーブが現れたり消えたりするとずれてしまいます。
         private static bool TryFindSameDocument(
             IEnumerable<TreeViewItemData<SaveTreeNode>> items, SaveTreeNode previous, out SaveTreeNode match)
         {
@@ -505,8 +505,8 @@ namespace PlayerData.Unity.Editor
                 && string.Equals(left.PropertyName, right.PropertyName, StringComparison.Ordinal);
         }
 
-        // Recreates the live views from the registry. Session display names are the tree's
-        // lookup key, so duplicates get an index suffix (same rule as the session dropdown).
+        // レジストリからライブビューを作り直します。セッションの表示名がツリーの検索キーなので、
+        // 重複したときはインデックスの suffix を付けます（セッションのドロップダウンと同じルールです）。
         private IReadOnlyList<SaveTreeLiveSession> CollectLiveSessions()
         {
             DisposeLiveViews();
@@ -559,8 +559,8 @@ namespace PlayerData.Unity.Editor
             _treeView.Rebuild();
         }
 
-        // The filter matches document leaves by display-name substring; every ancestor of a
-        // match stays visible so the leaf keeps its context.
+        // フィルターは、表示名の部分一致でドキュメントのリーフに一致します。一致したものの祖先は
+        // すべて見えるままにして、リーフが文脈を失わないようにします。
         private bool TryBuildItem(SaveTreeNode node, out TreeViewItemData<SaveTreeNode> item)
         {
             List<TreeViewItemData<SaveTreeNode>> children = new List<TreeViewItemData<SaveTreeNode>>();
@@ -582,7 +582,7 @@ namespace PlayerData.Unity.Editor
             return keep;
         }
 
-        // ---- Detail pane ----
+        // ---- 詳細ペイン ----
 
         private void OnTreeSelectionChanged(IEnumerable<object> selection)
         {
@@ -596,8 +596,8 @@ namespace PlayerData.Unity.Editor
             ShowNode(node);
         }
 
-        // Changing selection discards unapplied edits on purpose: this UI has no confirmation
-        // dialogs, and the rule is pinned by
+        // 選択を変えると、未適用の編集はわざと破棄されます。この UI には確認ダイアログがなく、そのルールは
+        // 次のテストで固定されています。
         // SwitchingDocumentSelection_DiscardsUnappliedEdits_ByDesign.
         private void ShowNode(SaveTreeNode? node)
         {
@@ -654,8 +654,8 @@ namespace PlayerData.Unity.Editor
             _editable = view.CanEdit;
             _isCollection = entry.Descriptor?.IsCollection == true;
             _payloadType = entry.Descriptor?.PayloadType;
-            // Entity T of the collection (each entry's value type); the payload itself is the
-            // ConcurrentDictionary wrapper, which the collection Fields surface never reflects on.
+            // コレクションの entity の T（各エントリの値の型）です。ペイロードそのものは ConcurrentDictionary の
+            // ラッパーで、コレクションの Fields 画面がリフレクションで見ることはありません。
             _entityType = entry.Descriptor?.DocumentType;
             _keyType = entry.Descriptor?.KeyType;
 
@@ -708,8 +708,8 @@ namespace PlayerData.Unity.Editor
 
             ShowDetailContent();
             _detailHeader.text = $"{descriptor.PropertyName} ({node.SessionName})";
-            // Live docs have no on-disk DocumentState; the live round-trip gate maps onto the
-            // same two states (and colours) the disk pane uses.
+            // ライブのドキュメントには、ディスク上の DocumentState がありません。ライブの往復のガードは、ディスク側のペインが
+            // 使うのと同じ 2 つの状態（と色）に対応付けます。
             SetStatusBadge(
                 editable ? DocumentState.Editable : DocumentState.ReadOnlyRoundTrip,
                 editBlockReason ?? jsonError ?? string.Empty);
@@ -730,8 +730,8 @@ namespace PlayerData.Unity.Editor
             PresentDocument(json, jsonError, fieldsBlockReason);
         }
 
-        // Shared tail of the disk and live populate paths: fills the JSON field, applies the
-        // Fields gate and restores the preferred view mode.
+        // ディスクとライブの、データを入れる経路に共通する最後の部分です。JSON フィールドに入力し、Fields の
+        // ガードを適用して、好みのビューモードに戻します。
         private void PresentDocument(string? json, string? jsonError, string? fieldsBlockReason)
         {
             _originalJson = json;
@@ -754,8 +754,8 @@ namespace PlayerData.Unity.Editor
                 ShowError($"Could not show values: {jsonError}");
         }
 
-        // Fields need a resolved schema, a renderable JSON payload and a JSON round-trip that
-        // preserves the bytes; anything else is JSON-view-only (read-only unless Editable).
+        // Fields には、解決済みのスキーマと、表示できる JSON ペイロードと、バイト列を保持する JSON の往復が必要です。
+        // それ以外は JSON ビューだけになります（Editable でない限り読み取り専用です）。
         private static string? FieldsBlockReason(DocumentEntry entry, DocumentView view, string stateReason)
         {
             if (entry.Descriptor is null)
@@ -787,8 +787,8 @@ namespace PlayerData.Unity.Editor
 
             if (json)
             {
-                // Fields -> JSON: the shared working copy is serialized into the text field,
-                // so nothing edited mid-switch is lost.
+                // Fields → JSON：共有の作業用コピーをテキストフィールドへシリアライズするので、
+                // 切り替えの途中で編集したものが失われることはありません。
                 if (_fields is not null)
                     _jsonField.SetValueWithoutNotify(_fields.ToJson());
                 ClearFieldsSurface();
@@ -797,8 +797,8 @@ namespace PlayerData.Unity.Editor
             }
             else
             {
-                // JSON -> Fields: parse the text back into the model; on error stay on JSON
-                // with the error shown (no silent fallback).
+                // JSON → Fields：テキストをモデルへパースし直します。エラーが出たら JSON のままにして、
+                // エラーを表示します（静かにフォールバックはしません）。
                 if (!TryBuildFieldsSurface(_jsonField.value))
                 {
                     SyncViewToggles();
@@ -818,9 +818,9 @@ namespace PlayerData.Unity.Editor
         {
             ClearFieldsSurface();
 
-            // A collection reflects on its entity T per entry; a single document on its payload
-            // type. Both need a resolved type — without one the Fields toggle should not have been
-            // reachable, so this is a defensive guard.
+            // コレクションは、エントリごとにその entity の T をリフレクションで見ます。単一ドキュメントは、そのペイロードの
+            // 型を見ます。どちらも解決済みの型が必要です。型がないのに Fields のトグルに届いてしまったということは本来ないはずなので、
+            // これは防御的なガードです。
             Type? surfaceType = _isCollection ? _entityType : _payloadType;
             if (surfaceType is null)
                 return false;
@@ -889,8 +889,8 @@ namespace PlayerData.Unity.Editor
             if (applied)
             {
                 HideError();
-                // Disk: ApplyJson reloaded the save; live: the session was mutated in place.
-                // Repopulating shows the state the target actually holds now.
+                // ディスクの場合：ApplyJson がセーブを読み直しました。ライブの場合：セッションがその場で変更されました。
+                // データを入れ直すことで、対象が今実際に持っている状態を表示します。
                 PopulateDetail();
             }
             else
@@ -905,7 +905,7 @@ namespace PlayerData.Unity.Editor
                 return;
 
             HideError();
-            // Live docs revert by re-reading the live snapshot; disk docs reload from disk.
+            // ライブのドキュメントは、ライブのスナップショットを読み直して revert します。ディスクのドキュメントは、ディスクから読み直します。
             if (_selectedNode.Kind != SaveTreeNodeKind.LiveDocument)
                 _controller.Reload();
             PopulateDetail();
@@ -922,11 +922,11 @@ namespace PlayerData.Unity.Editor
             _revertButton.SetEnabled(dirty);
         }
 
-        // "Changed from the original" is compared on canonical (parse + compact re-serialize)
-        // JSON so formatting drift between the converter output, the field editor's working
-        // copy and hand-typed text never counts as an edit. Unparseable typed JSON counts as
-        // dirty (Apply will surface the parse error), as do invalid field values (Revert must
-        // stay available to escape them).
+        // 「元の内容から変わったか」は、正規化した（パースして、コンパクトに再シリアライズした）JSON で比べます。
+        // コンバーターの出力、フィールドエディターの作業用コピー、手で打ったテキストの間の書式のずれが、編集として数えられないようにするためです。
+        // パースできない入力済み JSON は dirty として数えます（Apply でパースエラーが出ます）。無効なフィールドの値も同様です
+        // （そこから抜け出すために Revert が使えるままでないといけません）。
+        // 
         private bool IsDirty()
         {
             if (_originalJson is null)
@@ -1002,9 +1002,9 @@ namespace PlayerData.Unity.Editor
             _errorBox.style.display = DisplayStyle.None;
         }
 
-        // Right-click menu for a tree row: reveal a disk node's folder in the OS file browser
-        // (Explorer / Finder / file manager), and for a document, open its file in the default app.
-        // Groups and live nodes have no disk backing, so they get no entries.
+        // ツリーの行の右クリックメニューです。ディスクのノードのフォルダーを OS のファイルブラウザー
+        // （Explorer / Finder / ファイルマネージャー）で表示し、ドキュメントについては、そのファイルをデフォルトのアプリで開きます。
+        // グループとライブのノードにはディスクの裏付けがないので、項目は出しません。
         private static void PopulateTreeContextMenu(ContextualMenuPopulateEvent evt)
         {
             VisualElement element = evt.target as VisualElement;
@@ -1031,12 +1031,12 @@ namespace PlayerData.Unity.Editor
             }
         }
 
-        // The on-disk folder to reveal for a node, or null for nodes with no disk location
-        // (groups and live session/documents).
+        // ノードについて表示すべきディスク上のフォルダーです。ディスク上の場所がないノード
+        // （グループとライブのセッション／ドキュメント）では null です。
         internal static string RevealableDirectory(SaveTreeNode node) => node?.Location?.Directory;
 
-        // A disk document's own file, or null for anything that is not a disk document. The path
-        // follows DirectorySaveBackend's layout so the name matches what was written.
+        // ディスクのドキュメント自身のファイルです。ディスクのドキュメントでないものは null です。パスは
+        // DirectorySaveBackend のレイアウトに従うので、名前が書き込まれたものと合います。
         internal static string DocumentFilePath(SaveTreeNode node)
         {
             if (node is null || node.Kind != SaveTreeNodeKind.Document
@@ -1046,15 +1046,15 @@ namespace PlayerData.Unity.Editor
             return DirectorySaveBackend.DocumentFilePath(node.Location.Directory, node.StorageKey);
         }
 
-        // Reveals the document detail and takes down the empty-state placeholder.
+        // ドキュメントの詳細を表示し、空状態のプレースホルダーを取り下げます。
         private void ShowDetailContent()
         {
             _detailContent.style.display = DisplayStyle.Flex;
             _emptyState.style.display = DisplayStyle.None;
         }
 
-        // Paints the status badge and the card's left accent from the shared status palette, so a
-        // document's state reads the same here as its dot in the tree.
+        // 共有のステータスパレットから、ステータスバッジとカードの左側のアクセントを塗ります。ドキュメントの
+        // 状態が、ツリーの中のドットと同じようにここでも読めるようにするためです。
         private void SetStatusBadge(DocumentState state, string tooltip)
         {
             Color accent = ViewerStatusVisuals.AccentColor(state);
@@ -1094,10 +1094,10 @@ namespace PlayerData.Unity.Editor
             icon.style.backgroundImage = new StyleBackground(texture);
         }
 
-        // Only attention states get a dot: a healthy Editable document stays quiet so the ones
-        // that need a second look stand out. Live leaves get a "live" dot (their on-disk state is
-        // undefined until opened). The dot's tooltip explains the state, so hovering it answers
-        // "what's going on with this document?".
+        // ドットが付くのは、注意が必要な状態だけです。健全な Editable のドキュメントは静かにしておいて、
+        // もう一度見るべきものが目立つようにします。ライブのリーフには「live」のドットが付きます（そのディスク上の状態は、
+        // 開くまで定まりません）。ドットのツールチップが状態を説明するので、ホバーすれば
+        // 「このドキュメントはどうなっているの？」に答えられます。
         private static void BindTreeDot(VisualElement dot, SaveTreeNode node)
         {
             if (node.Kind == SaveTreeNodeKind.Document && node.State.HasValue
@@ -1121,7 +1121,7 @@ namespace PlayerData.Unity.Editor
             }
         }
 
-        // Short state label plus its plain-language explanation, e.g.
+        // 短い状態ラベルと、そのわかりやすい説明です。たとえば、
         // "View only — This value can't be edited safely in the viewer."
         private static string DotTooltip(DocumentState state)
         {
@@ -1144,15 +1144,15 @@ namespace PlayerData.Unity.Editor
                     iconName = "TextAsset Icon";
                     break;
                 default:
-                    return null; // Group rows lean on the foldout arrow alone.
+                    return null; // グループの行は、foldout の矢印だけに頼ります。
             }
 
             return EditorGUIUtility.IconContent(iconName)?.image as Texture2D;
         }
 
-        // ---- Test hooks ----
-        // Detached elements (no panel) do not dispatch ChangeEvent/ClickEvent, so EditMode tests
-        // drive the same handlers the controls are wired to.
+        // ---- テスト用の入口 ----
+        // 切り離された要素（パネルがないもの）は ChangeEvent/ClickEvent を送らないので、EditMode テストでは、
+        // コントロールにつながっているのと同じハンドラーを直接動かします。
 
         internal IReadOnlyList<TreeViewItemData<SaveTreeNode>> VisibleTreeItemsForTests => _visibleItems;
 
@@ -1162,8 +1162,8 @@ namespace PlayerData.Unity.Editor
             OnSessionChanged();
         }
 
-        // Selects a session that is not offered in the dropdown (e.g. a test-only fixture filtered
-        // out of the session list), mirroring OnSessionChanged without the dropdown round-trip.
+        // ドロップダウンに出ていないセッションを選びます（セッションの一覧から除外された、テスト専用のフィクスチャなどです）。
+        // ドロップダウンを経由せずに、OnSessionChanged を再現します。
         internal void SelectSessionByTypeForTests(Type sessionType)
         {
             _controller.SelectSession(sessionType);
@@ -1186,8 +1186,8 @@ namespace PlayerData.Unity.Editor
 
         internal void SetJsonTextForTests(string json)
         {
-            // Mirrors the runtime path (typing raises a change event → UpdateApplyState); the
-            // event is not dispatched reliably on an unattached panel, so the update is direct.
+            // ランタイムの経路を再現しています（入力すると変更イベントが上がり、UpdateApplyState へ進みます）。
+            // 付いていないパネルではイベントが確実には送られないので、更新は直接行います。
             _jsonField.SetValueWithoutNotify(json);
             UpdateApplyState();
         }

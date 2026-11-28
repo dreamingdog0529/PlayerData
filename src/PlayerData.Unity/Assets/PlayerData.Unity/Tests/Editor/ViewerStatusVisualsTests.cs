@@ -20,7 +20,7 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void AccentColor_TreatsBothViewOnlyStatesAsOneColour()
         {
-            // Round-trip and old-format are both "view only", so they share the amber accent.
+            // 往復変換と旧形式はどちらも「閲覧のみ」なので、琥珀色のアクセントを共有しています。
             Assert.That(
                 ViewerStatusVisuals.AccentColor(DocumentState.ReadOnlyRoundTrip),
                 Is.EqualTo(ViewerStatusVisuals.AccentColor(DocumentState.ReadOnlyFormatVersion)));

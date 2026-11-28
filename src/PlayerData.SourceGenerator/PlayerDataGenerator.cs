@@ -19,8 +19,8 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
     private const string KeyAttributeMetadataName = "PlayerData.Schema.PlayerDataKeyAttribute";
     private const string MemoryPackableAttributeMetadataName = "MemoryPack.MemoryPackableAttribute";
 
-    // Fixed members every generated session always emits; a document property name must not
-    // collide with any of them.
+    // 生成されるセッションがいつも出す、固定のメンバーです。ドキュメントのプロパティ名が、
+    // これらのどれともぶつからないようにしてください。
     private static readonly HashSet<string> ReservedPropertyNames = new(StringComparer.Ordinal)
     {
         "IsDirty", "IsLoaded", "Loaded", "Committed", "DirtyChanged",

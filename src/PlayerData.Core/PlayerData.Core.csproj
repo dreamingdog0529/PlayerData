@@ -8,7 +8,7 @@
   <PropertyGroup>
     <PackageId>PlayerData.Core</PackageId>
     <Version>0.1.1</Version>
-    <Description>Session-centric thread-safe player save data with MemoryPack persistence (IDoc/IBag, explicit session composition, multi-document commit).</Description>
+    <Description>セッションを中心にした、スレッドセーフなプレイヤーのセーブデータです。MemoryPack で保存します（IDoc/IBag、セッションの明示的な組み立て、複数ドキュメントのまとめてのコミットに対応しています）。</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
 

@@ -5,9 +5,9 @@ using PlayerData.Documents;
 
 namespace PlayerData.R3;
 
-// A plain Subject<T> wired to Changed would never detach (Changed holds a reference to it for the
-// store's whole lifetime). Overriding SubscribeCore instead gives each individual .Subscribe()
-// call its own attach/detach lifecycle.
+// ふつうの Subject<T> を Changed につないだだけだと、ずっと外れなくなってしまいます（Changed が、ストアの
+// 生存期間ずっと参照を持ち続けるためです）。そこで SubscribeCore を上書きして、.Subscribe() の
+// 呼び出しごとに、付けたり外したりできるようにしています。
 internal sealed class PlayerDataStoreObservable<T>(IDoc<T> store, bool replayCurrent) : Observable<T> where T : class
 {
     protected override IDisposable SubscribeCore(Observer<T> observer)
@@ -18,11 +18,12 @@ internal sealed class PlayerDataStoreObservable<T>(IDoc<T> store, bool replayCur
         return new Subscription(store, observer);
     }
 
-    // Holds the target store and observer as fields and uses its own instance method as the
-    // Changed handler, so subscribing allocates exactly one delegate (shared by += and -=)
-    // instead of a local-function Handler closure plus the closure Disposable.Create itself
-    // wraps into a second ephemeral object. The target field is Interlocked.Exchange'd to null
-    // before unsubscribing so a double Dispose() only detaches once.
+    // 対象のストアと observer をフィールドに持って、自分のインスタンスメソッドを
+    // Changed ハンドラとして使います。こうすると、購読のときに確保されるデリゲートは
+    // ちょうど1つだけ（+= と -= で共有されます）で済みます。ローカル関数の Handler クロージャや、
+    // Disposable.Create がそれを包んで作るもう1つの一時的なオブジェクトは要りません。
+    // 対象のフィールドは、購読を外す前に Interlocked.Exchange で null にしておくので、
+    // Dispose() を2回呼んでも、外す処理は1回だけ走ります。
     private sealed class Subscription : IDisposable
     {
         private IDoc<T>? _store;

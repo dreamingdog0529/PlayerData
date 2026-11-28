@@ -9,10 +9,10 @@ public interface IBag<TKey, T>
 {
     int Count { get; }
 
-    // Weakly consistent: enumerating this while another thread writes may observe some but not
-    // all of that write's effects (no exception is thrown and no entry is ever torn - each
-    // key's value is always read atomically). Does not represent a single frozen point in time
-    // the way a snapshot of an immutable collection would.
+    // 弱い整合性です：別のスレッドが書き込んでいる最中に列挙すると、その書き込みの影響の一部だけが
+    // 見えることがあります（例外は投げられませんし、エントリが中途半端な状態で見えることもありません。
+    // 各キーの値は常に原子的に読めます）。イミュータブルなコレクションのスナップショットのように、
+    // ある一時点を切り取ったものではない点にはご注意ください。
     IReadOnlyDictionary<TKey, T> Snapshot { get; }
 
     bool Contains(TKey key);
@@ -21,25 +21,25 @@ public interface IBag<TKey, T>
 
     T Get(TKey key);
 
-    // key = keySelector(entity). Throws if entity is null.
+    // キーは key = keySelector(entity) で決まります。entity が null のときは例外を投げます。
     T Upsert(T entity);
 
-    // Throws if key does not equal keySelector(entity).
+    // key が keySelector(entity) と一致しないときは例外を投げます。
     T Set(TKey key, T entity);
 
     bool TryUpdate(TKey key, Func<T, T> updater, out T updated);
 
-    // Throws KeyNotFoundException when the key is missing.
+    // キーがないときは KeyNotFoundException を投げます。
     T Update(TKey key, Func<T, T> updater);
 
     T GetOrAdd(TKey key, Func<TKey, T> factory);
 
-    // State-threading variants of the above - avoid a capturing closure at the call site when
-    // the updater/factory needs external data. updater/factory may run more than once under CAS
-    // contention - it must be pure (no side effects).
+    // 上のメソッドの、状態を引き回す版です。updater や factory が外のデータを必要とするときに、
+    // 呼び出し側でキャプチャするクロージャを作らずに済みます。updater / factory は CAS の競合時に
+    // 複数回実行されることがありますので、純粋に（副作用なしで）書いてください。
     bool TryUpdate<TState>(TKey key, TState state, Func<TState, T, T> updater, out T updated);
 
-    // Throws KeyNotFoundException when the key is missing.
+    // キーがないときは KeyNotFoundException を投げます。
     T Update<TState>(TKey key, TState state, Func<TState, T, T> updater);
 
     T GetOrAdd<TState>(TKey key, TState state, Func<TKey, TState, T> factory);
@@ -48,6 +48,6 @@ public interface IBag<TKey, T>
 
     void Clear();
 
-    // Fires on user writes only. Load does not raise this.
+    // ユーザーの書き込みのときだけ発火します。読み込みでは発火しません。
     event Action<BagChange<TKey, T>>? Changed;
 }

@@ -7,14 +7,13 @@ using PlayerData.Persistence;
 
 namespace PlayerData.Benchmarks;
 
-// Compares the current EncryptedSaveBackend.Protect/Unprotect (buffer-direct AES writes +
-// IncrementalHash-streamed MAC, see PlayerData.Core, ST-2 of plan
-// 202607141500-playerdata-core-perf-tuning) against a frozen copy of the pre-ST-2 implementation
-// (separate ciphertext / ivAndCiphertext / macInput arrays, taken verbatim before that change).
-// The old code is kept here only as a benchmark baseline, not as production code - it is dead
-// outside this comparison. The two sides use independently generated keys: performance and
-// allocation cost do not depend on the key's contents, only on its length, so there is no need
-// for Old and New to agree on the same key value.
+// 現在の EncryptedSaveBackend.Protect / Unprotect（バッファへ直接 AES で書き込み、IncrementalHash で
+// MAC を流し込む形です。PlayerData.Core 側と、計画 202607141500-playerdata-core-perf-tuning の ST-2 を
+// ご覧ください）と、ST-2 より前の実装を凍結したコピー（暗号文、ivAndCiphertext、macInput の配列を別々に持つ形で、
+// その変更の直前のものをそのまま持ってきたものです）を比べます。古いコードは、比べるための基準として
+// ここに置いているだけです。本番のコードではなく、この比較の外では使われません。両側では別々に生成した
+// キーを使っています。性能や確保のコストはキーの中身ではなく長さだけで決まるので、古い側と新しい側で
+// 同じキーの値にそろえる必要はありません。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 1, warmupCount: 3, iterationCount: 5)]
 public class EncryptedSaveBackendBenchmarks
@@ -62,7 +61,7 @@ public class EncryptedSaveBackendBenchmarks
     [Benchmark]
     public byte[] Unprotect_New_DirectBuffer() => _backend.Unprotect(FormatVersion, DocumentKey, _newPayload);
 
-    // --- Frozen baseline, copied verbatim from PlayerData.Core/EncryptedSaveBackend.cs before ST-2 ---
+    // --- ここから凍結した基準です。PlayerData.Core/EncryptedSaveBackend.cs の ST-2 より前のものを、そのままコピーしています ---
 
     private const int OldIvSize = 16;
     private const int OldTagSize = 32;

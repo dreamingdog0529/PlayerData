@@ -154,8 +154,8 @@ namespace PlayerData.Unity.Editor.Tests
                 Assert.That(leaf.IsSelectableForDetail, Is.True);
             }
 
-            // The leaf label is the name only; the state now lives on the node's State property
-            // (rendered as the row's status dot) rather than being appended to the text.
+            // 葉のラベルは名前だけです。状態は今はノードの State プロパティ側に持たせていて、
+            // （行のステータスドットとして描かれます）テキストに付け足す形ではありません。
             Assert.That(byKey["SampleProfile"].DisplayName, Is.EqualTo("SampleProfile"));
             Assert.That(byKey["SampleProfile"].DisplayName, Does.Not.Contain("·"));
             Assert.That(byKey["SampleProfile"].State, Is.EqualTo(DocumentState.Editable));
@@ -175,11 +175,11 @@ namespace PlayerData.Unity.Editor.Tests
             SaveTreeNode saveNode = savedFiles.Children[0];
             SaveTreeNode documentNode = saveNode.Children[0];
 
-            // Both a save (folder) and its documents (files) resolve to the save's on-disk folder.
+            // セーブ（フォルダ）も、そのドキュメント（ファイル）も、どちらもセーブのディスク上のフォルダに解決されます。
             Assert.That(ViewerPanel.RevealableDirectory(saveNode), Is.EqualTo(saveNode.Location!.Directory));
             Assert.That(ViewerPanel.RevealableDirectory(documentNode), Is.EqualTo(saveNode.Location!.Directory));
 
-            // Groups and live nodes have no on-disk location, so there is nothing to reveal.
+            // グループとライブノードにはディスク上の場所がないので、表示できるものはありません。
             Assert.That(ViewerPanel.RevealableDirectory(savedFiles), Is.Null);
             SaveTreeNode liveSession = groups[1].Children[0];
             Assert.That(ViewerPanel.RevealableDirectory(liveSession), Is.Null);
@@ -199,7 +199,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(File.Exists(path), Is.True, path);
             Assert.That(Path.GetFileName(path), Is.EqualTo("SampleProfile.bin"));
 
-            // Only document leaves have a file; folders, groups and live nodes do not.
+            // ファイルを持っているのはドキュメントの葉だけです。フォルダやグループ、ライブノードにはありません。
             Assert.That(ViewerPanel.DocumentFilePath(saveNode), Is.Null);
             Assert.That(ViewerPanel.DocumentFilePath(groups[0]), Is.Null);
             SaveTreeNode liveDocument = groups[1].Children[0].Children[0];
@@ -209,8 +209,8 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void DocumentFilePath_MatchesTheBackendsSanitizedFileName()
         {
-            // A key with an invalid file-name character is sanitized to '_' on disk; the derived
-            // path must match what the backend actually wrote (guards against naming drift).
+            // ファイル名に使えない文字を含むキーは、ディスク上では '_' に置き換えられます。導き出した
+            // パスは、バックエンドが実際に書いたものと一致する必要があります（命名のずれを防ぐためです）。
             Dictionary<string, byte[]> documents = new Dictionary<string, byte[]> { ["odd/key"] = new byte[] { 1, 2 } };
             WriteSave(Path.Combine(_root, "save"), documents);
             IReadOnlyList<SaveTreeNode> groups = SaveTreeModel.Build(_root, ScanAndLoadAll(), NoLiveSessions);

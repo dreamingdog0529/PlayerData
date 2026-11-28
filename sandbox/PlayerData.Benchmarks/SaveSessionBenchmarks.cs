@@ -4,9 +4,9 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Benchmarks;
 
-// Measures SaveSession.CommitAsync with an in-memory backend (I/O excluded) to isolate the
-// dirty-check / snapshot logic that Tier 2 cleaned up (Any(...) LINQ boxing -> manual loop,
-// ToDictionary -> SnapshotItems copy).
+// SaveSession.CommitAsync を、メモリ上のバックエンドで測ります（入出力は除きます）。Tier 2 で整理した、
+// 汚れているかの確認とスナップショットの処理だけを切り出します（Any(...) の LINQ によるボクシングから
+// 手書きのループへ、ToDictionary から SnapshotItems へのコピーへ変えた部分です）。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 1, warmupCount: 3, iterationCount: 5)]
 public class SaveSessionBenchmarks
@@ -47,8 +47,8 @@ public class SaveSessionBenchmarks
         _nullBackendSession.CommitAsync().AsTask().GetAwaiter().GetResult();
     }
 
-    // Every invocation dirties the profile doc itself, so this stays representative regardless
-    // of how many invocations BenchmarkDotNet batches into one measured iteration.
+    // 呼び出しのたびにプロフィールのドキュメント自体を汚すので、BenchmarkDotNet が何回分を
+    // 1回の計測にまとめようと、代表的な形のままでいられます。
     [Benchmark(Baseline = true)]
     public async System.Threading.Tasks.Task CommitAsync_Dirty()
     {
@@ -56,17 +56,17 @@ public class SaveSessionBenchmarks
         await _dirtySession.CommitAsync();
     }
 
-    // _cleanSession is never mutated after the initial commit in GlobalSetup, so every call
-    // exercises the IsDirty-false no-op fast path (the common case for periodic autosave polling).
+    // _cleanSession は、GlobalSetup での最初のコミットのあと二度と変更されません。そのため、呼び出しのたびに
+    // IsDirty が false の、何もしない速い経路を通ります（定期的な自動セーブの確認では、よくある形です）。
     [Benchmark]
     public async System.Threading.Tasks.Task CommitAsync_NoOp()
     {
         await _cleanSession.CommitAsync();
     }
 
-    // Same steady-state shape as CommitAsync_Dirty but against a backend that neither stores nor
-    // allocates, so the Allocated column is purely the session's own commit path (snapshot,
-    // document dictionary, bundle, serialize).
+    // CommitAsync_Dirty と同じ定常状態の形ですが、保持も確保もしないバックエンドを使います。そのため
+    // Allocated の列には、セッション自身のコミット経路（スナップショット、ドキュメントのディクショナリ、
+    // バンドル、シリアライズ）の分だけが載ります。
     [Benchmark]
     public async System.Threading.Tasks.Task CommitAsync_Dirty_NullBackend()
     {

@@ -3,13 +3,14 @@ using PlayerData.Documents;
 
 namespace PlayerData.Schema;
 
-// Declares a single (always-present) document on a [PlayerDataSession] class (stack one
-// instance per document). propertyName defaults to documentType.Name when omitted and must be
-// a valid C# identifier. The generator writes the property (IDoc<T>) fully - do not declare it
-// yourself. Storage key defaults to the resolved property name.
-// Default: name of a public static method on documentType that returns documentType
-// (e.g. nameof(PlayerProfile.NewGame)). When omitted, documentType must have a public
-// parameterless constructor.
+// [PlayerDataSession] を付けたクラスに、単一の（常に存在する）文書を宣言するためのものです
+// （文書1つにつき1つずつ重ねて付けます）。propertyName を省略すると documentType.Name が
+// 使われますが、指定する場合は C# の識別子として正しい名前でお願いします。プロパティ
+// （IDoc<T>）はジェネレーターがまるごと書きますので、ご自分では宣言しないでくださいね。
+// 保存用のキーは、省略すると解決されたプロパティ名がそのまま使われます。
+// Default: documentType を返す、documentType 上の public static メソッドの名前です
+// （たとえば nameof(PlayerProfile.NewGame) のように指定します）。省略した場合は、
+// documentType に public な引数なしコンストラクターが必要です。
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
 public sealed class PlayerDataSingleAttribute : Attribute
 {

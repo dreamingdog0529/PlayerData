@@ -8,16 +8,17 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Persistence;
 
-// Wraps an ISaveBackend to obscure each document's bytes with a fixed, position-dependent XOR
-// mask. This is not a security feature: the mask is a compile-time constant with no external
-// key, so anyone who decompiles or reverse-engineers this library can trivially recover it. Its
-// only purpose is to keep save files unreadable in a plain hex/text editor, deterring casual
-// tampering. Use EncryptedSaveBackend instead when real confidentiality or tamper detection is
-// required.
+// ISaveBackend を包んで、各文書のバイト列を、固定の位置依存の XOR マスクで分かりにくくする
+// ためのものです。これはセキュリティ機能ではありません：マスクはコンパイル時の定数で外の鍵も
+// ありませんので、このライブラリをデコンパイルしたりリバースエンジニアリングしたりできる人なら
+// 簡単に復元できてしまいます。目的は、セーブファイルを普通の16進／テキストエディターでは読めなく
+// して、気軽な改変を思いとどまらせることだけです。本当の秘匿性や改ざん検知が必要なときは、
+// 代わりに EncryptedSaveBackend を使ってください。
 public sealed class ObfuscatedSaveBackend : ISaveBackend
 {
-    // Arbitrary fixed bytes; XOR is its own inverse, so the same mask both obscures and restores
-    // a document's bytes (data[i] ^ Mask[i % Mask.Length], applied twice, is the identity).
+    // 任意に決めた固定のバイト列です。XOR は自身が逆演算ですので、同じマスクで文書のバイト列を
+    // 分かりにくくもでき、元に戻すこともできます（data[i] ^ Mask[i % Mask.Length] を2回適用すると
+    // 元に戻ります）。
     private static readonly byte[] Mask =
     {
         0x5A, 0xE3, 0x1C, 0x7F, 0x92, 0x08, 0xB6, 0xD4,
@@ -28,11 +29,12 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
 
     private readonly ISaveBackend _inner;
 
-    // Write-path transformed-document dictionary, recycled between writes via the same
-    // Interlocked.Exchange handoff SaveSession's commit scratch uses: at most one in-flight
-    // write holds it, a concurrent write just allocates fresh, and it is only recycled after
-    // the inner WriteAsync completed (the ownership contract bars the inner backend from
-    // holding the bundle past that point). Dropped, not recycled, when the write throws.
+    // 書き込み経路で変換後の文書を入れるディクショナリで、SaveSession のコミット用作業領域と
+    // 同じ Interlocked.Exchange の受け渡しで書き込みの合間に使い回します：同時に進行中の
+    // 書き込みでこれを持つのは最大で1つだけで、競合した書き込みは新しく確保します。再利用するのは
+    // 内側の WriteAsync が完了したあとだけです（所有権の約束ごとにより、内側のバックエンドが
+    // その時点を越えてバンドルを保持することはありません）。書き込みが例外を投げたときは、
+    // 使い回さずに捨てます。
     private Dictionary<string, byte[]>? _writeScratch;
 
     public ObfuscatedSaveBackend(ISaveBackend inner)
@@ -45,9 +47,9 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
         var bundle = await _inner.ReadAsync(cancellationToken).ConfigureAwait(false);
         if (bundle is null) return null;
 
-        // The inner backend transfers ownership of the returned bundle (see ISaveBackend), so
-        // each masked payload is unmasked in place and the same bundle instance is returned -
-        // no per-document copy, no new dictionary, no new bundle.
+        // 内側のバックエンドは、返したバンドルの所有権を移してくれます（ISaveBackend をご覧
+        // ください）ので、各マスク済みペイロードはその場でマスクを外し、同じバンドルのインスタンスを
+        // 返します。文書ごとのコピーも、新しいディクショナリも、新しいバンドルも要りません。
         foreach (var pair in bundle.Documents)
             TransformInPlace(pair.Value);
 
@@ -58,8 +60,8 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
     {
         if (bundle is null) throw new ArgumentNullException(nameof(bundle));
 
-        // The input arrays are the caller's (SaveSession caches them as clean-state bytes), so
-        // the write path must transform into fresh arrays - only the dictionary is recycled.
+        // 入力の配列は呼び出し側のものです（SaveSession が clean な状態のバイト列としてキャッシュして
+        // います）ので、書き込み経路では新しい配列へ変換します。使い回すのはディクショナリだけです。
         var documents = Interlocked.Exchange(ref _writeScratch, null)
             ?? new Dictionary<string, byte[]>(bundle.Documents.Count);
         foreach (var pair in bundle.Documents)
@@ -71,14 +73,15 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
         Volatile.Write(ref _writeScratch, documents);
     }
 
-    // Mask.Length (32) generally doesn't divide Vector<byte>.Count evenly on every platform (16
-    // on SSE2/NEON, 32 on AVX2, 64 on AVX-512), so TiledMask repeats Mask out to their least
-    // common multiple: every Vector<byte>.Count-aligned offset into TiledMask then lines up with
-    // the correct phase of the 32-byte mask, letting the same precomputed vector be reused for
-    // every chunk at that offset (mod TiledMask.Length) instead of re-deriving it per call.
-    // System.Numerics.Vector<T> (not a hardware intrinsic type) is used deliberately: it falls
-    // back to a software (non-accelerated) implementation wherever SIMD isn't available, so this
-    // stays correct - if slower - on platforms/backends without vector hardware support.
+    // Mask.Length（32）は、プラットフォームごとの Vector<byte>.Count（SSE2 / NEON では 16、
+    // AVX2 では 32、AVX-512 では 64）を一般には割り切りません。そこで TiledMask は、Mask を
+    // その最小公倍数まで繰り返したものです：TiledMask の中では Vector<byte>.Count に揃った
+    // どのオフセットも 32 バイトのマスクの正しい位相と一致しますので、そのオフセット
+    // （TiledMask.Length で割った余り）では、あらかじめ計算した同じベクターをすべてのチャンクで
+    // 使い回せて、呼び出しごとに導き直さずに済みます。System.Numerics.Vector<T>（ハードウェア
+    // 組み込みの型ではありません）を意図的に使っています：SIMD が使えない場所ではソフトウェアの
+    // （加速されない）実装にフォールバックしますので、ベクターのハードウェア対応がない
+    // プラットフォームやバックエンドでも、遅くはなっても正しさは保てます。
     private static readonly byte[] TiledMask = BuildTiledMask();
 
     private static byte[] BuildTiledMask()
@@ -110,9 +113,9 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
         return result;
     }
 
-    // Self-XOR variant for buffers this backend owns (the read path, where the inner backend
-    // transferred ownership): dst == src is safe in TransformCore because every location is
-    // fully read before it is written.
+    // このバックエンドが所有するバッファ向けの、自分自身への XOR の版です（読み取り経路で、
+    // 内側のバックエンドから所有権が移ったもの）：TransformCore ではどの場所も書かれる前に
+    // 完全に読まれますので、dst == src でも安全です。
     internal static unsafe void TransformInPlace(byte[] data)
     {
         if (data.Length == 0) return;
@@ -121,14 +124,14 @@ public sealed class ObfuscatedSaveBackend : ISaveBackend
             TransformCore(buffer, buffer, data.Length, mask);
     }
 
-    // Raw-pointer loop over the previous span/indexer version: pinning src/dst/mask once
-    // removes the per-chunk bounds checks the Vector<byte>(array, index) constructor and
-    // CopyTo(array, index) performed, Unsafe.Read/WriteUnaligned compiles to single unaligned
-    // vector moves, and the mask offset is tracked as a running counter reset at the tile
-    // boundary instead of recomputing `i % tileLength` (an integer division) per chunk.
-    // TiledMask.Length is an exact multiple of Vector<byte>.Count (LCM, see BuildTiledMask), so
-    // `maskOffset + vectorSize <= tileLength` always holds when the counter is in range and the
-    // unaligned mask read never runs off the end of the tile.
+    // 生ポインターのループです。src / dst / mask を一度だけピン留めすることで、Vector<byte>
+    // （array, index）のコンストラクターや CopyTo(array, index) が行うチャンクごとの範囲チェックを
+    // なくせます。Unsafe.Read/WriteUnaligned は単一の非整列ベクター移動にコンパイルされ、マスクの
+    // オフセットはチャンクごとに `i % tileLength`（整数除算）を計算し直すのではなく、タイルの
+    // 境界でリセットされる進行カウンターで追います。TiledMask.Length は Vector<byte>.Count の
+    // ちょうどの倍数ですので（最小公倍数です。BuildTiledMask をご覧ください）、カウンターが範囲内に
+    // ある限り `maskOffset + vectorSize <= tileLength` が常に成り立ち、非整列のマスク読み取りが
+    // タイルの末尾を越えることはありません。
     private static unsafe void TransformCore(byte* src, byte* dst, int length, byte* mask)
     {
         var vectorSize = Vector<byte>.Count;

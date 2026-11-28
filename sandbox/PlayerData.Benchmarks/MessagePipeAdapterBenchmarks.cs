@@ -6,10 +6,10 @@ using PlayerData.Documents;
 
 namespace PlayerData.Benchmarks;
 
-// Measures a single subscribe-then-dispose round trip through PlayerDataStoreMessagePipeExtensions
-// / PlayerDataCollectionMessagePipeExtensions.PublishChangesTo (round-2 perf plan ST-3, baseline
-// for ST-4). Each [Benchmark] call is the unit of work being priced: PublishChangesTo allocates a
-// local-function Handler closure plus an ActionDisposable-wrapping lambda closure, on every call.
+// PlayerDataStoreMessagePipeExtensions / PlayerDataCollectionMessagePipeExtensions.PublishChangesTo 経由で、
+// 購読してから破棄するまでの往復を1回分だけ測ります（ラウンド2の性能計画 ST-3 で、ST-4 の基準に
+// なるものです）。[Benchmark] の呼び出し1回が、測りたい仕事の単位です。PublishChangesTo は呼び出しの
+// たびに、ローカル関数の Handler クロージャと、ActionDisposable で包むラムダのクロージャを確保します。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 3, warmupCount: 5, iterationCount: 10)]
 public class MessagePipeAdapterBenchmarks

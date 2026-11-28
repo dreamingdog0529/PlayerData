@@ -7,11 +7,11 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Benchmarks;
 
-// Isolates SaveSession benchmarks from disk I/O so measured time/allocations reflect only
-// SaveSession's own commit/load logic, while honoring ISaveBackend's ownership contract:
-// WriteAsync copies the dictionary it retains (the caller recycles the bundle's dictionary
-// right after the call) and ReadAsync hands out a deep copy (ownership of the returned bundle
-// transfers to the caller, who may mutate its arrays in place).
+// SaveSession のベンチマークからディスク入出力を切り離し、測る時間や確保量が SaveSession 自身の
+// コミットや読み込みの処理だけを映すようにします。そのうえで、ISaveBackend の所有権の決まりは守ります。
+// WriteAsync は保持するディクショナリをコピーします（呼び出し側は、呼び出しの直後にバンドルの
+// ディクショナリを再利用するためです）。ReadAsync は深いコピーを渡します（返されたバンドルの所有権は
+// 呼び出し側へ移り、配列をその場で書き換えてもよいことになっています）。
 internal sealed class InMemorySaveBackend : ISaveBackend
 {
     private SaveBundle? _bundle;
@@ -20,8 +20,8 @@ internal sealed class InMemorySaveBackend : ISaveBackend
     {
         if (_bundle is null) return new((SaveBundle?)null);
 
-        // byte[] contents are cloned too: a caller (e.g. an obfuscating wrapper) may transform
-        // the returned arrays in place, which must not corrupt the stored copy.
+        // byte[] の中身もコピーしています。呼び出し側（難読化するラッパーなど）が返された配列を
+        // その場で変換することがあり、保持しているコピーを壊してはいけないためです。
         var documents = new Dictionary<string, byte[]>(_bundle.Documents.Count);
         foreach (var pair in _bundle.Documents)
         {
@@ -34,9 +34,9 @@ internal sealed class InMemorySaveBackend : ISaveBackend
 
     public ValueTask WriteAsync(SaveBundle bundle, CancellationToken cancellationToken = default)
     {
-        // Only the dictionary needs copying: the known writers (SaveSession, the wrapper
-        // backends) recycle their dictionary between calls but never mutate the byte[] payloads
-        // they handed over, so sharing the arrays keeps write benchmarks noise-free.
+        // コピーが必要なのはディクショナリだけです。分かっている書き込み側（SaveSession やラッパーの
+        // バックエンド）は、呼び出しの合間にディクショナリを再利用しますが、渡した byte[] の中身を
+        // 書き換えることはありません。そのため配列を共有しても、書き込みのベンチマークにノイズは入りません。
         var documents = new Dictionary<string, byte[]>(bundle.Documents.Count);
         foreach (var pair in bundle.Documents)
             documents[pair.Key] = pair.Value;

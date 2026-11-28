@@ -40,8 +40,8 @@ namespace PlayerData.Unity.Editor.Tests
 
         private TreeView Tree => _rootElement.Q<TreeView>(ViewerUI.TreeViewName);
 
-        // SampleEditorSession is a test fixture and is filtered out of the dropdown, so it is
-        // selected directly rather than by dropdown index.
+        // SampleEditorSession はテスト用のフィクスチャで、ドロップダウンからは除外されるので、
+        // ドロップダウンのインデックスではなく、直接選ぶようにしています。
         private void SelectSampleSession() => _panel.SelectSessionByTypeForTests(typeof(SampleEditorSession));
 
         private static void Flatten(IEnumerable<TreeViewItemData<SaveTreeNode>> items, List<SaveTreeNode> into)
@@ -76,8 +76,8 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void Window_OpenAndClose_DoesNotThrow()
         {
-            // GetWindow can emit a graphics-device error under -batchmode -nographics; the
-            // window lifecycle itself must still complete without an exception.
+            // GetWindow は -batchmode -nographics のときにグラフィックスデバイスのエラーを出すことがありますが、
+            // ウィンドウのライフサイクル自体は、例外なく最後まで進む必要があります。
             UnityEngine.TestTools.LogAssert.ignoreFailingMessages = true;
             try
             {
@@ -103,7 +103,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(_rootElement.Q<VisualElement>(ViewerUI.SplitViewName), Is.Not.Null);
             Assert.That(Tree, Is.Not.Null);
             Assert.That(_rootElement.Q<VisualElement>(ViewerUI.DetailPaneName), Is.Not.Null);
-            // Test-only session fixtures are filtered out of the viewer's session dropdown.
+            // テスト専用のセッションフィクスチャは、ビューアのセッションドロップダウンからは除外されます。
             Assert.That(_controller.SessionTypes, Has.No.Member(typeof(SampleEditorSession)));
         }
 
@@ -112,7 +112,7 @@ namespace PlayerData.Unity.Editor.Tests
         {
             Assert.That(VisibleNames(), Is.EqualTo(new[] { ViewerDisplayNames.SavedFilesLabel }));
 
-            // The TreeView control itself carries the same data (not just the test-hook list).
+            // TreeView コントロール自体も同じデータを持っています（テスト用フックのリストだけではありません）。
             List<int> rootIds = Tree.GetRootIds().ToList();
             Assert.That(rootIds, Has.Count.EqualTo(1));
             Assert.That(
@@ -191,8 +191,8 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void OldStagedFlowElements_DoNotExist()
         {
-            // Old-flow element names are hardcoded on purpose: their ViewerUI constants were
-            // deleted together with the staged flow, and this test pins their absence.
+            // 旧フローの要素名はあえてハードコードしています。その ViewerUI 定数は
+            // 段階的なフローと一緒に削除されていて、このテストで存在しないことを固定しています。
             string[] oldNames =
             {
                 "guide-box",

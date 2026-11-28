@@ -1,68 +1,56 @@
-# Developing PlayerData
+# PlayerData の開発について
 
-## Prerequisites
+## 用意していただきたいもの
 
-- .NET SDK 9.0+
-- Unity 6000.0+ (only for `src/PlayerData.Unity`; optional)
-- [NuGetForUnity CLI](https://github.com/GlitchEnzo/NuGetForUnity) (only for the Unity project)
+- .NET SDK 9.0 以上
+- Unity 6000.0 以上（`src/PlayerData.Unity` を触るときだけ。任意です）
+- [NuGetForUnity CLI](https://github.com/GlitchEnzo/NuGetForUnity)（Unity プロジェクトを触るときだけ）
 
-Optional developer tools (used by CI and local hooks):
+あると便利なツールです（CI やローカルのフックで使っています）。
 
-- [typos](https://github.com/crate-ci/typos) — spell check
-- [lefthook](https://github.com/evilmartians/lefthook) — git hooks
-- [Task](https://taskfile.dev/) — task runner
+- [typos](https://github.com/crate-ci/typos) — スペルチェック用です
+- [lefthook](https://github.com/evilmartians/lefthook) — Git フック用です
+- [Task](https://taskfile.dev/) — タスクランナーです
 
-## Build, run, test
+## ビルド・実行・テスト
 
 ```sh
-dotnet build src/PlayerData.Core/PlayerData.Core.csproj -c Release  # packs Core into ../.local-feed
+dotnet build src/PlayerData.Core/PlayerData.Core.csproj -c Release  # Core をパックして ../.local-feed に置きます
 dotnet build PlayerData.slnx -c Release
 dotnet test PlayerData.slnx -c Release --no-build
 ```
 
-`PlayerData.SourceGenerator.IntegrationTests` consumes the packed `PlayerData.Core`
-nupkg from the local feed (`../.local-feed`, see `nuget.config`), so build Core once
-before restoring the full solution. `task build` does this for you.
-
-Or via [Task](https://taskfile.dev/):
+`PlayerData.SourceGenerator.IntegrationTests` は、ローカルフィード（`../.local-feed`、`nuget.config` をご覧ください）にあるパック済みの `PlayerData.Core` の nupkg を使うので、ソリューション全体を復元する前に、まず Core を一度ビルドしておいてください。`task build` を使えばまとめて行われます。
 
 ```bash
 task build
 task test
-task check   # spellcheck + commit-lint + dco-check + build + test
+task check   # スペルチェック + コミットメッセージのチェック + DCO チェック + ビルド + テスト
 ```
 
-## Git hooks
+## Git フック
 
-Install local hooks (Conventional Commits + DCO sign-off):
+ローカルのフックを入れておくと、Conventional Commits や DCO のサインオフを忘れにくくなります。
 
 ```powershell
 pwsh ./scripts/install-git-hooks.ps1
-# or
+# または
 task setup
 ```
 
-- **pre-commit**: spellcheck staged markdown/yaml (via lefthook)
-- **commit-msg**: enforce Conventional Commits + DCO `Signed-off-by`
+- **pre-commit**: ステージされた Markdown / YAML のスペルチェックをします（lefthook 経由です）
+- **commit-msg**: Conventional Commits と DCO の `Signed-off-by` が付いているか確認します
 
-## Commit & PR conventions
+## コミットと PR の約束ごと
 
-- Use [Conventional Commits](https://www.conventionalcommits.org/): `type: description`
-- Sign off every commit: `git commit -s`
-- Squash-merge only; the PR title becomes the commit on the default branch
+- [Conventional Commits](https://www.conventionalcommits.org/) で書いてください（`type: description` の形です）
+- すべてのコミットにサインオフをお願いします（`git commit -s` です）
+- マージはスカッシュマージだけです。PR のタイトルが、そのままデフォルトブランチ上のコミットになります
 
-See [CONTRIBUTING.md](../.github/CONTRIBUTING.md) for the full workflow.
+全体の流れは [CONTRIBUTING.md](../.github/CONTRIBUTING.md) にまとめています。
 
-## Releases
+## リリース
 
-Releases are automated with [Release Please](https://github.com/googleapis/release-please):
+リリースは [Release Please](https://github.com/googleapis/release-please) で自動化しています。Conventional Commits のコミットをデフォルトブランチにマージするとリリース PR が開くか更新され、それをマージするとタグと GitHub Release が作られます。そのあと `release-assets.yml` が、リリースしたバージョンで NuGet パッケージ（`PlayerData.Core`、`PlayerData.MessagePipe`、`PlayerData.R3`、`PlayerData.VitalRouter`）をパックして、`.nupkg` ファイルを GitHub Release に添付します。
 
-1. Merge Conventional Commits to the default branch.
-2. Release Please opens/updates a release PR (version bump + CHANGELOG).
-3. Merge the release PR to create the tag and GitHub Release.
-4. `release-assets.yml` then packs the NuGet packages (`PlayerData.Core`,
-   `PlayerData.MessagePipe`, `PlayerData.R3`, `PlayerData.VitalRouter`) at the
-   released version and attaches the `.nupkg` files to the GitHub Release.
-
-To publish to NuGet.org as well, add a `NUGET_KEY` secret and uncomment the
-push step in `.github/workflows/release-assets.yml`.
+NuGet.org にも公開したいときは、`NUGET_KEY` シークレットを追加して、`.github/workflows/release-assets.yml` の push ステップのコメントアウトを外してください。

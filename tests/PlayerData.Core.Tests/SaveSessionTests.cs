@@ -74,11 +74,11 @@ public class SaveSessionTests
     [Test]
     public async Task LoadAsync_ReadsCollectionSerializedInLegacyDictionaryFormat()
     {
-        // CollectionParticipant now serializes ImmutableDictionary<TKey,T> directly instead of
-        // copying into Dictionary<TKey,T> first (SaveSession.cs GetBytes/LoadBytes). MemoryPack's
-        // Dictionary and ImmutableDictionary formatters share the same collection-header-plus-
-        // KeyValuePairs wire layout, so saves written by the old Dictionary-based path must still
-        // load correctly under the new code.
+        // CollectionParticipant は今は、まず Dictionary<TKey,T> へコピーするのではなく、ImmutableDictionary<TKey,T> を
+        // 直接シリアライズします（SaveSession.cs の GetBytes / LoadBytes です）。MemoryPack の Dictionary 用と
+        // ImmutableDictionary 用のフォーマッタは、コレクションのヘッダーに KeyValuePair が続く同じワイヤー形式を
+        // 共有しています。そのため、古い Dictionary 経由の経路で書かれたセーブも、新しいコードで正しく
+        // 読み込めなければなりません。
         var backend = new DirectorySaveBackend(_directory);
         var legacyItems = new Dictionary<string, SampleItem>
         {
@@ -172,8 +172,8 @@ public class SaveSessionTests
             var store = session.AddDocument("player", () => new SamplePlayerData(1, "X"));
             store.Update(p => p with { Level = 2 });
 
-            // Windows surfaces the blocking file as IOException, Linux as its subclass
-            // DirectoryNotFoundException (ENOTDIR) - accept the whole IOException family.
+            // Windows では、ファイルを塞いでいるものが IOException として表れ、Linux ではその派生クラスの
+            // DirectoryNotFoundException（ENOTDIR）として表れます。IOException の仲間全体を受け入れます。
             Assert.CatchAsync<IOException>(async () => await session.CommitAsync());
         }
         finally
@@ -274,7 +274,7 @@ public class SaveSessionTests
     [Test]
     public async Task CommitAsync_DirtyOnlySerialize_CleanDocumentReusesCache()
     {
-        // Spy: second commit after touching only one doc should still restore both.
+        // スパイです。片方のドキュメントだけに触れたあとの2回目のコミットでも、両方が復元されるはずです。
         var writer = CreateSession(out var player, out var items);
         player.Update(_ => new SamplePlayerData(1, "A"));
         items.Upsert(new SampleItem("sword", 1));
@@ -311,7 +311,7 @@ public class SaveSessionTests
             Assert.That(session.IsDirty, Is.True);
         }
 
-        Assert.That(playerChanges, Is.EqualTo(1)); // coalesced
+        Assert.That(playerChanges, Is.EqualTo(1)); // まとめられています
         Assert.That(itemChanges, Is.EqualTo(1));
         Assert.That(dirtyFlags, Is.EqualTo(new[] { true }));
         Assert.That(player.Value.Level, Is.EqualTo(6));
@@ -332,7 +332,7 @@ public class SaveSessionTests
                 player.Update(p => p with { Level = 3 });
                 Assert.That(playerChanges, Is.EqualTo(0));
             }
-            // Inner dispose only drops depth; outer scope still suppresses.
+            // 内側を破棄しても深さが下がるだけで、外側のスコープがまだ抑制しています。
             Assert.That(playerChanges, Is.EqualTo(0));
             player.Update(p => p with { Level = 4 });
         }
@@ -353,7 +353,7 @@ public class SaveSessionTests
         scope.Dispose();
         Assert.That(playerChanges, Is.EqualTo(1));
 
-        scope.Dispose(); // second dispose of the same copy is a no-op
+        scope.Dispose(); // 同じコピーを2回目に破棄しても、何も起きません
         Assert.That(playerChanges, Is.EqualTo(1));
     }
 
@@ -365,7 +365,7 @@ public class SaveSessionTests
         var copy = scope;
         scope.Dispose();
 
-        // Each copy owns the same suppress-depth token; disposing both over-closes the counter.
+        // どのコピーも同じ、抑制の深さのトークンを持っています。両方を破棄すると、カウンタを閉じすぎてしまいます。
         Assert.Throws<InvalidOperationException>(() => copy.Dispose());
     }
 
@@ -418,7 +418,7 @@ public class SaveSessionTests
         var bundle = new SaveBundle(SaveSession.CurrentFormatVersion, new Dictionary<string, byte[]>
         {
             ["player"] = MemoryPackSerializer.Serialize(new SamplePlayerData(7, "OnlyPlayer")),
-            // intentionally no "items" entry
+            // わざと "items" のエントリを入れていません
         });
         await backend.WriteAsync(bundle);
 
@@ -458,7 +458,7 @@ public class SaveSessionTests
     [Test]
     public async Task CommitAsync_MultipleDirtyDocuments_RoundTrips()
     {
-        // Exercises the parallel dirty-serialize path (dirtyCount > 1).
+        // 汚れたものを並列にシリアライズする経路を通ります（dirtyCount > 1 です）。
         var writer = CreateSession(out var player, out var items);
         player.Update(_ => new SamplePlayerData(11, "Multi"));
         items.Upsert(new SampleItem("a", 1));
@@ -476,7 +476,7 @@ public class SaveSessionTests
     public async Task LoadAsync_AppliesMigrationsInOrder()
     {
         var backend = new DirectorySaveBackend(_directory);
-        // Version 0 save with a single document key the migration will rewrite.
+        // バージョン0のセーブです。マイグレーションが書き換えるドキュメントのキーが、1つだけ入っています。
         await backend.WriteAsync(new SaveBundle(0, new Dictionary<string, byte[]>
         {
             ["legacy_player"] = MemoryPackSerializer.Serialize(new SamplePlayerData(9, "Legacy")),
@@ -518,7 +518,7 @@ public class SaveSessionTests
             ["player"] = MemoryPackSerializer.Serialize(new SamplePlayerData(1, "X")),
         }));
 
-        // No migrations registered for version 0 → 1.
+        // バージョン 0 → 1 のマイグレーションは登録されていません。
         var session = CreateSession(out _, out _);
         Assert.ThrowsAsync<InvalidDataException>(async () => await session.LoadAsync());
     }
@@ -581,11 +581,11 @@ public class SaveSessionTests
         await session.DisposeAsync();
     }
 
-    // Coverage gap identified when KeyedDocumentStore moved from ImmutableDictionary (frozen
-    // point-in-time Snapshot) to ConcurrentDictionary (weakly consistent live Snapshot):
-    // GetBytes()/Validate() now enumerate the same live dictionary a background thread may be
-    // writing to. This must never throw or produce a save file that fails to load, no matter how
-    // the writes and the serializing reads interleave.
+    // カバーできていないところです。KeyedDocumentStore が ImmutableDictionary（ある時点のスナップショットで
+    // 凍結される形）から ConcurrentDictionary（弱い整合性の、生きている Snapshot）へ移ったときに見つかりました。
+    // GetBytes() と Validate() は今は、バックグラウンドのスレッドが書き込んでいるかもしれないのと同じ、
+    // 生きているディクショナリを列挙します。書き込みと、シリアライズする読み取りがどう交錯しても、例外が
+    // 投げられたり、読み込めないセーブファイルができたりしてはいけません。
     [Test]
     public async Task CommitAsync_ConcurrentCollectionWrites_DoesNotThrowOrCorrupt()
     {
@@ -623,10 +623,10 @@ public class SaveSessionTests
         Assert.That(readItems.Snapshot.Count, Is.EqualTo(keyCount));
     }
 
-    // Boundary tests for DirectorySaveBackend.BuildManifest/ParseManifest, rewritten onto raw
-    // pointers + BinaryPrimitives to drop the MemoryStream/BinaryWriter/BinaryReader allocations.
-    // Both methods are `internal` with no InternalsVisibleTo, so these exercise them the only way
-    // available from outside the assembly: a full WriteAsync/ReadAsync round trip.
+    // DirectorySaveBackend.BuildManifest / ParseManifest の境界のテストです。生のポインタと BinaryPrimitives へ
+    // 書き直して、MemoryStream / BinaryWriter / BinaryReader の確保をなくした部分が対象です。
+    // どちらのメソッドも `internal` で InternalsVisibleTo はないので、外のアセンブリからは次の方法でしか通せません。
+    // WriteAsync / ReadAsync の往復全体です。
     [Test]
     public async Task DirectorySaveBackend_EmptyManifest_RoundTrips()
     {
@@ -649,7 +649,7 @@ public class SaveSessionTests
         {
             ["プレイヤー"] = new byte[] { 1, 2, 3 },
             ["アイテム袋"] = new byte[] { 4, 5, 6, 7 },
-            ["🎮emoji"] = new byte[] { 8 }, // surrogate pair - stresses the UTF-8 byte-count/write boundary
+            ["🎮emoji"] = new byte[] { 8 }, // サロゲートペアです。UTF-8 のバイト数の数え方と、書き込みの境目に負荷をかけます
         };
         var bundle = new SaveBundle(1, documents);
         await backend.WriteAsync(bundle);
@@ -746,7 +746,7 @@ public class SaveSessionTests
         public int ToVersion { get; }
 
         public SaveBundle Migrate(SaveBundle bundle) =>
-            // Claims ToVersion but leaves the bundle's FormatVersion unchanged.
+            // ToVersion を名乗りながら、バンドルの FormatVersion は変えないままにします。
             new SaveBundle(FromVersion, new Dictionary<string, byte[]>(bundle.Documents));
     }
 }
