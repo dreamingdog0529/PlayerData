@@ -1,51 +1,30 @@
-# Support
+# サポート
 
-Welcome! This document outlines how to get help.
+困ったときにどこを見ればよいか、どう聞けばよいかをまとめています。
 
-## Documentation
+## ドキュメント
 
-- **Development / build guide**: https://github.com/dreamingdog0529/PlayerData/blob/main/docs/development.md
+- **開発・ビルドのガイド**: https://github.com/dreamingdog0529/PlayerData/blob/main/docs/development.md
 - **README**: https://github.com/dreamingdog0529/PlayerData/blob/main/README.md
-- **README (日本語)**: https://github.com/dreamingdog0529/PlayerData/blob/main/README_ja.md
+- **README（日本語）**: https://github.com/dreamingdog0529/PlayerData/blob/main/README_ja.md
 
-## Community Support
+## 質問やアイデア
 
-### GitHub Discussions
-
-For questions, ideas, and community conversations:
+質問やアイデア、みなさんとのやり取りは [GitHub Discussions](https://github.com/dreamingdog0529/PlayerData/discussions) でどうぞ。
 https://github.com/dreamingdog0529/PlayerData/discussions
 
-## Reporting Issues
+## 問題の報告
 
-### Bug Reports
+- **バグの報告**: https://github.com/dreamingdog0529/PlayerData/issues/new?template=bug_report.yml
+  報告の前に、同じ Issue がないか検索し、関係しそうなログやバージョンの情報と、再現の手順を用意してください。
+- **機能のリクエスト**: https://github.com/dreamingdog0529/PlayerData/issues/new?template=feature_request.yml
+- **提案（大きめの構成変更）**: https://github.com/dreamingdog0529/PlayerData/issues/new?template=proposal.yml
 
-Found a bug? Please file an issue:
-https://github.com/dreamingdog0529/PlayerData/issues/new?template=bug_report.yml
+### セキュリティの問題
 
-Before filing, please:
-1. Search existing issues to avoid duplicates
-2. Gather relevant logs and version information
-3. Provide steps to reproduce
-
-### Feature Requests
-
-Have an idea for a new feature?
-https://github.com/dreamingdog0529/PlayerData/issues/new?template=feature_request.yml
-
-### Proposals
-
-Significant architectural changes:
-https://github.com/dreamingdog0529/PlayerData/issues/new?template=proposal.yml
-
-### Security Issues
-
-**Do NOT file public issues for security concerns.**
-
-Please report security issues privately:
+**セキュリティに関わることは、公開の Issue には書かないでください。** 次のページから非公開で報告してください。詳しくは [SECURITY.md](SECURITY.md) をご覧ください。
 https://github.com/dreamingdog0529/PlayerData/security/advisories/new
 
-See [SECURITY.md](SECURITY.md).
+## コントリビュートについて
 
-## Contributing
-
-Interested in contributing? See our [CONTRIBUTING.md](CONTRIBUTING.md) guide.
+参加してみたい方は、[CONTRIBUTING.md](CONTRIBUTING.md) のガイドをご覧ください。

@@ -1,108 +1,66 @@
-# Security Hardening
+# セキュリティを固めるために
 
-Operational guidance for maintainers of projects created from this template. It
-focuses on software supply-chain defenses: the CI/CD pipeline, third-party
-dependencies, and — increasingly — AI agent tooling.
+サプライチェーンを守るための、メンテナー向けの運用ガイドです。CI/CD パイプラインや依存関係、AI エージェントまわりのツールを対象にしています。
 
-For reporting vulnerabilities in PlayerData itself, see
-[SECURITY.md](../.github/SECURITY.md).
+PlayerData 自体の脆弱性の報告については、[SECURITY.md](../.github/SECURITY.md) をご覧ください。
 
-## Why this matters
+## なぜ大切なのか
 
-Supply-chain attacks target the components developers trust implicitly. Recent
-incidents show the attack surface widening across three layers:
+サプライチェーン攻撃は、開発者が当たり前に信頼している部品を狙います。狙われやすいのは、パッケージレジストリ（タイポスクワッティングや依存関係の混乱）、CI/CD パイプライン（侵害された GitHub Actions から強いシークレットが抜かれる）、AI エージェントのスキル / MCP サーバー（乗っ取りやプロンプトインジェクション）の 3 つです。
 
-1. **Package registries** — typosquatted or dependency-confusion packages on npm,
-   PyPI, and others, often with a malicious `postinstall`/build step.
-2. **CI/CD pipelines** — compromised GitHub Actions whose tags are force-pushed to
-   point at attacker code, exfiltrating the elevated secrets available at build
-   time (cloud credentials, registry and publish tokens).
-3. **AI agent skills / MCP servers** — repository-jacking, skill-squatting, and
-   prompt injection through a tool's own description text.
+共通点は、名前やタグ、URL が気づかないうちに別のものを指すようになることです。ピン留めと監査、最小権限で、その暗黙の信頼を減らしていきます。
 
-The common thread: a name, a tag, or a URL that used to be safe silently starts
-resolving to something else. Pinning, auditing, and least privilege remove that
-implicit trust.
+## 最初から入っているもの
 
-## What this template already ships
-
-| Control | Where |
+| 対策 | 場所 |
 |---------|-------|
-| GitHub Actions pinned to commit SHAs | `.github/workflows/*.yml` |
-| Automated action/dependency update PRs | `.github/dependabot.yml` |
-| Dependency review on PRs (`fail-on-severity: high`) | `.github/workflows/dependency-review.yml` |
-| OpenSSF Scorecard analysis | `.github/workflows/scorecard.yml` |
-| Secret scanning + push protection, Dependabot security updates | `.github/settings.yml` |
-| Least-privilege `permissions:` on every workflow | `.github/workflows/*.yml` |
-| DCO sign-off + Conventional Commits (provenance) | `lefthook.yml`, `.githooks/` |
+| GitHub Actions をコミット SHA でピン留め | `.github/workflows/*.yml` |
+| アクション / 依存関係の更新 PR の自動作成 | `.github/dependabot.yml` |
+| PR での依存関係レビュー（`fail-on-severity: high`） | `.github/workflows/dependency-review.yml` |
+| OpenSSF Scorecard による分析 | `.github/workflows/scorecard.yml` |
+| シークレットスキャンと push 保護、Dependabot のセキュリティ更新 | `.github/settings.yml` |
+| すべてのワークフローでの最小権限の `permissions:` | `.github/workflows/*.yml` |
+| DCO サインオフと Conventional Commits（来歴の確認用） | `lefthook.yml`、`.githooks/` |
 
-The sections below explain how to keep these working and how to extend them once
-your project has real source code.
+## 1. GitHub Actions をコミット SHA でピン留めする
 
-## 1. Pin GitHub Actions to commit SHAs
-
-A tag (`@v4`) or a major-version branch (`@v5`) is a **mutable** pointer: the
-owner — or an attacker who compromises the owner — can move it to different code
-without changing what your workflow says. A 40-character commit SHA is immutable.
-
-This template pins every action to a SHA with the version in a trailing comment:
+タグ（`@v4`）やブランチは動かせてしまう参照で、所有者や攻撃者が指す先を変えられます。40 文字のコミット SHA は変わりません。アクションを足すときも、SHA でピン留めして末尾にバージョンのコメントを書いてください。
 
 ```yaml
 - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 ```
 
-The comment keeps the file readable and lets Dependabot recognize and bump the
-pin. Keep the convention when you add actions.
-
-### Resolving a tag to a SHA
+### タグから SHA を調べる
 
 ```bash
-# Lightweight tag: object.sha is the commit; type is "commit".
+# 軽量タグ: object.sha がコミットで、type は "commit" です。
 gh api repos/<owner>/<repo>/git/ref/tags/<tag> --jq '.object'
 
-# Annotated tag (type "tag"): dereference to the underlying commit.
+# 注釈付きタグ (type が "tag"): もとになるコミットまでたどってください。
 gh api repos/<owner>/<repo>/git/tags/<tag-sha> --jq '.object.sha'
 ```
 
-Always confirm the SHA points at the tag you intended before committing it —
-that verification step is the whole point.
+コミットする前に、その SHA が意図したタグを指しているかを必ず確認してください。
 
-**Caveat — some actions ship the major line as a branch, not a tag.** For
-example `actions/dependency-review-action@v5` resolves to `refs/heads/v5`, a
-moving branch. Pin the immutable release commit instead (the SHA behind the
-`vX.Y.Z` tag), which is what this repo does.
+**注意 — アクションによっては、メジャーのラインがタグではなくブランチで配られていることがあります。** たとえば `actions/dependency-review-action@v5` は `refs/heads/v5` という動くブランチに解決されます。代わりに、変わらないリリースのコミット（`vX.Y.Z` タグの後ろにある SHA）をピン留めしてください。
 
-SHA pins do not auto-receive upstream fixes, so pair them with Dependabot (the
-`github-actions` ecosystem is already enabled in `.github/dependabot.yml`) and
-review the update PRs. See
-[Keeping your actions up to date with Dependabot](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot).
+SHA でピン留めすると上流の修正が自動では入らないので、Dependabot（`github-actions` は `.github/dependabot.yml` で有効）と組み合わせ、更新 PR はきちんと確認してください。既存のリポジトリをまとめて変換したいときは、StepSecurity の [secure-repo](https://github.com/step-security/secure-repo) が使えます。
 
-To convert an existing repository in bulk, StepSecurity's
-[secure-repo](https://github.com/step-security/secure-repo) rewrites workflow
-tags to SHAs.
+## 2. ワークフローの権限は最小限に
 
-## 2. Least-privilege workflow permissions
-
-Every workflow declares an explicit `permissions:` block scoped to what it needs;
-`ci.yml`, for instance, only reads contents:
+すべてのワークフローで、必要な範囲に絞った `permissions:` を明示してください。1 つのジョブだけ強い権限が要るときは、ワークフロー全体ではなくジョブごとに引き上げます。デフォルトのトークンの範囲には頼らないでください。
 
 ```yaml
 permissions:
   contents: read
 ```
 
-Grant the minimum, and elevate per-job rather than per-workflow when only one job
-needs more. Never rely on the default token scope.
+## 3. 依存関係の監査
 
-## 3. Dependency auditing (after you choose a stack)
+ソースとロックファイルが入ってきたら、次のことを行ってください。
 
-This template is language-neutral, so no package manifest exists yet and there is
-nothing to audit at the package level. Once you add source and a lockfile:
-
-1. **Enable the matching Dependabot ecosystem** in `.github/dependabot.yml`
-   (commented examples are provided for npm, pip, gomod, cargo, and more).
-2. **Run an audit in CI.** Add a step to `ci.yml` (or a dedicated workflow), for
-   example:
+1. 使うスタックに合わせて、`.github/dependabot.yml` で Dependabot のエコシステムを有効にします（npm、pip、gomod、cargo などの例がコメントで用意されています）。
+2. CI で監査を実行します。
 
    ```yaml
    # Node.js
@@ -112,87 +70,47 @@ nothing to audit at the package level. Once you add source and a lockfile:
    - run: pip install pip-audit && pip-audit -r requirements.txt
    ```
 
-3. **Review lockfile diffs in PRs.** An unexpected change to
-   `package-lock.json` / `poetry.lock` / `go.sum` is a signal worth reading.
-4. **Distrust install-time scripts.** When evaluating an unfamiliar npm package,
-   install with `npm install --ignore-scripts` and run build steps only after you
-   trust it.
+3. PR ではロックファイル（`package-lock.json` / `poetry.lock` / `go.sum` など）の予期しない変更を確認します。
+4. インストール時に動くスクリプトは信用しすぎないでください。見慣れない npm パッケージは `npm install --ignore-scripts` で入れ、信頼できると判断してからビルドの手順を実行します。
 
-The existing dependency-review workflow already blocks PRs that introduce
-high-severity advisories once the Dependency graph is enabled.
+依存関係レビューのワークフローは、依存関係グラフが有効なら、深刻度の高い勧告を持ち込む PR をすでに止めてくれます。
 
-## 4. Secret management and rotation
+## 4. シークレットの管理とローテーション
 
-CI/CD secrets are high value because the pipeline runs with elevated privileges.
+- すべてのシークレットと、それが何を許可するのかを一覧で把握しておいてください（`gh secret list --repo <owner>/<repo>`）。
+- 短命で範囲の狭い認証情報を優先してください。クラシック PAT より GitHub App トークンや細かく権限を絞った PAT を、長命なクラウドのキーより OIDC を選びます。
+- 有効期限を設定するか定期的にローテーションし、使ったアクションが侵害されたおそれがある場合はすぐにローテーションしてください。
+- シークレットをログに出力しないでください。ビルドログは攻撃者にも読まれうるものとして扱います。
 
-- **Keep an inventory** of every secret and what it grants
-  (`gh secret list --repo <owner>/<repo>`).
-- **Prefer short-lived, narrowly-scoped credentials**: a GitHub App token or a
-  fine-grained PAT over a classic PAT; OIDC over long-lived cloud keys.
-- **Set expiry / rotate on a schedule**, and rotate immediately if an action you
-  used may have been compromised.
-- **Never echo secrets** into logs; treat build logs as attacker-readable.
+補足です。任意の `SETTINGS_TOKEN`（`settings.yml` の適用用）は、設計上の制約でクラシック PAT になっています。対象を 1 つのリポジトリに絞って、他の認証情報と同じようにローテーションしてください。
 
-Note: this template's optional `SETTINGS_TOKEN` (for applying `settings.yml`) is a
-classic PAT by design constraint — scope it to the single repository and rotate
-it like any other credential.
+## 5. AI エージェントのスキルや MCP サーバーを確かめる
 
-## 5. Vetting third-party AI agent skills and MCP servers
+サードパーティのスキルやプラグイン、MCP サーバーは依存関係と同じように扱ってください。スキルの説明文はモデルのプロンプトに直接入れられるので、悪意のあるものはエージェント自体を乗っ取ることがあります。入れる前に、次のことを確認してください。
 
-If your project or its contributors use AI agents that load third-party skills,
-plugins, or MCP servers, treat those the way you treat any dependency — a skill's
-description text is injected directly into the model's prompt, so a malicious one
-can hijack the agent, not just run bad code.
+- 配布元の所有者が実在して活動していること、アカウントが作られたばかりでないこと（`gh api users/<owner> --jq '{login,created_at,public_repos}'`）
+- リポジトリの乗っ取りがないこと。URL でリダイレクトが起きる場合は、元の所有者が名前を変えたか削除して、別の人がその名前を取得した可能性があります（`curl -sI https://github.com/<owner>/<repo> | grep -i location`）
+- ソースだけでなく、`name` や `description`、指示の中に隠れた命令や外部への通信がないこと
+- 権限は最小限にし、MCP サーバーの接続先が意図したものか確かめること。できる場合は、署名や来歴のある配布元を、特定のリビジョンにピン留めして使うこと
 
-Before adding one:
+## チェックリスト
 
-- **Confirm the source repository is genuine.** Check that the owner exists and is
-  active, and that the account is not brand new
-  (`gh api users/<owner> --jq '{login,created_at,public_repos}'`).
-- **Check for repository-jacking.** A redirect on the repo URL can mean the
-  original owner renamed or deleted the account and someone else claimed the name:
-  `curl -sI https://github.com/<owner>/<repo> | grep -i location`.
-- **Read the code and the metadata.** Review not just the source but the `name`,
-  `description`, and instructions for hidden directives or external network calls.
-- **Apply least privilege.** Grant the skill only the permissions it genuinely
-  needs, and verify the MCP server endpoint is the one you intend.
-- **Prefer signed, provenance-backed sources** and pin to a specific revision
-  rather than a floating reference where the framework allows it.
+**GitHub Actions / 依存関係**
 
-## Security health checklist
+- [ ] すべてのアクションが、バージョンのコメント付きでコミット SHA にピン留めされている
+- [ ] Dependabot が `github-actions` と使うスタックの両方で有効になっている
+- [ ] すべてのワークフローで、最小権限の `permissions:` が明示されている
+- [ ] シークレットスキャンと push 保護が有効になっている
+- [ ] 監査（`npm audit` / `pip-audit` など）が CI で動いていて、ロックファイルの変更が PR で確認されている
 
-Use this to audit a project periodically. Starting with the first two items —
-SHA-pinned actions and dependency auditing in CI — already raises the bar
-substantially.
+**シークレット / AI エージェント（使う場合）**
 
-**GitHub Actions**
+- [ ] シークレットの一覧があり、有効期限かローテーションの間隔が決まっている
+- [ ] クラシック PAT ではなく、細かく権限を絞った PAT や GitHub App トークンが使われている
+- [ ] ワークフローのログにシークレットが書かれていない
+- [ ] サードパーティのスキル / MCP の配布元が採用前に確認され、必要な権限だけを求めている
 
-- [ ] All actions are pinned to commit SHAs with a version comment
-- [ ] Dependabot is enabled for the `github-actions` ecosystem
-- [ ] Every workflow sets explicit least-privilege `permissions:`
-- [ ] Secret scanning and push protection are enabled
-
-**Dependencies**
-
-- [ ] The matching Dependabot ecosystem is enabled for your stack
-- [ ] `npm audit` / `pip-audit` (or equivalent) runs in CI
-- [ ] Lockfile changes are reviewed in PRs
-- [ ] Unnecessary install-time scripts are disabled or scrutinized
-
-**Secrets**
-
-- [ ] An inventory of CI/CD secrets exists
-- [ ] Secrets have expiry or a documented rotation cadence
-- [ ] Fine-grained PATs / GitHub App tokens are used instead of classic PATs
-- [ ] No secret is written to workflow logs
-
-**AI agents (if used)**
-
-- [ ] Third-party skill/MCP sources are verified before adoption
-- [ ] Skills request only the permissions they need
-- [ ] Packages an agent installs automatically go through an approval step
-
-## References
+## 参考資料
 
 - [Security hardening for GitHub Actions](https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions)
 - [Keeping your actions up to date with Dependabot](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/keeping-your-actions-up-to-date-with-dependabot)

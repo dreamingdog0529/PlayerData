@@ -1,32 +1,31 @@
-# Code of Conduct
+# 行動規範
 
-## Our Pledge
+## お約束
 
-We as members, contributors, and leaders pledge to make participation in our
-community a welcoming experience for everyone.
+メンバー、コントリビューター、リーダーを含め、関わってくださるみなさんと一緒に、このコミュニティへの参加が、どなたにとっても気持ちのよいものになるようにしていきます。
 
-## Our Standards
+## 大切にしたいこと
 
-Examples of behavior that contributes to a positive environment:
+場が心地よくなるような振る舞いの例です。
 
-* Using welcoming and inclusive language
-* Being respectful of differing viewpoints and experiences
-* Gracefully accepting constructive criticism
-* Focusing on what is best for the community
-* Showing empathy towards other community members
+* 相手を迎え入れるような、偏りのない言葉を使うこと
+* 違う考え方や経験を尊重すること
+* 建設的な意見は、素直に受け止めること
+* コミュニティにとって何がよいかを大切にすること
+* 他のメンバーに思いやりを持って接すること
 
-Examples of unacceptable behavior:
+一方で、次のような振る舞いは認められません。
 
-* Trolling, insulting or derogatory comments, and personal attacks
-* Public or private harassment
-* Publishing others' private information without explicit permission
-* Other conduct which could reasonably be considered inappropriate
+* 荒らし行為、侮辱的・差別的なコメント、人格への攻撃
+* 公の場でも私的な場でも行われるハラスメント
+* 本人の明確な許可なく、他の人の私的な情報を公開すること
+* そのほか、一般的に不適切と考えられる行為
 
-## Enforcement
+## 問題があったとき
 
-Instances of unacceptable behavior may be reported to the project maintainers.
-All complaints will be reviewed and investigated promptly and fairly.
+認められない振る舞いがあった場合は、プロジェクトのメンテナーへ報告できます。
+寄せられた申し立てはすべて、速やかに、公平に確認し、必要な対応を行います。
 
-## Attribution
+## 出典について
 
-This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org/).
+この行動規範は [Contributor Covenant](https://www.contributor-covenant.org/) をもとにしています。

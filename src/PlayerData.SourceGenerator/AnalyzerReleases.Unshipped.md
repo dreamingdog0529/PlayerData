@@ -1,13 +1,13 @@
-### New Rules
+### 新しいルール
 
-Rule ID | Category | Severity | Notes
+ルール ID | カテゴリ | 深刻度 | メモ
 --------|----------|----------|-------
-PD0001 | PlayerData.SourceGenerator | Error | Document type missing [MemoryPackable(GenerateType.VersionTolerant)]
-PD0002 | PlayerData.SourceGenerator | Error | Collection entity must have exactly one [PlayerDataKey] member
-PD0005 | PlayerData.SourceGenerator | Error | Cannot resolve document default factory
-PD0006 | PlayerData.SourceGenerator | Error | Duplicate document storage key in the same session
-PD0008 | PlayerData.SourceGenerator | Error | Document property name is not a valid C# identifier
-PD0009 | PlayerData.SourceGenerator | Error | Duplicate document property name in the same session
-PD0010 | PlayerData.SourceGenerator | Error | Document property name collides with a generated session member
-PD0011 | PlayerData.SourceGenerator | Error | Invalid document entity type
-PD0012 | PlayerData.SourceGenerator | Error | Session class must be partial
+PD0001 | PlayerData.SourceGenerator | Error | ドキュメントの型に [MemoryPackable(GenerateType.VersionTolerant)] が付いていません
+PD0002 | PlayerData.SourceGenerator | Error | コレクションのエンティティには [PlayerDataKey] メンバーがちょうど 1 つ必要です
+PD0005 | PlayerData.SourceGenerator | Error | ドキュメントのデフォルトファクトリを解決できません
+PD0006 | PlayerData.SourceGenerator | Error | 同じセッションの中で、ドキュメントのストレージキーが重なっています
+PD0008 | PlayerData.SourceGenerator | Error | ドキュメントのプロパティ名が、C# の識別子として正しくありません
+PD0009 | PlayerData.SourceGenerator | Error | 同じセッションの中で、ドキュメントのプロパティ名が重なっています
+PD0010 | PlayerData.SourceGenerator | Error | ドキュメントのプロパティ名が、生成されるセッションのメンバーとぶつかっています
+PD0011 | PlayerData.SourceGenerator | Error | ドキュメントのエンティティの型が正しくありません
+PD0012 | PlayerData.SourceGenerator | Error | セッションのクラスは partial にしてください
