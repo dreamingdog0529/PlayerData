@@ -1,4 +1,6 @@
 using BenchmarkDotNet.Attributes;
+using PlayerData.Documents;
+using PlayerData.Sessions;
 
 namespace PlayerData.Benchmarks;
 

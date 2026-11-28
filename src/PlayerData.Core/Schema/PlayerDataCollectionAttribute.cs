@@ -1,6 +1,7 @@
 using System;
+using PlayerData.Documents;
 
-namespace PlayerData;
+namespace PlayerData.Schema;
 
 // Declares a keyed collection document on a [PlayerDataSession] class (stack one instance per
 // document). documentType must have exactly one [PlayerDataKey] member; its type becomes

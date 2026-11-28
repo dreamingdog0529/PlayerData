@@ -1,6 +1,7 @@
 using global::VitalRouter;
 using NUnit.Framework;
 using PlayerData;
+using PlayerData.Documents;
 
 namespace PlayerData.VitalRouter.Tests;
 

@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using MessagePipe;
 using Microsoft.Extensions.DependencyInjection;
 using PlayerData.MessagePipe;
+using PlayerData.Documents;
 
 namespace PlayerData.Benchmarks;
 

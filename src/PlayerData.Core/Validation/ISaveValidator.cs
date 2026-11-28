@@ -1,4 +1,5 @@
-namespace PlayerData;
+using PlayerData.Sessions;
+namespace PlayerData.Validation;
 
 // Session-level commit gate. Registered via SaveSession.AddValidator / ISaveSession.AddValidator.
 public interface ISaveValidator

@@ -1,6 +1,7 @@
 using System;
+using PlayerData.Documents;
 
-namespace PlayerData;
+namespace PlayerData.Schema;
 
 // Marks the member whose value is the bag key for an entity type used in IBag<TKey, T>.
 // Exactly one member per entity type must carry this attribute.

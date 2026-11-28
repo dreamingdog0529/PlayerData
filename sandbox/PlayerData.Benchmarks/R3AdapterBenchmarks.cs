@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using PlayerData.R3;
 using R3;
+using PlayerData.Documents;
 
 namespace PlayerData.Benchmarks;
 

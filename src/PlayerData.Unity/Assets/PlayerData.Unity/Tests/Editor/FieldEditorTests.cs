@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine.UIElements;
+using PlayerData.Schema;
 
 namespace PlayerData.Unity.Editor.Tests
 {

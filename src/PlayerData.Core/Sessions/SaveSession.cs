@@ -6,8 +6,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MemoryPack;
+using PlayerData.Persistence;
+using PlayerData.Migrations;
+using PlayerData.Validation;
+using PlayerData.Documents;
 
-namespace PlayerData;
+namespace PlayerData.Sessions;
 
 public sealed class SaveSession : ISaveSession
 {

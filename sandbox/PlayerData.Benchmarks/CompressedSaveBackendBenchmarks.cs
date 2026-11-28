@@ -1,6 +1,7 @@
 using System;
 using System.IO.Compression;
 using BenchmarkDotNet.Attributes;
+using PlayerData.Persistence;
 
 namespace PlayerData.Benchmarks;
 

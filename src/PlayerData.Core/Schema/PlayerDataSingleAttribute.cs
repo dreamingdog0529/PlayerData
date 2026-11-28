@@ -1,6 +1,7 @@
 using System;
+using PlayerData.Documents;
 
-namespace PlayerData;
+namespace PlayerData.Schema;
 
 // Declares a single (always-present) document on a [PlayerDataSession] class (stack one
 // instance per document). propertyName defaults to documentType.Name when omitted and must be

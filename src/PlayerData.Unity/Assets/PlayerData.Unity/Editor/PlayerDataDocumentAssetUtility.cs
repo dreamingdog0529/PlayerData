@@ -1,6 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using PlayerData.Persistence;
+using PlayerData.Sessions;
+using PlayerData.Schema;
 
 namespace PlayerData.Unity.Editor
 {

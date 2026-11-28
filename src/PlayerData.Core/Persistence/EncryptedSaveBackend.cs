@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PlayerData;
+namespace PlayerData.Persistence;
 
 // Wraps an ISaveBackend to encrypt each document's bytes with AES-256-CBC and authenticate them
 // with HMAC-SHA256 (Encrypt-then-MAC). AesGcm was rejected for this library: it carries

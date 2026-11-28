@@ -6,8 +6,9 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using PlayerData.Sessions;
 
-namespace PlayerData;
+namespace PlayerData.Persistence;
 
 // Layout:
 //   {root}/manifest.bin

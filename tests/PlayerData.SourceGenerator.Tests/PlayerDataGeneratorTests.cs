@@ -3,6 +3,10 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using NUnit.Framework;
 using PlayerData.SourceGenerator;
+using PlayerData.Persistence;
+using PlayerData.Documents;
+using PlayerData.Sessions;
+using PlayerData.Schema;
 
 namespace PlayerData.SourceGenerator.Tests;
 
@@ -14,6 +18,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -47,16 +52,16 @@ public class PlayerDataGeneratorTests
         Assert.That(generated, Is.Not.Null);
         var text = generated!.GetText().ToString();
         Assert.That(text, Does.Contain("namespace Sample"));
-        Assert.That(text, Does.Contain("partial class GameSave : global::PlayerData.ISaveSession"));
+        Assert.That(text, Does.Contain("partial class GameSave : global::PlayerData.Sessions.ISaveSession"));
         Assert.That(text, Does.Contain("IDoc<global::Sample.PlayerProfile> Profile"));
         Assert.That(text, Does.Contain("IBag<string, global::Sample.InventoryItem> Inventory"));
-        Assert.That(text, Does.Not.Contain("partial global::PlayerData.IDoc"));
-        Assert.That(text, Does.Not.Contain("partial global::PlayerData.IBag"));
+        Assert.That(text, Does.Not.Contain("partial global::PlayerData.Documents.IDoc"));
+        Assert.That(text, Does.Not.Contain("partial global::PlayerData.Documents.IBag"));
         Assert.That(text, Does.Contain("AddDocument(\"Profile\""));
         Assert.That(text, Does.Contain("AddCollection<string, global::Sample.InventoryItem>(\"Inventory\""));
         Assert.That(text, Does.Contain("OpenAsync"));
         Assert.That(text, Does.Contain("PlayerProfile.NewGame()"));
-        Assert.That(text, Does.Contain("global::PlayerData.SuppressionScope SuppressNotifications()"));
+        Assert.That(text, Does.Contain("global::PlayerData.Sessions.SuppressionScope SuppressNotifications()"));
         Assert.That(text, Does.Contain("AddValidator"));
     }
 
@@ -66,6 +71,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -96,6 +102,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -125,6 +132,7 @@ public class PlayerDataGeneratorTests
     {
         const string source = """
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -151,6 +159,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -181,6 +190,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -231,6 +241,7 @@ public class PlayerDataGeneratorTests
     {
         const string source = """
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -242,8 +253,8 @@ public class PlayerDataGeneratorTests
 
         Assert.That(diagnostics, Is.Empty);
         var text = generatedTrees.Single(t => t.FilePath.EndsWith("GameSave.PlayerDataSession.g.cs")).GetText().ToString();
-        Assert.That(text, Does.Contain("partial class GameSave : global::PlayerData.ISaveSession"));
-        Assert.That(text, Does.Contain("public GameSave(global::PlayerData.ISaveBackend backend"));
+        Assert.That(text, Does.Contain("partial class GameSave : global::PlayerData.Sessions.ISaveSession"));
+        Assert.That(text, Does.Contain("public GameSave(global::PlayerData.Persistence.ISaveBackend backend"));
         Assert.That(text, Does.Contain("OpenAsync"));
     }
 
@@ -252,6 +263,7 @@ public class PlayerDataGeneratorTests
     {
         const string source = """
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -271,6 +283,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -298,6 +311,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -333,6 +347,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -359,6 +374,7 @@ public class PlayerDataGeneratorTests
     {
         const string source = """
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -383,6 +399,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -411,6 +428,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -446,6 +464,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -476,6 +495,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -507,6 +527,7 @@ public class PlayerDataGeneratorTests
         const string source = """
             using MemoryPack;
             using PlayerData;
+            using PlayerData.Schema;
 
             namespace Sample;
 
@@ -534,7 +555,7 @@ public class PlayerDataGeneratorTests
     private static (System.Collections.Immutable.ImmutableArray<Diagnostic> Diagnostics, System.Collections.Immutable.ImmutableArray<SyntaxTree> GeneratedTrees) RunGenerator(string additionalSource)
     {
         var references = Basic.Reference.Assemblies.Net90.References.All
-            .Append(MetadataReference.CreateFromFile(typeof(PlayerData.PlayerDataSingleAttribute).Assembly.Location))
+            .Append(MetadataReference.CreateFromFile(typeof(PlayerData.Schema.PlayerDataSingleAttribute).Assembly.Location))
             .Append(MetadataReference.CreateFromFile(typeof(MemoryPack.MemoryPackableAttribute).Assembly.Location));
 
         var compilation = CSharpCompilation.Create(

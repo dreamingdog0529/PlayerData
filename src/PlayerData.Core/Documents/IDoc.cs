@@ -1,6 +1,6 @@
 using System;
 
-namespace PlayerData;
+namespace PlayerData.Documents;
 
 public interface IDoc<T> where T : class
 {

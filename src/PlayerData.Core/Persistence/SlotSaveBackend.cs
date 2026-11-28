@@ -3,7 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PlayerData;
+namespace PlayerData.Persistence;
 
 // Wraps DirectorySaveBackend under {root}/slot_{n}/ so multiple save slots share one root path.
 public sealed class SlotSaveBackend : ISaveBackend

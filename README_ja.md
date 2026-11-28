@@ -179,6 +179,8 @@ dotnet add package PlayerData.MessagePipe
 ```csharp
 using MemoryPack;
 using PlayerData;
+using PlayerData.Persistence;
+using PlayerData.Schema;
 
 [MemoryPackable(GenerateType.VersionTolerant)]
 public partial record PlayerProfile(

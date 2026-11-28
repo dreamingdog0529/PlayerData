@@ -2,6 +2,7 @@ using global::MessagePipe;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using PlayerData;
+using PlayerData.Documents;
 
 namespace PlayerData.MessagePipe.Tests;
 
