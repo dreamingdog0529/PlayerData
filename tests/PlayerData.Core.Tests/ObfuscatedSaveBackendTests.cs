@@ -34,7 +34,7 @@ public class ObfuscatedSaveBackendTests
     [TestCase(0)]
     [TestCase(1)]
     [TestCase(31)]
-    [TestCase(32)] // mask period boundary
+    [TestCase(32)] // マスクの周期の境目です
     [TestCase(33)]
     [TestCase(100)]
     public async Task WriteAsync_ThenReadAsync_RoundTripsExactBytes(int length)
@@ -59,7 +59,7 @@ public class ObfuscatedSaveBackendTests
         var raw = await File.ReadAllBytesAsync(Path.Combine(_directory, "docs", "doc.bin"));
 
         Assert.That(raw, Is.Not.EqualTo(plaintext));
-        Assert.That(raw.Length, Is.EqualTo(plaintext.Length)); // obfuscation does not change length
+        Assert.That(raw.Length, Is.EqualTo(plaintext.Length)); // 難読化で長さは変わりません
     }
 
     [Test]

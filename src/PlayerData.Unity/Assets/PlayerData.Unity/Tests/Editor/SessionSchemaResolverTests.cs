@@ -24,7 +24,7 @@ namespace PlayerData.Unity.Editor.Tests
             SessionSchema schema = SessionSchemaResolver.Resolve(typeof(SampleEditorSession));
 
             Assert.That(schema.Diagnostics, Is.Empty);
-            // Same rule as the source generator: Key ?? propertyName ?? DocumentType.Name.
+            // ソースジェネレータと同じルールです。Key ?? propertyName ?? DocumentType.Name の順に使います。
             Assert.That(
                 schema.Documents.Select(d => d.StorageKey),
                 Is.EqualTo(new[] { "SampleProfile", "Stats", "items-v1" }));
@@ -116,7 +116,7 @@ namespace PlayerData.Unity.Editor.Tests
 
             Assert.That(schema.Documents, Is.Empty);
             Assert.That(schema.Diagnostics, Has.Count.EqualTo(2));
-            // "Session" collides with the generator-emitted "_session" backing field.
+            // "Session" は、ジェネレータが出力する "_session" バッキングフィールドとぶつかります。
             Assert.That(schema.Diagnostics[0], Does.Contain("Session"));
             Assert.That(schema.Diagnostics[1], Does.Contain("IsDirty"));
         }

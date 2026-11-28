@@ -16,18 +16,19 @@ public interface ISaveSession : IAsyncDisposable
 
     bool IsLoaded { get; }
 
-    // Found = false means no save on disk; documents stay at their constructor initial values.
+    // Found = false のときはディスク上にセーブがないという意味で、文書はコンストラクターで用意した初期値のままになります。
     ValueTask<LoadResult> LoadAsync(CancellationToken cancellationToken = default);
 
-    // No-op when !IsDirty. Runs validators, then serializes dirty documents and writes via the backend.
+    // !IsDirty のときは何もしません。バリデーターを走らせてから、dirty な文書をシリアライズしてバックエンド経由で書き込みます。
     ValueTask CommitAsync(CancellationToken cancellationToken = default);
 
-    // Suppress store Changed and DirtyChanged until dispose; then flush coalesced notifications.
-    // Returns a concrete struct (not IDisposable, which would box it) so opening a scope is
-    // allocation-free; dispose each scope exactly once - `using` does this naturally.
+    // 破棄されるまでの間、ストアの Changed と DirtyChanged を抑えておき、破棄のタイミングで
+    // まとめた通知を流します。スコープを開くときにアロケーションが起きないよう、戻り値は具象の
+    // struct にしています（IDisposable にするとボックス化してしまうためです）。各スコープは
+    // ちょうど1回だけ破棄してください。`using` を使えば自然にそうなります。
     SuppressionScope SuppressNotifications();
 
-    // Session-level commit validators (in addition to IValidatable on document values).
+    // セッション単位のコミット用バリデーターです（文書の値に対する IValidatable とは別に働きます）。
     void AddValidator(ISaveValidator validator);
 
     void AddValidator(Action<ISaveSession> validate);
@@ -35,6 +36,6 @@ public interface ISaveSession : IAsyncDisposable
     event Action? Loaded;
     event Action? Committed;
 
-    // Fires when IsDirty transitions (true after first dirty write, false after a clean commit).
+    // IsDirty が切り替わるときに発火します（最初の dirty な書き込みのあとは true、きれいにコミットできたあとは false です）。
     event Action<bool>? DirtyChanged;
 }

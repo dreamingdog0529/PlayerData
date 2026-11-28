@@ -8,9 +8,9 @@ using PlayerData.Persistence;
 
 namespace PlayerData.Unity.Editor.Tests
 {
-    // Live sessions in the two-pane viewer: registering makes a "Playing now" group appear in
-    // the tree, live document leaves open the same detail pane, Apply flows through
-    // LiveSessionView into the running session, and unregistering clears both tree and pane.
+    // 2ペインのビューアでのライブセッションです。登録するとツリーに "Playing now" グループが現れて、
+    // ライブドキュメントの葉からは同じ詳細ペインが開き、Apply は LiveSessionView を通して
+    // 動いているセッションへ流れます。登録を解除すると、ツリーとペインの両方がクリアされます。
     public sealed class PlayerDataViewerLiveModeTests
     {
         private string _root;
@@ -39,7 +39,7 @@ namespace PlayerData.Unity.Editor.Tests
                 Directory.Delete(_root, recursive: true);
         }
 
-        // ---- element access ----
+        // ---- 要素へのアクセス ----
 
         private VisualElement DetailContent => _rootElement.Q<VisualElement>(ViewerUI.DetailContentName);
         private Label Header => _rootElement.Q<Label>(ViewerUI.DetailHeaderName);
@@ -52,7 +52,7 @@ namespace PlayerData.Unity.Editor.Tests
 
         private static bool IsShown(VisualElement element) => element.style.display.value == DisplayStyle.Flex;
 
-        // ---- tree access ----
+        // ---- ツリーへのアクセス ----
 
         private static void Flatten(IEnumerable<TreeViewItemData<SaveTreeNode>> items, List<SaveTreeNode> into)
         {
@@ -95,7 +95,7 @@ namespace PlayerData.Unity.Editor.Tests
             return node;
         }
 
-        // ---- tree integration ----
+        // ---- ツリーとの統合 ----
 
         [Test]
         public void Register_ShowsPlayingNowGroup_WithSessionAndDocumentLeaves()
@@ -137,7 +137,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(ApplyButton.enabledSelf, Is.False);
         }
 
-        // ---- detail pane ----
+        // ---- 詳細ペイン ----
 
         [Test]
         public void SelectLiveDocument_ShowsHeaderStateAndValues()
@@ -171,7 +171,7 @@ namespace PlayerData.Unity.Editor.Tests
 
                 Assert.That(IsShown(ErrorBox), Is.False, ErrorBox.text);
                 Assert.That(_session.Stats.Value.Hp, Is.EqualTo(42));
-                // The pane repopulated from the live snapshot after Apply.
+                // Apply のあと、ペインはライブのスナップショットから再び入力されています。
                 Assert.That(JsonField.value, Does.Contain("\"Hp\": 42"));
             }
         }
@@ -211,7 +211,7 @@ namespace PlayerData.Unity.Editor.Tests
             }
         }
 
-        // ---- collections ----
+        // ---- コレクション ----
 
         [Test]
         public void LiveCollection_FieldsView_ShowsOneSubFormPerEntry()
@@ -301,7 +301,7 @@ namespace PlayerData.Unity.Editor.Tests
                 Assert.That(IsShown(ErrorBox), Is.False, ErrorBox.text);
                 Assert.That(_session.Items.Snapshot["potion"].Count, Is.EqualTo(9));
                 Assert.That(_session.Items.Snapshot["elixir"].Count, Is.EqualTo(1));
-                // Round trip: the pane re-read the applied snapshot.
+                // 往復の確認です。ペインは、適用済みのスナップショットを読み直しています。
                 Assert.That(JsonField.value, Does.Contain("elixir"));
             }
         }

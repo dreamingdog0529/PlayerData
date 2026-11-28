@@ -89,7 +89,7 @@ public class DirectorySaveBackendTests
     [Test]
     public async Task WriteAsync_EscapesPathSeparatorsInKeys()
     {
-        // Keys containing path separators must not create nested directories under docs/.
+        // パスの区切り文字を含むキーは、docs/ の下にネストしたディレクトリを作ってはいけません。
         var backend = new DirectorySaveBackend(_directory);
         await backend.WriteAsync(new SaveBundle(1, new Dictionary<string, byte[]>
         {
@@ -132,7 +132,7 @@ public class DirectorySaveBackendTests
     public async Task ReadAsync_CorruptManifest_Throws()
     {
         Directory.CreateDirectory(_directory);
-        // Truncated after format version int32 - ParseManifest should fail cleanly.
+        // フォーマットのバージョンの int32 のあとで切り詰められています。ParseManifest がきれいに失敗するはずです。
         await File.WriteAllBytesAsync(Path.Combine(_directory, "manifest.bin"), new byte[] { 1, 0, 0, 0 });
 
         var backend = new DirectorySaveBackend(_directory);

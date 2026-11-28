@@ -10,7 +10,7 @@ namespace PlayerData.Unity.Editor.Tests
         Gold = 2,
     }
 
-    // Mutable class covering enum / nullable / list / dictionary members.
+    // enum や nullable、list、dictionary のメンバーを扱う、変更できるクラスです。
     [MemoryPackable(GenerateType.VersionTolerant)]
     public partial class SampleStats
     {
@@ -30,7 +30,7 @@ namespace PlayerData.Unity.Editor.Tests
         public Dictionary<string, int> Counters { get; set; } = new Dictionary<string, int>();
     }
 
-    // Immutable record nested inside another record.
+    // 別のレコードの中に入っている、変更できないレコードです。
     [MemoryPackable(GenerateType.VersionTolerant)]
     public partial record SamplePosition
     {
@@ -54,7 +54,7 @@ namespace PlayerData.Unity.Editor.Tests
         public SamplePosition Spawn { get; init; } = new SamplePosition();
     }
 
-    // Computed member excluded from the payload via [MemoryPackIgnore].
+    // [MemoryPackIgnore] でペイロードから外している、計算で求めるメンバーです。
     [MemoryPackable(GenerateType.VersionTolerant)]
     public partial class SampleWithIgnored
     {
@@ -65,7 +65,7 @@ namespace PlayerData.Unity.Editor.Tests
         public int Doubled => BaseValue * 2;
     }
 
-    // Non-public member included in the payload via [MemoryPackInclude].
+    // [MemoryPackInclude] でペイロードに含めている、非公開のメンバーです。
     [MemoryPackable(GenerateType.VersionTolerant)]
     public partial class SampleWithPrivateIncluded
     {
@@ -81,8 +81,8 @@ namespace PlayerData.Unity.Editor.Tests
         }
     }
 
-    // Same document key written by a "newer" schema (extra member C): reading its payload
-    // as SampleWideDocV1 drops C, so a JSON round-trip cannot reproduce the bytes.
+    // 「新しい」スキーマ（追加メンバー C があります）が書いた、同じドキュメントキーです。そのペイロードを
+    // SampleWideDocV1 として読むと C が落ちてしまうので、JSON の往復ではバイト列を再現できません。
     [MemoryPackable(GenerateType.VersionTolerant)]
     public partial record SampleWideDocV2
     {

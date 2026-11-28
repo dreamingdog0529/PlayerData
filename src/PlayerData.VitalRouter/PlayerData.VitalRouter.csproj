@@ -7,7 +7,7 @@
   <PropertyGroup>
     <PackageId>PlayerData.VitalRouter</PackageId>
     <Version>0.1.1</Version>
-    <Description>Publishes PlayerData store changes as VitalRouter commands.</Description>
+    <Description>PlayerData のストアの変更を VitalRouter のコマンドとして配信します。</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
   <ItemGroup>

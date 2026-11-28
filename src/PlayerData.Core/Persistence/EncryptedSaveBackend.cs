@@ -9,23 +9,23 @@ using System.Threading.Tasks;
 
 namespace PlayerData.Persistence;
 
-// Wraps an ISaveBackend to encrypt each document's bytes with AES-256-CBC and authenticate them
-// with HMAC-SHA256 (Encrypt-then-MAC). AesGcm was rejected for this library: it carries
-// [UnsupportedOSPlatform("browser")] on every .NET moniker and has a history of
-// PlatformNotSupportedException reports under Unity IL2CPP, while Aes/HMACSHA256 carry no such
-// restriction on netstandard2.1.
+// ISaveBackend を包んで、各文書のバイト列を AES-256-CBC で暗号化し、HMAC-SHA256 で認証する
+// ためのものです（Encrypt-then-MAC です）。AesGcm は使わないことにしています：どの .NET の
+// モニカーでも [UnsupportedOSPlatform("browser")] が付いていて、Unity IL2CPP の下で
+// PlatformNotSupportedException が報告されることがあるためです。一方、Aes / HMACSHA256 には
+// netstandard2.1 でそうした制限がありません。
 //
-// Payload layout per document: [FormatTag(1)] [IV(16)] [ciphertext(N, PKCS7)] [HMACTag(32)].
-// The HMAC additionally authenticates the document key and the bundle's FormatVersion as
-// associated data (not stored in the payload itself), so ciphertext cannot be swapped between
-// documents or replayed from a differently-versioned bundle without detection.
+// 文書ごとのペイロードの並びは [FormatTag(1)] [IV(16)] [ciphertext(N, PKCS7)] [HMACTag(32)] です。
+// HMAC はさらに、文書のキーとバンドルの FormatVersion を関連データとして（ペイロード自体には
+// 保存せずに）認証しますので、暗号文を文書の間で入れ替えたり、バージョンの違うバンドルから
+// 流用したりしても、検知されずに済むことはありません。
 public sealed class EncryptedSaveBackend : ISaveBackend, IDisposable
 {
     private const byte FormatTag = 0x01;
     private const int IvSize = 16;
-    private const int TagSize = 32; // HMACSHA256 output size
+    private const int TagSize = 32; // HMACSHA256 の出力サイズです
     private const int MinPayloadSize = 1 + IvSize + TagSize;
-    private const int Pbkdf2Iterations = 210_000; // OWASP 2023 recommendation for PBKDF2-HMAC-SHA256
+    private const int Pbkdf2Iterations = 210_000; // PBKDF2-HMAC-SHA256 についての OWASP 2023 の推奨値です
 
     private static readonly byte[] Pbkdf2Salt = Encoding.UTF8.GetBytes("PlayerData.Core.EncryptedSaveBackend.v1");
     private static readonly byte[] AesInfo = Encoding.UTF8.GetBytes("PlayerData.Core.v1.AES");
@@ -35,24 +35,25 @@ public sealed class EncryptedSaveBackend : ISaveBackend, IDisposable
     private readonly byte[] _aesKey;
     private readonly byte[] _hmacKey;
 
-    // Aes.Create() (platform-impl probing + object graph) and IncrementalHash.CreateHMAC (HMAC
-    // key schedule: two SHA-256 block passes over the padded key) used to run once per document
-    // per Protect/Unprotect call. Both are keyed by fields fixed at construction, so one cached
-    // instance each serves every call; _cryptoGate serializes access since neither type is
-    // thread-safe (uncontended lock cost is negligible next to the per-call construction it
-    // replaces, and Read/Write already process documents sequentially).
+    // Aes.Create()（プラットフォーム実装の探索とオブジェクトグラフ）と IncrementalHash.CreateHMAC
+    // （HMAC の鍵スケジュール：詰めた鍵に対する SHA-256 ブロックの処理2回）は、どちらも構築時に
+    // 決まるフィールドを鍵にしています。そのため、Protect / Unprotect の呼び出しのたびに文書ごとに
+    // 作り直さず、キャッシュしたインスタンスを1つずつ使い回します。どちらの型もスレッドセーフでは
+    // ないため、アクセスは _cryptoGate で直列化します（競合のないロックのコストは、呼び出しごとの
+    // 構築に比べればごくわずかですし、Read / Write はもともと文書を順番に処理します）。
     private readonly object _cryptoGate = new();
     private readonly Aes _aes;
     private readonly IncrementalHash _hmac;
     private Dictionary<string, byte[]>? _writeScratch;
-    // Scratch IV handed to CreateEncryptor/CreateDecryptor, which clone it internally before
-    // the transform is built - so reusing one buffer per backend (under _cryptoGate) is safe
-    // and saves a 16-byte allocation per document. netstandard2.1 has no span-taking overload.
+    // CreateEncryptor / CreateDecryptor へ渡す作業用の IV です。そちらは変換を作る前に内部で
+    // 複製しますので、バックエンドごとに（_cryptoGate の下で）1つのバッファを使い回しても安全で、
+    // 文書ごとに 16 バイトのアロケーションを省けます。netstandard2.1 には span を取る
+    // オーバーロードがありません。
     private readonly byte[] _ivScratch = new byte[IvSize];
 
-    // key is used as HKDF input key material (IKM), not directly as the AES/HMAC key: reusing
-    // one raw key across two primitives is a key-reuse anti-pattern, so AES and HMAC subkeys are
-    // derived separately (see DeriveKeys).
+    // key は AES / HMAC の鍵として直接使うのではなく、HKDF の入力鍵素材（IKM）として使います：
+    // 1つの生の鍵を2つのプリミティブで使い回すのは鍵の再利用というよくない形ですので、AES と
+    // HMAC のサブ鍵は別々に導出します（DeriveKeys をご覧ください）。
     public EncryptedSaveBackend(ISaveBackend inner, byte[] key)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
@@ -105,11 +106,11 @@ public sealed class EncryptedSaveBackend : ISaveBackend, IDisposable
     {
         if (bundle is null) throw new ArgumentNullException(nameof(bundle));
 
-        // Recycled dictionary (same Interlocked.Exchange handoff as ObfuscatedSaveBackend):
-        // taken by at most one in-flight write, returned only after the inner WriteAsync
-        // completed (the ownership contract bars the inner backend from holding the bundle past
-        // that point), dropped when the write throws. The encrypted payloads themselves are
-        // fresh per call - only the dictionary is reused.
+        // 使い回すディクショナリです（ObfuscatedSaveBackend と同じ Interlocked.Exchange の
+        // 受け渡し）：同時に進行中の書き込みで取るのは最大で1つだけで、戻すのは内側の WriteAsync が
+        // 完了したあとだけです（所有権の約束ごとにより、内側のバックエンドがその時点を越えてバンドルを
+        // 保持することはありません）。書き込みが例外を投げたときは捨てます。暗号化したペイロード自体は
+        // 呼び出しごとに新しいもので、再利用するのはディクショナリだけです。
         var documents = Interlocked.Exchange(ref _writeScratch, null)
             ?? new Dictionary<string, byte[]>(bundle.Documents.Count);
         foreach (var pair in bundle.Documents)
@@ -121,20 +122,20 @@ public sealed class EncryptedSaveBackend : ISaveBackend, IDisposable
         Volatile.Write(ref _writeScratch, documents);
     }
 
-    // Builds the final payload buffer once ([FormatTag][IV][ciphertext][HMACTag]) and encrypts
-    // directly into it instead of allocating a separate ciphertext array, an ivAndCiphertext
-    // array, and a MAC-input array along the way (the pre-ST-2 shape of this method). PKCS7
-    // always appends a full padding block even when the input is already block-aligned, so the
-    // ciphertext length is always plaintext rounded up to the next 16-byte boundary - this lets
-    // the final buffer be sized up front. TransformBlock writes full blocks straight into the
-    // payload at the right offset; only the last (possibly all-padding) block still comes back
-    // as a fresh, fixed 16-byte array from TransformFinalBlock, since ICryptoTransform has no
-    // span/offset-writing overload for it on netstandard2.1.
+    // 最終的なペイロードのバッファ（[FormatTag][IV][ciphertext][HMACTag]）を1回で組み立て、
+    // そこへ直接暗号化します。途中で暗号文の配列や ivAndCiphertext の配列、MAC 入力の配列を
+    // 別々に確保しないための形です。PKCS7 は入力がすでにブロック境界に揃っていても必ず丸ごとの
+    // パディングブロックを付けますので、暗号文の長さは常に平文を次の 16 バイト境界へ切り上げた
+    // 大きさになり、最終バッファの大きさを最初に決められます。TransformBlock は完全なブロックを
+    // ペイロードの正しいオフセットへ直接書きます。最後のブロック（すべてパディングのこともあります）
+    // だけは TransformFinalBlock から新しい固定 16 バイトの配列として返ってきます。
+    // ICryptoTransform には netstandard2.1 で span やオフセットへ書くオーバーロードがないためです。
     internal byte[] Protect(int formatVersion, string documentKey, byte[] plaintext)
     {
-        // The IV is generated straight into the payload (its final destination); the only copy
-        // is into the reusable scratch buffer CreateEncryptor requires as byte[]. aes.GenerateIV()
-        // + the aes.IV getter used to allocate one internal array plus a defensive copy per call.
+        // IV は最終的な置き場所であるペイロードの中へ直接生成します。コピーは、CreateEncryptor が
+        // byte[] として必要とする使い回しの作業バッファへの1回だけです。aes.GenerateIV() と
+        // aes.IV の getter を使う形にしないのは、呼び出しごとに内部の配列と防御的なコピーが
+        // 確保されてしまうためです。
         var ciphertextLength = (plaintext.Length / 16 + 1) * 16;
         var payload = new byte[1 + IvSize + ciphertextLength + TagSize];
         payload[0] = FormatTag;
@@ -161,11 +162,11 @@ public sealed class EncryptedSaveBackend : ISaveBackend, IDisposable
         return payload;
     }
 
-    // Operates on the input `payload` array by offset instead of first copying the ciphertext
-    // (and, previously, the IV) out into their own arrays: ICryptoTransform.TransformFinalBlock
-    // accepts an (array, offset, count) triple, so it can decrypt straight out of the caller's
-    // buffer. Only the 16-byte IV still needs a dedicated array, since SymmetricAlgorithm.IV's
-    // setter takes byte[] on netstandard2.1 (no ReadOnlySpan<byte> overload).
+    // 暗号文（や IV）を専用の配列へ先にコピーするのではなく、入力の `payload` 配列に対して
+    // オフセットで操作します：ICryptoTransform.TransformFinalBlock は（配列、オフセット、個数）の
+    // 組を受け取りますので、呼び出し側のバッファから直接復号できます。専用の配列が要るのは
+    // 16 バイトの IV だけで、SymmetricAlgorithm.IV の setter が netstandard2.1 では byte[] を
+    // 取るためです（ReadOnlySpan<byte> のオーバーロードがありません）。
     internal byte[] Unprotect(int formatVersion, string documentKey, byte[] payload)
     {
         if (payload.Length < MinPayloadSize)
@@ -195,30 +196,31 @@ public sealed class EncryptedSaveBackend : ISaveBackend, IDisposable
             }
             catch (CryptographicException ex)
             {
-                // A padding failure here would mean the HMAC verified above but the plaintext is
-                // still malformed, which should not happen for anything but a broken key. Fold it
-                // into the same exception rather than exposing a second, more specific error path.
+                // ここでパディングが失敗するのは、上の HMAC は通ったのに平文がそれでも壊れている
+                // ということで、鍵が壊れているような場合でもない限り起きないはずです。より詳しい
+                // 別のエラーの経路を表に出さず、同じ例外にまとめて扱います。
                 throw new SaveTamperDetectedException(
                     $"Encrypted document '{documentKey}' failed to decrypt after passing integrity verification.", ex);
             }
         }
     }
 
-    // HMAC input: FormatTag(1) || LE-Int32(formatVersion) || LE-Int32(keyByteLength) ||
-    // UTF8(documentKey) || ivAndCiphertext. documentKey and formatVersion are associated data:
-    // they are authenticated but never stored in the payload, binding each tag to the specific
-    // document slot and bundle version it was written for.
+    // HMAC の入力は FormatTag(1) || LE-Int32(formatVersion) || LE-Int32(keyByteLength) ||
+    // UTF8(documentKey) || ivAndCiphertext です。documentKey と formatVersion は関連データで、
+    // 認証はされますがペイロードには保存されません。各タグが、それが書かれた特定の文書の場所と
+    // バンドルのバージョンに結びつくようにするためです。
     //
-    // Built via IncrementalHash.AppendData across three spans instead of concatenating
-    // everything into one macInput array first - HMAC is a streaming construction, so appending
-    // the same bytes in the same order produces an identical tag. documentKey's UTF8 bytes are
-    // encoded into a stack (or, past MaxStackKeyBytes, pooled) buffer rather than a per-call
-    // heap array; GetHashAndReset() is netstandard2.1's only overload (the Span<byte>-writing one
-    // is net5.0+), so the 32-byte tag itself is still a fresh allocation.
+    // すべてを1つの macInput 配列へ先に連結するのではなく、IncrementalHash.AppendData で
+    // 3つの span に分けて組み立てます。HMAC はストリーミングの構成ですので、同じバイト列を同じ
+    // 順番で追加すれば同じタグになります。documentKey の UTF8 バイトは、呼び出しごとのヒープの
+    // 配列ではなく、スタック上（MaxStackKeyBytes を超えたらプール）のバッファへエンコードします。
+    // GetHashAndReset() は netstandard2.1 で使える唯一のオーバーロードですので（Span<byte> へ
+    // 書くものは net5.0 以降です）、32 バイトのタグ自体は新しいアロケーションになります。
     private const int MaxStackKeyBytes = 256;
 
-    // Caller must hold _cryptoGate: the shared _hmac instance carries per-computation state
-    // between AppendData and GetHashAndReset (which leaves it reset and ready for the next MAC).
+    // 呼び出し側は _cryptoGate を保持している必要があります：共有の _hmac インスタンスは、
+    // AppendData から GetHashAndReset までの間、計算ごとの状態を持ちます（GetHashAndReset は
+    // リセットして、次の MAC の準備ができた状態で残してくれます）。
     private byte[] ComputeMac(int formatVersion, string documentKey, ReadOnlySpan<byte> ivAndCiphertext)
     {
         var maxKeyByteCount = Encoding.UTF8.GetMaxByteCount(documentKey.Length);
@@ -246,13 +248,14 @@ public sealed class EncryptedSaveBackend : ISaveBackend, IDisposable
         }
     }
 
-    // RFC 5869 HKDF (Extract-then-Expand), built from HMACSHA256 alone: netstandard2.1 has no
-    // System.Security.Cryptography.HKDF (that class is .NET 5+ only). Each Expand step needs
-    // only a single HMAC block since SHA-256 already produces the 32 bytes each subkey needs:
-    // T(1) = HMAC(PRK, info || counterByte) with T(0) empty and counterByte = 0x01.
+    // RFC 5869 の HKDF（Extract-then-Expand）で、HMACSHA256 だけで組み立ててあります：
+    // netstandard2.1 には System.Security.Cryptography.HKDF がありません（そのクラスは
+    // .NET 5 以降だけです）。SHA-256 は各サブ鍵が必要とする 32 バイトをすでに生みますので、
+    // Expand の各ステップには HMAC ブロックが1つで足ります：
+    // T(1) = HMAC(PRK, info || counterByte) で、T(0) は空、counterByte は 0x01 です。
     private static (byte[] AesKey, byte[] HmacKey) DeriveKeys(byte[] ikm)
     {
-        var prk = Hmac(new byte[32], ikm); // Extract: HMAC(key=zero-salt, message=IKM)
+        var prk = Hmac(new byte[32], ikm); // Extract です：HMAC(key=zero-salt, message=IKM)
         var aesKey = Hmac(prk, ExpandBlockInput(AesInfo));
         var hmacKey = Hmac(prk, ExpandBlockInput(HmacInfo));
         return (aesKey, hmacKey);

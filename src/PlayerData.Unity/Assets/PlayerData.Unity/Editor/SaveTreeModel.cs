@@ -13,8 +13,8 @@ namespace PlayerData.Unity.Editor
     }
 
     /// <summary>
-    /// One node of the viewer's save tree. Pure data: no UIToolkit types, so EditMode tests can
-    /// assert the whole structure without a window.
+    /// ビューワーのセーブツリーのノード 1 件です。純粋なデータで、UIToolkit の型は入っていません。なので EditMode テストでは、
+    /// ウィンドウなしで構造全体を確認できます。
     /// </summary>
     public sealed class SaveTreeNode
     {
@@ -40,7 +40,7 @@ namespace PlayerData.Unity.Editor
             State = state;
         }
 
-        /// <summary>Unique within one Build result; stable across builds for identical inputs.</summary>
+        /// <summary>1 回の Build の結果の中では一意です。入力が同じなら、ビルドをまたいでも安定しています。</summary>
         public int Id { get; }
 
         public string DisplayName { get; }
@@ -49,27 +49,27 @@ namespace PlayerData.Unity.Editor
 
         public IReadOnlyList<SaveTreeNode> Children { get; }
 
-        /// <summary>Set on Save and Document nodes.</summary>
+        /// <summary>Save ノードと Document ノードに設定されます。</summary>
         public SaveLocation? Location { get; }
 
-        /// <summary>Set on Document nodes.</summary>
+        /// <summary>Document ノードに設定されます。</summary>
         public string? StorageKey { get; }
 
-        /// <summary>Set on LiveSession and LiveDocument nodes.</summary>
+        /// <summary>LiveSession ノードと LiveDocument ノードに設定されます。</summary>
         public string? SessionName { get; }
 
-        /// <summary>Set on LiveDocument nodes.</summary>
+        /// <summary>LiveDocument ノードに設定されます。</summary>
         public string? PropertyName { get; }
 
-        /// <summary>The on-disk document state; set on Document nodes only, drives the tree's status dot.</summary>
+        /// <summary>ディスク上のドキュメントの状態です。Document ノードにだけ設定され、ツリーのステータスドットを決めます。</summary>
         public DocumentState? State { get; }
 
-        /// <summary>Only document leaves open the detail pane; groups/saves/sessions just expand.</summary>
+        /// <summary>詳細ペインを開くのはドキュメントのリーフだけです。グループ、セーブ、セッションは展開するだけです。</summary>
         public bool IsSelectableForDetail =>
             Kind is SaveTreeNodeKind.Document or SaveTreeNodeKind.LiveDocument;
     }
 
-    /// <summary>Live session input for the tree: registry name plus its discovered documents.</summary>
+    /// <summary>ツリー向けのライブセッションの入力です。レジストリ名と、そこで見つけたドキュメントを合わせたものです。</summary>
     public sealed class SaveTreeLiveSession
     {
         public SaveTreeLiveSession(string name, IReadOnlyList<LiveDocumentDescriptor> documents)
@@ -84,19 +84,19 @@ namespace PlayerData.Unity.Editor
     }
 
     /// <summary>
-    /// Maps disk scan results and live sessions to the viewer's tree: root groups → saves /
-    /// sessions → document leaves. Pure and synchronous so tests can drive it without UI.
+    /// ディスクのスキャン結果とライブセッションを、ビューワーのツリーに対応付けます。ルートのグループ → セーブ /
+    /// セッション → ドキュメントのリーフ、という形です。純粋で同期的なので、テストでは UI なしで動かせます。
     /// </summary>
     public static class SaveTreeModel
     {
         public const string PlayingNowLabel = "Playing now";
 
-        /// <summary>Label for a save whose directory is the scanned root itself.</summary>
+        /// <summary>ディレクトリがスキャンしたルートそのものであるセーブ向けのラベルです。</summary>
         public const string RootSaveLabel = "(root)";
 
         /// <summary>
-        /// The "Saved files" group is always first and always present (empty root = zero
-        /// children); the "Playing now" group exists only when live sessions do.
+        /// 「Saved files」グループはいつも最初にあり、いつも存在します（空のルートでは子がゼロになります）。
+        /// 「Playing now」グループは、ライブセッションがあるときにだけ存在します。
         /// </summary>
         public static IReadOnlyList<SaveTreeNode> Build(
             string rootDirectory,
@@ -137,7 +137,7 @@ namespace PlayerData.Unity.Editor
             {
                 documents.Add(new SaveTreeNode(
                     nextId++,
-                    // Name only: the state now reads from the row's status dot, not the label text.
+                    // 名前だけにします。状態はラベルのテキストではなく、行のステータスドットから読むようになったためです。
                     ViewerDisplayNames.DocumentDisplayName(
                         entry.StorageKey, entry.Descriptor?.PropertyName, entry.Descriptor?.DocumentType.Name),
                     SaveTreeNodeKind.Document,
@@ -186,8 +186,8 @@ namespace PlayerData.Unity.Editor
             if (directory.StartsWith(prefix, StringComparison.Ordinal))
                 return directory.Substring(prefix.Length);
 
-            // A location outside the scanned root is a caller bug; showing the full path makes
-            // the mismatch visible instead of fabricating a relative one.
+            // スキャンしたルートの外にある場所は、呼び出し側のバグです。フルパスを表示することで、相対パスを
+            // でっち上げるのではなく、不一致が見えるようにします。
             return directory;
         }
 

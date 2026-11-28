@@ -4,15 +4,13 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Documents;
 
-// Lock-free reads (Volatile.Read) with a CAS retry loop on writes.
-// Persistence is owned by SaveSession - this type is memory-only.
+// 読み取りはロックなし（Volatile.Read）で、書き込みは CAS のリトライループで回しています。
+// 永続化は SaveSession が担当しますので、この型はメモリ上だけのものです。
 public sealed class DocumentStore<T> : IDoc<T> where T : class
 {
-    // Called exactly once per mutation (not once for the dirty-notification path and again for
-    // the Changed-coalescing check, as the two separate delegates this replaced did). The
-    // callback both forwards the mutation to the owning SaveSession and returns whether
-    // notifications are currently suppressed, so the store can reuse that single answer for its
-    // own RaiseChanged decision below instead of querying suppression state a second time.
+    // 変更のたびにちょうど1回だけ呼ばれるコールバックです。変更を所有者の SaveSession へ伝える
+    // 役割と、通知が今抑えられているかどうかを返す役割を1つにまとめてあります。おかげでストアは、
+    // 抑制状態をもう一度問い合わせずに、その答えを下の RaiseChanged の判断に使い回せます。
     private readonly Func<bool>? _onMutated;
     private T _current;
     private long _version;
@@ -72,9 +70,9 @@ public sealed class DocumentStore<T> : IDoc<T> where T : class
     {
         if (value is null) throw new ArgumentNullException(nameof(value));
 
-        // Unconditional swap: Replace does not need the CAS retry loop Update uses for
-        // read-modify-write updaters. Interlocked.Exchange publishes the new reference and
-        // returns the previous one for the Changed event in a single atomic step.
+        // 無条件の入れ替えです：Replace には、読み取り・変更・書き込みを行う Update が使うような
+        // CAS のリトライループは要りません。Interlocked.Exchange が新しい参照を公開しつつ、
+        // Changed イベント用の前の参照を、1回の原子的なステップで返してくれます。
         var before = Interlocked.Exchange(ref _current, value)!;
         Interlocked.Increment(ref _version);
         var suppressed = _onMutated?.Invoke() ?? false;
@@ -82,7 +80,7 @@ public sealed class DocumentStore<T> : IDoc<T> where T : class
         return value;
     }
 
-    // Used by SaveSession.LoadAsync - does not raise Changed and marks the store clean.
+    // SaveSession.LoadAsync が使うものです。Changed は発火させず、ストアを clean な状態にします。
     internal void ReplaceFromLoad(T value)
     {
         if (value is null) throw new ArgumentNullException(nameof(value));
@@ -94,7 +92,7 @@ public sealed class DocumentStore<T> : IDoc<T> where T : class
 
     internal void MarkCleanAt(long version)
     {
-        // Only clear dirty if no newer user update landed after the commit snapshot was taken.
+        // コミットのスナップショットを取ったあとに新しいユーザー更新が来ていたら、dirty は消さないようにします。
         if (Volatile.Read(ref _version) == version)
             Volatile.Write(ref _cleanVersion, version);
     }
@@ -116,7 +114,7 @@ public sealed class DocumentStore<T> : IDoc<T> where T : class
     {
         if (suppressed)
         {
-            // Coalesce: keep the first Previous, latest Current.
+            // まとめます：Previous は最初のものを残し、Current は最新のものにします。
             if (_pendingChange is { } existing)
                 _pendingChange = new DocChange<T>(existing.Previous, change.Current, change.Cause);
             else

@@ -5,9 +5,9 @@ using PlayerData.Schema;
 namespace PlayerData.Unity.Editor
 {
     /// <summary>
-    /// Editor-only fixture for a single PlayerData document. Stored as a Project asset so
-    /// planners/QA can author sample payloads in the Inspector without touching Core binaries.
-    /// Runtime game code must not load this type (it lives in the Editor assembly).
+    /// PlayerData ドキュメント 1 件分のための、エディター専用のフィクスチャです。Project アセットとして置いてあるので、
+    /// プランナーや QA の方が Core のバイナリに触らなくても、Inspector でサンプルのペイロードを作れます。
+    /// ランタイムのゲームコードからこの型を読み込まないでください（Editor アセンブリの中にあります）。
     /// </summary>
     [CreateAssetMenu(
         fileName = "PlayerData Document",

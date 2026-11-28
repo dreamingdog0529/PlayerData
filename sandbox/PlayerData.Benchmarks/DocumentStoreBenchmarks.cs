@@ -3,8 +3,8 @@ using PlayerData.Documents;
 
 namespace PlayerData.Benchmarks;
 
-// Compares the capturing-closure call shape (pre-existing API) against the TState overloads
-// added to eliminate per-call closure allocations on DocumentStore<T>.
+// キャプチャするクロージャを使う呼び出し方（もともとの API）と、DocumentStore<T> への呼び出しごとの
+// クロージャ確保をなくすために追加した、TState ありのオーバーロードを比べます。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 1, warmupCount: 3, iterationCount: 5)]
 public class DocumentStoreBenchmarks
@@ -14,9 +14,9 @@ public class DocumentStoreBenchmarks
     private DocumentStore<PlayerProfile> _store = null!;
     private PlayerProfile _replacement = null!;
 
-    // Dedicated Clean/Dirty stores for IsDirty (round-2 perf plan ST-2): isolates the
-    // Volatile.Read(_version)/Volatile.Read(_cleanVersion) comparison itself from the
-    // Update/Replace call path the other benchmarks in this class exercise.
+    // IsDirty 専用の、きれいな状態と汚れた状態のストアです（ラウンド2の性能計画 ST-2）。Volatile.Read(_version) と
+    // Volatile.Read(_cleanVersion) の比較そのものを、このクラスのほかのベンチマークが使う
+    // Update / Replace の呼び出し経路から切り離して測ります。
     private DocumentStore<PlayerProfile> _cleanStore = null!;
     private DocumentStore<PlayerProfile> _dirtyStore = null!;
 
@@ -45,11 +45,11 @@ public class DocumentStoreBenchmarks
         return _store.Update(GoldGain, static (gain, current) => current with { Gold = current.Gold + gain });
     }
 
-    // Isolates DocumentStore<T>.Update's own cost from the `with` expression's allocation: the
-    // updater here returns the already-allocated `_replacement` unchanged, so it performs zero
-    // allocation of its own. If this benchmark's Allocated is ~0B (matching Value_Read), that
-    // proves Update_WithState's 40B comes entirely from PlayerProfile's `with` expression
-    // creating a new record instance, not from DocumentStore<T> itself (see plan ST-3).
+    // DocumentStore<T>.Update 自身のコストを、`with` 式の確保から切り離して測ります。
+    // ここでの updater は、確保済みの `_replacement` をそのまま返すので、自分では何も確保しません。
+    // このベンチマークの Allocated がだいたい 0B（Value_Read と同じくらい）なら、Update_WithState の
+    // 40B はすべて、PlayerProfile の `with` 式が新しいレコードのインスタンスを作る分であり、
+    // DocumentStore<T> 自身の分ではないことが分かります（計画の ST-3 をご覧ください）。
     [Benchmark]
     public PlayerProfile Update_WithState_UpdaterAllocatesNothing()
     {

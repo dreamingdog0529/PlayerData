@@ -4,18 +4,18 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Benchmarks;
 
-// Isolates SaveSession.CollectionParticipant's serialize/deserialize path (GetBytes/LoadBytes) from
-// the single-document path already covered by SaveSessionBenchmarks. Dirty tracking on
-// KeyedDocumentStore is store-level, not per-item, so upserting one existing key forces
-// GetBytes() to re-serialize every seeded item on the next commit - this is the path the
-// ImmutableDictionary-direct-serialize optimization targets.
+// SaveSession.CollectionParticipant のシリアライズとデシリアライズの経路（GetBytes / LoadBytes）を、
+// SaveSessionBenchmarks がすでにカバーしている単一ドキュメントの経路から切り離して測ります。
+// KeyedDocumentStore の汚れの管理は項目ごとではなくストア単位なので、既存のキーを1つ差し替えるだけでも、
+// 次のコミットでは GetBytes() が、仕込んだ項目をすべてシリアライズし直します。ここが、
+// ImmutableDictionary を直接シリアライズする最適化の対象になっている経路です。
 //
-// Uses launchCount:3 instead of the launchCount:1 used elsewhere in this project: a
-// launchCount:1/iterationCount:5 job on a 200-item ImmutableDictionary write path produced 3x
-// Mean swings and inverted rankings between two otherwise-identical clean runs (confirmed by
-// re-running KeyedDocumentStoreBenchmarks twice back to back), because ImmutableDictionary.SetItem's
-// node-allocation count depends on tree shape, which the pilot phase's warmup mutations perturb
-// differently run to run. Multiple process launches average that out.
+// このプロジェクトのほかの場所で使う launchCount:1 ではなく、launchCount:3 を使っています。
+// 200項目の ImmutableDictionary への書き込み経路で launchCount:1 / iterationCount:5 のジョブを使うと、
+// 平均が3倍振れたり、きれいな実行同士でも順位が逆転したりしました（KeyedDocumentStoreBenchmarks を続けて
+// 2回実行して確認しています）。ImmutableDictionary.SetItem が確保するノードの数はツリーの形で決まり、
+// 試運転の段階でのウォームアップの変更が、その形を実行ごとに違うふうに乱してしまうためです。
+// プロセスを複数回起動して平均を取ることで、それをならしています。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 3, warmupCount: 3, iterationCount: 5)]
 public class SaveSessionCollectionBenchmarks

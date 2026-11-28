@@ -1,10 +1,10 @@
 using PlayerData.Persistence;
 namespace PlayerData.Migrations;
 
-/// <summary>Migrates a save bundle from <see cref="FromVersion"/> to <see cref="ToVersion"/>.</summary>
-/// <remarks>Ownership: the input bundle's ownership transfers to the migration - it may mutate
-/// the documents in place or return the same instance. Ownership of the returned bundle
-/// transfers back to the caller; the migration must not retain references to it.</remarks>
+/// <summary>セーブバンドルを <see cref="FromVersion"/> から <see cref="ToVersion"/> へ移行します。</summary>
+/// <remarks>所有権について：入力バンドルの所有権は移行処理側へ移りますので、文書をその場で
+/// 書き換えても、同じインスタンスをそのまま返しても大丈夫です。返したバンドルの所有権は
+/// 呼び出し側へ戻りますので、移行処理側でその参照を持ち続けないようにしてください。</remarks>
 public interface ISaveMigration
 {
     int FromVersion { get; }

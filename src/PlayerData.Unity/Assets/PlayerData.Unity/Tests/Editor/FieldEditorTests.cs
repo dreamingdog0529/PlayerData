@@ -9,8 +9,8 @@ namespace PlayerData.Unity.Editor.Tests
 {
     public sealed class FieldEditorTests
     {
-        // Plain fixture for the editor-kind matrix. FieldEditorModel is serializer-agnostic
-        // (JSON + contract only), so this type does not need to be MemoryPackable.
+        // エディタの種類のマトリクスを確認するための、素朴なフィクスチャです。FieldEditorModel はシリアライザに依存しないので
+        // （JSON とコントラクトだけです）この型は MemoryPackable でなくても大丈夫です。
         private sealed class FieldMatrixDoc
         {
             public bool Flag { get; set; }
@@ -59,7 +59,7 @@ namespace PlayerData.Unity.Editor.Tests
             return null;
         }
 
-        // ---- Row construction / editor-kind mapping ----
+        // ---- 行の構築／エディタの種類への対応づけ ----
 
         [Test]
         public void Create_MatrixDocument_MapsMembersToExpectedEditorKinds()
@@ -97,7 +97,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(Row(model, "Level").DisplayValue, Is.EqualTo("5"));
         }
 
-        // ---- Member selection matches MemoryPackContractResolver ----
+        // ---- メンバー選択が MemoryPackContractResolver と一致すること ----
 
         [Test]
         public void Create_MemoryPackIgnoredMember_IsAbsent()
@@ -129,7 +129,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(updated.Secret, Is.EqualTo(5));
         }
 
-        // ---- Edits produce the updated document ----
+        // ---- 編集で更新されたドキュメントが得られること ----
 
         [Test]
         public void Edits_ProduceUpdatedObject_AndPreserveUntouchedMembers()
@@ -170,7 +170,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That((int)result["IntValue"], Is.EqualTo(3), "untouched member must be preserved");
         }
 
-        // ---- Numeric parse validation ----
+        // ---- 数値のパースの検証 ----
 
         [Test]
         public void TrySetNumber_InvalidText_FlagsRowAndBlocksApply()
@@ -207,7 +207,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(model.IsDirty, Is.True, "unparseable text sitting in a field is still an unapplied edit");
         }
 
-        // ---- Enum editing ----
+        // ---- Enum の編集 ----
 
         [Test]
         public void EnumRow_ListsDefinedValues_WithCurrentSelected()
@@ -232,7 +232,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That((int)JObject.Parse(model.ToJson())["Rank"], Is.EqualTo((int)SampleRank.Gold));
         }
 
-        // ---- Read-only rows ----
+        // ---- 読み取り専用の行 ----
 
         [Test]
         public void ReadOnlyRows_ExposeJsonTabHint()
@@ -245,7 +245,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(Row(model, "Name").Hint, Is.Null, "editable rows carry no hint");
         }
 
-        // ---- View construction and validation feedback ----
+        // ---- ビューの構築と検証のフィードバック ----
 
         [Test]
         public void View_BuildsExpectedControls()
@@ -303,7 +303,7 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That((int)result["Rank"], Is.EqualTo((int)SampleRank.Gold));
         }
 
-        // ---- Collection sub-forms ----
+        // ---- コレクションのサブフォーム ----
 
         private const string TwoItemsJson =
             "{ \"potion\": { \"ItemId\": \"potion\", \"Count\": 3 }," +
@@ -369,14 +369,14 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(editor.ToJson().Trim(), Is.EqualTo("{}"));
         }
 
-        // ---- Add / remove ----
+        // ---- 追加／削除 ----
 
         [Test]
         public void CollectionEditor_KeyIsDerivedFromKeyMember_RenamesOnEdit()
         {
             CollectionFieldsEditor editor = Items(TwoItemsJson);
 
-            // Editing the [PlayerDataKey] member (ItemId) renames the entry's dictionary key.
+            // [PlayerDataKey] メンバー（ItemId）を編集すると、エントリのディクショナリキーがリネームされます。
             editor.EntryViewForTests("potion").SetTextForTests("ItemId", "elixir");
 
             Assert.That(editor.EntryKeysForTests, Has.Member("elixir"));
@@ -393,7 +393,7 @@ namespace PlayerData.Unity.Editor.Tests
             editor.AddEntryForTests();
 
             Assert.That(editor.EntryKeysForTests.Count, Is.EqualTo(4));
-            // The two new keys are distinct, so the JSON keeps four entries.
+            // 新しい2つのキーは互いに異なるので、JSON には4件のエントリが残ります。
             Assert.That(JObject.Parse(editor.ToJson()).Count, Is.EqualTo(4));
             Assert.That(editor.HasInvalid, Is.False, "unique auto keys must not collide");
         }
@@ -417,12 +417,12 @@ namespace PlayerData.Unity.Editor.Tests
         {
             CollectionFieldsEditor editor = Items(TwoItemsJson);
 
-            // Rename sword to collide with potion.
+            // sword を potion とぶつかるようにリネームします。
             editor.EntryViewForTests("sword").SetTextForTests("ItemId", "potion");
             Assert.That(editor.HasDuplicateKeysForTests, Is.True);
             Assert.That(editor.HasInvalid, Is.True, "a duplicate key must block Apply");
 
-            // Rename it to something unique again.
+            // もう一度、重ならない名前にリネームします。
             editor.EntryViewForTests("potion").SetTextForTests("ItemId", "elixir");
             Assert.That(editor.HasDuplicateKeysForTests, Is.False);
             Assert.That(editor.HasInvalid, Is.False);
@@ -442,6 +442,6 @@ namespace PlayerData.Unity.Editor.Tests
         }
     }
 
-    // The former FieldEditorWindowTests (window-level Fields integration) was removed with the
-    // staged flow it drove; the detail-pane and live-integration steps rebuild that coverage.
+    // 以前の FieldEditorWindowTests（ウィンドウ単位の Fields 統合）は、それが動かしていた段階的なフローと一緒に削除されました。
+    // 詳細ペインとライブ統合のステップで、そのカバレッジを作り直しています。
 }

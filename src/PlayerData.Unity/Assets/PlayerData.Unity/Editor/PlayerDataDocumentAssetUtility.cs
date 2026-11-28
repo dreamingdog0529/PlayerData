@@ -8,9 +8,9 @@ using PlayerData.Schema;
 namespace PlayerData.Unity.Editor
 {
     /// <summary>
-    /// UI-independent operations for <see cref="PlayerDataDocumentAsset"/>: resolve session
-    /// schema, validate JSON against the document payload type, and export into a
-    /// DirectorySaveBackend layout. Pure enough for EditMode tests.
+    /// <see cref="PlayerDataDocumentAsset"/> に対する、UI に依存しない操作です。セッションのスキーマを
+    /// 解決し、ドキュメントのペイロード型に対して JSON を検証し、DirectorySaveBackend のレイアウトへ
+    /// エクスポートします。EditMode テストで使えるくらい、純粋な作りにしてあります。
     /// </summary>
     public static class PlayerDataDocumentAssetUtility
     {
@@ -74,8 +74,8 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// True when the asset's JSON deserializes to the document payload type and survives a
-        /// MemoryPack round-trip (same gate as the Data Viewer).
+        /// アセットの JSON がドキュメントのペイロード型にデシリアライズできて、MemoryPack の往復にも
+        /// 耐えられるときに true です（Data Viewer と同じガードです）。
         /// </summary>
         public static bool TryValidate(PlayerDataDocumentAsset asset, out DocumentDescriptor descriptor, out string? error)
         {
@@ -116,8 +116,8 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Replaces the asset JSON after validating against the resolved payload type.
-        /// Does not call <see cref="UnityEditor.EditorUtility.SetDirty"/> — callers/UI do that.
+        /// 解決したペイロード型に対して検証してから、アセットの JSON を置き換えます。
+        /// <see cref="UnityEditor.EditorUtility.SetDirty"/> は呼びません。それは呼び出し側や UI の役割です。
         /// </summary>
         public static bool TrySetJson(PlayerDataDocumentAsset asset, string json, out string? error)
         {
@@ -132,7 +132,7 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Seeds JSON from a default instance of the entity (singles) or empty collection (bags).
+        /// entity のデフォルトインスタンス（単一の場合）、または空のコレクション（bag の場合）から、JSON の種を作ります。
         /// </summary>
         public static bool TryCreateDefaultJson(DocumentDescriptor descriptor, out string json, out string? error)
         {
@@ -160,8 +160,8 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Writes/merges this document into a DirectorySaveBackend folder. Existing documents in
-        /// that save are preserved; only the target storage key is replaced.
+        /// このドキュメントを DirectorySaveBackend のフォルダーへ書き込み、またはマージします。そのセーブに
+        /// すでにあるドキュメントは保持され、対象のストレージキーだけが置き換わります。
         /// </summary>
         public static bool TryExportToFolder(PlayerDataDocumentAsset asset, string directory, out string? error)
         {

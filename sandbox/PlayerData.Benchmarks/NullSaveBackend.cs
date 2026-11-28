@@ -4,9 +4,9 @@ using PlayerData.Persistence;
 
 namespace PlayerData.Benchmarks;
 
-// Removes the backend from the measurement entirely: writes are discarded and reads report no
-// existing save. Unlike InMemorySaveBackend it retains nothing and allocates nothing, so commit
-// benchmarks that target it price the session's own path with zero backend contribution.
+// バックエンドを計測から完全に取り除きます。書き込みは捨てられ、読み取りでは既存のセーブはないものとして
+// 返します。InMemorySaveBackend と違って何も保持せず何も確保しないので、これを向き先にしたコミットの
+// ベンチマークでは、セッション自身の経路だけに値段が付きます。
 internal sealed class NullSaveBackend : ISaveBackend
 {
     public ValueTask<SaveBundle?> ReadAsync(CancellationToken cancellationToken = default) => new((SaveBundle?)null);

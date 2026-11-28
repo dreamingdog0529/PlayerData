@@ -20,9 +20,9 @@ namespace PlayerData.Unity
 {
     public static class PlayerDataVContainerExtensions
     {
-        // Registers ISaveBackend (UnitySaveBackend, optionally wrapped by wrapBackend) and TSession
-        // as singletons, then LoadAsync on start. TSession must expose a constructor
-        // (ISaveBackend, IEnumerable<ISaveMigration>?).
+        // ISaveBackend（UnitySaveBackend で、必要に応じて wrapBackend でラップできます）と TSession を
+        // シングルトンとして登録し、開始時に LoadAsync を呼びます。TSession には
+        // (ISaveBackend, IEnumerable<ISaveMigration>?) というコンストラクタが必要です。
         public static void RegisterPlayerDataSession<TSession>(
             this IContainerBuilder builder,
             string relativeFolder = "PlayerData",
@@ -57,7 +57,7 @@ namespace PlayerData.Unity
         }
     }
 
-    // Loads the session on start so semantics match GameSave.OpenAsync.
+    // 開始時にセッションを読み込むことで、GameSave.OpenAsync と同じ意味合いにしています。
     internal sealed class PlayerDataSessionLoader<TSession> : IAsyncStartable
         where TSession : class, ISaveSession
     {

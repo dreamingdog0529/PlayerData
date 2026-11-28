@@ -5,7 +5,7 @@ namespace PlayerData.R3;
 
 public static class PlayerDataStoreR3Extensions
 {
-    // replayCurrent: when true (default), emits Value immediately on Subscribe, then subsequent writes.
+    // replayCurrent: true（既定値）のときは、Subscribe した直後に Value を流して、その後の書き込みも流します。
     public static Observable<T> AsObservable<T>(this IDoc<T> store, bool replayCurrent = true) where T : class =>
         new PlayerDataStoreObservable<T>(store, replayCurrent);
 

@@ -99,8 +99,8 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void DisambiguatedShortNames_SuffixesDuplicatesOnly()
         {
-            // Two different types that share .Name is impossible in one assembly, so use the same
-            // type twice to prove the occurrence counter — real collisions are rare but supported.
+            // .Name が同じで異なる型を1つのアセンブリに用意することはできないので、同じ
+            // 型を2回使って出現カウンタを確認します。実際の衝突はまれですが、対応はしています。
             List<Type> types = new List<Type> { typeof(SampleProfile), typeof(SampleStats) };
             List<string> labels = ViewerDisplayNames.DisambiguatedShortNames(types);
 
@@ -110,9 +110,9 @@ namespace PlayerData.Unity.Editor.Tests
         [Test]
         public void DisambiguatedShortNames_WhenNamesCollide_AddsNumericSuffix()
         {
-            // Simulate collision by wrapping the same short name twice via a local strategy:
-            // DisambiguatedShortNames uses Type.Name; we can't force two types with same Name
-            // easily, so assert the algorithm via a single unique list still returns count match.
+            // ローカルなストラテジで同じ短い名前を2回ラップして、衝突を再現します。
+            // DisambiguatedShortNames は Type.Name を使います。同じ Name を持つ型を2つ用意するのは
+            // 簡単ではないので、単一のユニークなリストでも件数が一致することを通してアルゴリズムを確認します。
             List<Type> types = new List<Type>
             {
                 typeof(SampleEditorSession),

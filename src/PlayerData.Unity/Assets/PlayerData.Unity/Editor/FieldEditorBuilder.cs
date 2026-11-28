@@ -21,7 +21,7 @@ namespace PlayerData.Unity.Editor
         ReadOnly,
     }
 
-    /// <summary>One top-level serializable member of a document, prepared for inline editing.</summary>
+    /// <summary>ドキュメントのトップレベルのシリアライズ可能なメンバー 1 件です。その場で編集できるよう準備してあります。</summary>
     public sealed class FieldRow
     {
         internal FieldRow(
@@ -50,29 +50,29 @@ namespace PlayerData.Unity.Editor
 
         public FieldEditorKind Kind { get; }
 
-        /// <summary>Initial text: editor seed for Text/Number rows, compact preview for ReadOnly rows.</summary>
+        /// <summary>初期テキストです。Text/Number の行ではエディターの種になり、ReadOnly の行ではコンパクトなプレビューになります。</summary>
         public string DisplayValue { get; }
 
         public bool InitialBool { get; }
 
         public IReadOnlyList<string> EnumChoices { get; }
 
-        /// <summary>Currently selected enum member name; empty for non-enum rows.</summary>
+        /// <summary>現在選ばれている enum メンバーの名前です。enum でない行では空になります。</summary>
         public string EnumValue { get; }
 
-        /// <summary>Non-null on ReadOnly rows: how to edit this member instead.</summary>
+        /// <summary>ReadOnly の行では null ではなくなります。このメンバーを代わりにどう編集すればよいかを示します。</summary>
         public string? Hint { get; }
 
-        /// <summary>False after a failed numeric parse until valid text is entered.</summary>
+        /// <summary>数値のパースに失敗したあとは、正しいテキストが入力されるまで false のままです。</summary>
         public bool IsValid { get; internal set; } = true;
     }
 
     /// <summary>
-    /// UI-independent working copy behind the Fields tab. Edits mutate a JObject loaded from the
-    /// document's current JSON; <see cref="ToJson"/> produces the payload for the existing Apply
-    /// pipelines. Going through JSON (instead of reflection writes) sidesteps records/init-only
-    /// members entirely and keeps MissingMemberHandling guarding the final deserialization.
-    /// Member selection is single-sourced from MemoryPackJsonConverter's contract resolver.
+    /// Fields タブの裏側にある、UI に依存しない作業用コピーです。編集では、ドキュメントの現在の JSON から読み込んだ JObject を
+    /// 書き換えます。<see cref="ToJson"/> が、既存の Apply パイプライン向けのペイロードを作ります。
+    /// JSON を経由する（リフレクションで直接書くのではなく）ことで、records や init-only のメンバーを
+    /// まるごと避けられますし、最後のデシリアライズは MissingMemberHandling で守られたままになります。
+    /// メンバーの選択は、MemoryPackJsonConverter のコントラクトリゾルバーに一本化しています。
     /// </summary>
     public sealed class FieldEditorModel
     {
@@ -103,7 +103,7 @@ namespace PlayerData.Unity.Editor
             if (documentType is null) throw new ArgumentNullException(nameof(documentType));
 
             JObject root;
-            // DateParseHandling.None mirrors MemoryPackJsonConverter: date-looking strings stay strings.
+            // DateParseHandling.None は MemoryPackJsonConverter に合わせています。日付っぽく見える文字列は、文字列のままにします。
             using (JsonTextReader reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None })
                 root = JObject.Load(reader);
             return new FieldEditorModel(root, documentType);
@@ -111,10 +111,10 @@ namespace PlayerData.Unity.Editor
 
         public IReadOnlyList<FieldRow> Rows => _rows;
 
-        /// <summary>True while any numeric row holds unparseable text; callers must block Apply.</summary>
+        /// <summary>数値の行のどれかにパースできないテキストがある間は true です。呼び出し側では Apply を止めてください。</summary>
         public bool HasInvalid => _invalidMembers.Count > 0;
 
-        /// <summary>True after any edit (including a failed numeric parse still sitting in a field).</summary>
+        /// <summary>編集があれば true です（フィールドに残ったままの、パースに失敗した数値も含みます）。</summary>
         public bool IsDirty => _dirty;
 
         public void SetBool(string memberName, bool value)
@@ -132,8 +132,8 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Parses with the member type's own parser (InvariantCulture). On failure the row is
-        /// flagged invalid and the working copy keeps its previous value.
+        /// メンバーの型自身のパーサー（InvariantCulture）でパースします。失敗したときは、その行に
+        /// 無効の印を付け、作業用コピーは前の値のままにします。
         /// </summary>
         public bool TrySetNumber(string memberName, string text)
         {
@@ -157,18 +157,18 @@ namespace PlayerData.Unity.Editor
         {
             FieldRow row = RequireRow(memberName, FieldEditorKind.Enum);
             object value = Enum.Parse(row.MemberType, valueName);
-            // FromObject with the default serializer writes the underlying number, matching how
-            // MemoryPackJsonConverter serializes enums (no StringEnumConverter in its settings).
+            // デフォルトのシリアライザーで FromObject すると、もとの数値が書かれます。これは、
+            // MemoryPackJsonConverter が enum をシリアライズする方法に合わせています（その設定には StringEnumConverter は入っていません）。
             _root[memberName] = JToken.FromObject(value);
             _dirty = true;
         }
 
-        /// <summary>The edited document as a JSON payload for the existing Apply pipelines.</summary>
+        /// <summary>編集済みのドキュメントを、既存の Apply パイプライン向けの JSON ペイロードとして返します。</summary>
         public string ToJson() => _root.ToString(Formatting.Indented);
 
         /// <summary>
-        /// Current working-copy token for a member, or null when absent. Read-only peek used by
-        /// the collection surface to derive an entry's key from its [PlayerDataKey] member.
+        /// メンバーの現在の作業用コピーのトークンです。ないときは null になります。読み取り専用の覗き見で、
+        /// コレクション側が、エントリのキーをその [PlayerDataKey] メンバーから導くときに使います。
         /// </summary>
         internal JToken? GetMemberToken(string memberName) => _root[memberName];
 
@@ -194,7 +194,7 @@ namespace PlayerData.Unity.Editor
                     string current = EnumNameFromToken(type, token);
                     List<string> choices = new List<string>(Enum.GetNames(type));
                     if (!choices.Contains(current))
-                        choices.Insert(0, current); // undefined stored value: keep it selectable so building never throws
+                        choices.Insert(0, current); // 保存されていた値が未定義です。構築で例外にならないよう、選べるままにしておきます
                     return new FieldRow(name, type, kind, current, initialBool: false, choices, current, hint: null);
                 }
                 default:
@@ -214,8 +214,8 @@ namespace PlayerData.Unity.Editor
                 return FieldEditorKind.Enum;
             if (IsSupportedNumber(type))
                 return FieldEditorKind.Number;
-            // Everything else (nested objects, collections, DateTime, nullable structs, ...):
-            // read-only preview, edited via the JSON tab.
+            // それ以外（入れ子のオブジェクト、コレクション、DateTime、nullable な struct など）は、
+            // 読み取り専用のプレビューにして、JSON タブで編集してもらいます。
             return FieldEditorKind.ReadOnly;
         }
 
@@ -336,29 +336,29 @@ namespace PlayerData.Unity.Editor
     }
 
     /// <summary>
-    /// The Fields-tab editing surface for one document: a UIElements root plus the working-copy
-    /// operations the viewer needs to serialize, gate Apply and detect edits. Single documents
-    /// (<see cref="FieldEditorView"/>) and collection documents
-    /// (<see cref="CollectionFieldsEditor"/>) each supply their own implementation so the panel
-    /// treats both uniformly.
+    /// ドキュメント 1 件分の Fields タブの編集画面です。UIElements のルートと、作業用コピーに対する
+    /// 操作（ビューワーがシリアライズしたり、Apply をガードしたり、編集を検出したりするのに必要なもの）を合わせたものです。単一ドキュメント
+    /// （<see cref="FieldEditorView"/>）とコレクションドキュメント
+    /// （<see cref="CollectionFieldsEditor"/>）がそれぞれ実装を用意するので、パネル側では
+    /// どちらも同じように扱えます。
     /// </summary>
     internal interface IFieldsEditor
     {
         VisualElement Root { get; }
 
-        /// <summary>The edited document as a JSON payload for the existing Apply pipelines.</summary>
+        /// <summary>編集済みのドキュメントを、既存の Apply パイプライン向けの JSON ペイロードとして返します。</summary>
         string ToJson();
 
-        /// <summary>True while any field holds unparseable input; callers must block Apply.</summary>
+        /// <summary>どれかのフィールドにパースできない入力がある間は true です。呼び出し側では Apply を止めてください。</summary>
         bool HasInvalid { get; }
 
         event Action Changed;
     }
 
     /// <summary>
-    /// Builds the UIElements rows for a <see cref="FieldEditorModel"/> and routes control edits
-    /// into it. Raises <see cref="Changed"/> after every edit so the host can re-evaluate the
-    /// Apply gate (<see cref="FieldEditorModel.HasInvalid"/>).
+    /// <see cref="FieldEditorModel"/> 向けの UIElements の行を作り、コントロールの編集をモデルへ
+    /// 流し込みます。編集のたびに <see cref="Changed"/> を上げるので、ホスト側では Apply のガード
+    /// （<see cref="FieldEditorModel.HasInvalid"/>）を見直せます。
     /// </summary>
     internal sealed class FieldEditorView : IFieldsEditor
     {
@@ -380,7 +380,7 @@ namespace PlayerData.Unity.Editor
 
         public VisualElement Root { get; }
 
-        /// <summary>The working copy this view edits; exposed for the collection surface and tests.</summary>
+        /// <summary>このビューが編集する作業用コピーです。コレクション側とテスト向けに公開しています。</summary>
         internal FieldEditorModel Model => _model;
 
         public string ToJson() => _model.ToJson();
@@ -393,9 +393,9 @@ namespace PlayerData.Unity.Editor
 
         internal static string HintName(string memberName) => "field-" + memberName + "-hint";
 
-        // ---- Test hooks ----
-        // Detached elements (no panel) do not dispatch ChangeEvent, so EditMode tests drive the
-        // same handlers the controls are wired to.
+        // ---- テスト用の入口 ----
+        // 切り離された要素（パネルがないもの）は ChangeEvent を送らないので、EditMode テストでは、コントロールに
+        // つながっているのと同じハンドラーを直接動かします。
 
         internal void SetTextForTests(string memberName, string text) => RequireSetter(_textSetters, memberName)(text);
 
@@ -545,14 +545,14 @@ namespace PlayerData.Unity.Editor
     }
 
     /// <summary>
-    /// The Fields-tab surface for a collection document: one sub-form per entry, reusing
-    /// <see cref="FieldEditorModel"/>/<see cref="FieldEditorView"/> for each entry's entity, plus
-    /// Inspector-style add/remove. An entry's key is the value of the entity's [PlayerDataKey]
-    /// member — the single source of truth the runtime bag also keys on — so editing that member
-    /// renames the entry and no separate key can drift out of sync. <see cref="ToJson"/> recombines
-    /// the entries into the same {key: entity} JSON the JSON tab and the Apply pipelines speak, so
-    /// editing here is byte-identical to editing in the JSON view. Duplicate keys are flagged and
-    /// block Apply via <see cref="HasInvalid"/>.
+    /// コレクションドキュメント向けの Fields タブの画面です。エントリごとにサブフォームを 1 つずつ置き、各エントリの entity には
+    /// <see cref="FieldEditorModel"/>/<see cref="FieldEditorView"/> を再利用します。そこに Inspector 風の追加と削除も付けています。
+    /// エントリのキーは、entity の [PlayerDataKey] メンバーの値です
+    /// （ランタイムの bag もキーにしている、唯一の正の情報です）。なので、そのメンバーを編集すると
+    /// エントリの名前が変わり、別に持ったキーがずれてしまうこともありません。<see cref="ToJson"/> はエントリを、
+    /// JSON タブや Apply パイプラインが扱うのと同じ {key: entity} の JSON に組み直します。ですので、
+    /// ここでの編集は、JSON ビューでの編集とバイト単位で同じになります。キーが重複したときは印を付けて、
+    /// <see cref="HasInvalid"/> 経由で Apply を止めます。
     /// </summary>
     internal sealed class CollectionFieldsEditor : IFieldsEditor
     {
@@ -561,7 +561,7 @@ namespace PlayerData.Unity.Editor
         internal const string RemoveButtonName = "collection-remove";
         internal const string DuplicateWarningName = "collection-dup-warning";
 
-        // Indents each entry's fields under its key header so the grouping reads at a glance.
+        // 各エントリのフィールドを、そのキーの見出しの下にインデントして、グループがひと目でわかるようにしています。
         private const int EntryIndent = 12;
         private const string DefaultNewStringKey = "newEntry";
 
@@ -586,8 +586,8 @@ namespace PlayerData.Unity.Editor
             _defaultEntityJson = TryBuildDefaultEntityJson(entityType);
 
             JObject dictionary;
-            // DateParseHandling.None mirrors FieldEditorModel/MemoryPackJsonConverter: date-looking
-            // strings stay strings so untouched entries round-trip unchanged.
+            // DateParseHandling.None は FieldEditorModel と MemoryPackJsonConverter に合わせています。日付っぽく
+            // 見える文字列は文字列のままにし、手を入れていないエントリがそのまま往復できるようにします。
             using (JsonTextReader reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None })
                 dictionary = JObject.Load(reader);
 
@@ -611,8 +611,8 @@ namespace PlayerData.Unity.Editor
             _addButton.name = AddButtonName;
             if (_defaultEntityJson is null)
             {
-                // A non-constructible entity has no template to append; keep the button visible but
-                // disabled so the JSON tab stays the way to add entries.
+                // 構築できない entity には、追加するためのテンプレートがありません。ボタンは見えるままにしておきますが、
+                // 無効にしておき、エントリの追加は JSON タブからしてもらいます。
                 _addButton.SetEnabled(false);
                 _addButton.tooltip = $"Cannot create a default {ViewerDisplayNames.ShortTypeName(entityType)}.";
             }
@@ -647,9 +647,9 @@ namespace PlayerData.Unity.Editor
             JObject root = new JObject();
             foreach (Entry entry in _entries)
             {
-                // Editable entries re-serialize through their model, keyed by the current key
-                // member; non-object entries (which cannot back a field form) round-trip untouched.
-                // A duplicate key overwrites here, but HasInvalid blocks Apply before that matters.
+                // 編集できるエントリは、そのモデルを通して再シリアライズし、現在のキーメンバーの値でキー付けします。
+                // オブジェクトでないエントリ（フィールドフォームの裏付けにはならないもの）は、そのまま往復させます。
+                // キーが重複するとここでは上書きされてしまいますが、問題になる前に HasInvalid が Apply を止めます。
                 if (entry.Model is not null)
                     root[entry.DerivedKey] = JToken.Parse(entry.Model.ToJson());
                 else
@@ -661,7 +661,7 @@ namespace PlayerData.Unity.Editor
 
         internal static string EntrySectionName(string key) => "collection-entry-" + key;
 
-        // ---- Test hooks ----
+        // ---- テスト用の入口 ----
 
         internal IReadOnlyList<string> EntryKeysForTests
         {
@@ -729,8 +729,8 @@ namespace PlayerData.Unity.Editor
             headerRow.Add(spacer);
 
             Entry entry;
-            // Only object entries can back a field form. A null or scalar entry (unusual, but the
-            // JSON may hold anything) is shown as a read-only preview and round-trips untouched.
+            // フィールドフォームの裏付けになれるのは、オブジェクトのエントリだけです。null やスカラーのエントリ（珍しいですが、JSON には
+            // 何でも入り得ます）は、読み取り専用のプレビューとして出し、そのまま往復させます。
             if (!(value is JObject entityJson))
             {
                 section.Add(headerRow);
@@ -785,14 +785,14 @@ namespace PlayerData.Unity.Editor
 
         private void OnEntryChanged()
         {
-            // A key member edit renames an entry, which can create or clear a duplicate, so keys are
-            // recomputed on every edit before the host re-evaluates the Apply gate.
+            // キーメンバーを編集するとエントリの名前が変わり、重複が生じたり解消したりするので、キーは
+            // 編集のたびに計算し直してから、ホスト側が Apply のガードを見直します。
             RecomputeKeys();
             RaiseChanged();
         }
 
-        // Re-derives every entry's key, refreshes headers, and flags duplicate keys. Kept cheap
-        // (linear over the entries) because it runs on each edit; collections are small.
+        // すべてのエントリのキーを導き直し、見出しを更新して、重複したキーに印を付けます。編集のたびに動くので、軽く
+        // 保っています（エントリに対する線形処理です）。コレクションは小さい前提です。
         private void RecomputeKeys()
         {
             Dictionary<string, int> counts = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -826,9 +826,9 @@ namespace PlayerData.Unity.Editor
             return string.Empty;
         }
 
-        // Seeds a new entry's key member with a value not already used, so consecutive adds do not
-        // pile up under one duplicate key. String keys count up from "newEntry"; numeric keys take
-        // max + 1. Other key types keep the template default and rely on the duplicate warning.
+        // 新しいエントリのキーメンバーには、まだ使われていない値を種として入れます。続けて追加しても、
+        // 1 つの重複キーに積み重なってしまわないためです。文字列のキーは「newEntry」から数え上げ、数値のキーは
+        // 最大値 + 1 にします。それ以外の型のキーはテンプレートのデフォルトのままにして、重複の警告に頼ります。
         private void AssignUniqueKey(JObject entityJson)
         {
             if (_keyMemberName is null)
@@ -879,9 +879,9 @@ namespace PlayerData.Unity.Editor
             }
         }
 
-        // Resolves the JSON property name of the entity's [PlayerDataKey] member, matching the
-        // contract MemoryPackJsonConverter/FieldEditorModel use. Null when it cannot be determined,
-        // which disables key derivation and add (the entries then keep their original keys).
+        // entity の [PlayerDataKey] メンバーの JSON プロパティ名を解決します。
+        // MemoryPackJsonConverter と FieldEditorModel が使うコントラクトに合わせています。決められないときは null で、
+        // キーの導出と追加が無効になります（その場合、エントリは元のキーのままです）。
         private static string? ResolveKeyMemberJsonName(Type entityType)
         {
             const BindingFlags declaredInstance =
@@ -923,7 +923,7 @@ namespace PlayerData.Unity.Editor
             }
             catch (Exception)
             {
-                // Fall through to the raw member name; the contract mirrors member names anyway.
+                // そのままメンバー名へフォールスルーします。コントラクトは、どのみちメンバー名をそのまま写したものです。
             }
 
             return memberName;
@@ -960,18 +960,18 @@ namespace PlayerData.Unity.Editor
                 _duplicateWarning = duplicateWarning;
             }
 
-            /// <summary>Dict key this entry loaded under; the fallback key when none can be derived.</summary>
+            /// <summary>このエントリが読み込まれたときの辞書のキーです。キーを導けないときのフォールバックになります。</summary>
             public string OriginalKey { get; }
 
-            /// <summary>Current key: the entity's [PlayerDataKey] member value, recomputed on edit.</summary>
+            /// <summary>現在のキーです。entity の [PlayerDataKey] メンバーの値で、編集のたびに計算し直します。</summary>
             public string DerivedKey { get; set; }
 
-            /// <summary>Non-null for object entries backed by a field form; null for passthrough entries.</summary>
+            /// <summary>フィールドフォームに裏付けられたオブジェクトのエントリでは null ではなく、素通しのエントリでは null です。</summary>
             public FieldEditorModel? Model { get; }
 
             public FieldEditorView? View { get; }
 
-            /// <summary>Original token, re-emitted verbatim for passthrough entries.</summary>
+            /// <summary>元のトークンです。素通しのエントリでは、そのまま再出力されます。</summary>
             public JToken RawValue { get; }
 
             public VisualElement Section { get; }

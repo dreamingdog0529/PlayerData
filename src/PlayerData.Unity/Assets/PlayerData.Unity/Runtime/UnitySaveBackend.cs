@@ -7,8 +7,8 @@ using PlayerData.Persistence;
 
 namespace PlayerData.Unity
 {
-    // ISaveBackend rooted under Application.persistentDataPath.
-    // Optional slot maps to {root}/slot_{n}/ via SlotSaveBackend.
+    // Application.persistentDataPath の下を起点にする ISaveBackend です。
+    // スロットを指定すると、SlotSaveBackend を通して {root}/slot_{n}/ に対応づけられます。
     public sealed class UnitySaveBackend : ISaveBackend
     {
         private readonly ISaveBackend _inner;

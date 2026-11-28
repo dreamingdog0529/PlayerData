@@ -6,40 +6,37 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Documents;
 
-// Backed by ConcurrentDictionary<TKey,T>: reads (TryGet/Contains/Snapshot enumeration) are
-// lock-free; writes take a short per-bucket lock instead of retrying a whole-tree CAS. Every
-// conditional/read-modify-write operation goes through AddOrUpdate/GetOrAdd so the update
-// delegate always observes the truly-live current value. ConcurrentDictionary.TryUpdate(key,
-// newValue, comparisonValue) is deliberately never used: its comparison is
-// EqualityComparer<T>.Default, which is structural equality for record T, so a different
-// instance that happens to compare equal to a stale read would make TryUpdate report success
-// against that stale base and silently discard whatever produced the "equal" instance (a real
-// ABA hazard, reproduced empirically for record-typed T - see PlayerData plan
-// 202607131429-playerdata-extreme-perf.plan.md, Assumption 2).
+// 土台は ConcurrentDictionary<TKey,T> です：読み取り（TryGet / Contains / Snapshot の列挙）は
+// ロックなしで、書き込みはツリー全体の CAS をリトライする代わりにバケットごとの短いロックを取ります。
+// 条件付きの操作や読み取り・変更・書き込みの操作はすべて AddOrUpdate / GetOrAdd を通しますので、
+// 更新デリゲートは常に本当に現在の値を目にできます。ConcurrentDictionary.TryUpdate(key,
+// newValue, comparisonValue) は使わないことにしています：その比較は EqualityComparer<T>.Default で、
+// record 型の T では構造的な等価性になります。そのため、古い読み取り値とたまたま等しくなる別の
+// インスタンスがあると、TryUpdate はその古い値を土台に成功を報告してしまい、「等しい」インスタンスを
+// 作った側の変更を黙って捨ててしまうおそれがあります（実際に起こりうる ABA の危険で、record 型の
+// T では実測でも再現しています）。そうした事故を防ぐための選択です。
 public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
     where TKey : notnull
     where T : class
 {
     private readonly Func<T, TKey> _keySelector;
-    // Called exactly once per mutation (not once for the dirty-notification path and again for
-    // the Changed-coalescing check, as the two separate delegates this replaced did). The
-    // callback both forwards the mutation to the owning SaveSession and returns whether
-    // notifications are currently suppressed, so the store can reuse that single answer for its
-    // own RaiseChanged decision below instead of querying suppression state a second time.
+    // 変更のたびにちょうど1回だけ呼ばれるコールバックです。変更を所有者の SaveSession へ伝える
+    // 役割と、通知が今抑えられているかどうかを返す役割を1つにまとめてあります。おかげでストアは、
+    // 抑制状態をもう一度問い合わせずに、その答えを下の RaiseChanged の判断に使い回せます。
     private readonly Func<bool>? _onMutated;
     private readonly object _pendingGate = new();
-    // Not readonly: ReplaceFromLoad swaps in the freshly deserialized dictionary wholesale
-    // (a single volatile reference write) instead of clearing and re-inserting item by item.
-    // Reference reads are atomic, so a concurrent reader sees either the old or the new
-    // dictionary in full, never a half-populated one - strictly better than the old
-    // Clear-then-copy, whose intermediate states (empty, partially filled) were observable.
+    // readonly にしていないのには理由があります：ReplaceFromLoad は、クリアして1件ずつ入れ直す
+    // のではなく、デシリアライズしたばかりのディクショナリをまるごと入れ替えるためです（volatile な
+    // 参照の書き込み1回です）。参照の読み取りは原子的ですので、同時に読んでいる側には古い
+    // ディクショナリか新しいディクショナリのどちらかが丸ごと見え、空の状態や半分だけ入った状態の
+    // ような途中経過が見えてしまうことはありません。
     private ConcurrentDictionary<TKey, T> _items = new();
     private long _version;
     private long _cleanVersion;
     private List<BagChange<TKey, T>>? _pendingChanges;
-    // The previous suppress cycle's (cleared) list, recycled by RaiseChanged so steady-state
-    // suppress/flush cycles allocate no new list once its capacity has warmed up. Guarded by
-    // _pendingGate like _pendingChanges itself.
+    // 前の抑制サイクルで使い終えた（クリア済みの）リストで、RaiseChanged が使い回すためのものです。
+    // 容量が温まってくれば、定常状態の抑制／フラッシュのサイクルで新しいリストを作らずに済みます。
+    // _pendingChanges 自体と同じく _pendingGate で守られています。
     private List<BagChange<TKey, T>>? _pendingChangesSpare;
 
     public KeyedDocumentStore(
@@ -54,16 +51,15 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
 
     public int Count => _items.Count;
 
-    // Weakly consistent as of the redesign in plan 202607131429: this returns the live
-    // ConcurrentDictionary instance (not a frozen point-in-time copy). Enumerating it while
-    // another thread writes may observe some but not all of that write's effects; individual
-    // key reads are always atomic. See SnapshotItems below for why this is safe for
-    // SaveSession's serialize/validate paths.
+    // 弱い整合性です：これは生きている ConcurrentDictionary のインスタンスそのものを返します
+    // （ある一時点を切り取ったコピーではありません）。別のスレッドが書き込んでいる最中に列挙すると、
+    // その書き込みの影響の一部だけが見えることがありますが、個々のキーの読み取りは常に原子的です。
+    // これが SaveSession のシリアライズ／検証の経路で安全な理由は、下の SnapshotItems をご覧ください。
     public IReadOnlyDictionary<TKey, T> Snapshot => _items;
 
-    // Concretely-typed accessor for in-assembly consumers (SaveSession serialization) that need
-    // the ConcurrentDictionary-specific enumerator to avoid the ReadOnlyCollection allocation
-    // that ConcurrentDictionary.Values would otherwise incur.
+    // アセンブリ内の利用者（SaveSession のシリアライズ）向けの、具象型のアクセサーです。
+    // ConcurrentDictionary 専用の列挙子が必要なときに使うためのもので、ConcurrentDictionary.Values が
+    // 引き起こしてしまう ReadOnlyCollection のアロケーションを避けられます。
     internal ConcurrentDictionary<TKey, T> SnapshotItems => _items;
 
     public event Action<BagChange<TKey, T>>? Changed;
@@ -112,10 +108,11 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
     {
         if (updater is null) throw new ArgumentNullException(nameof(updater));
 
-        // Fast path: definitely-missing key costs nothing beyond this lookup. `previous` here is
-        // a best-effort peek for the Changed event only (see UpdateContext below) - the actual
-        // "does the key still exist" correctness gate is AddOrUpdate's own addValueFactory below,
-        // which re-checks on every internal retry, not this one-time peek.
+        // 高速な経路です：キーが確実にない場合は、この検索以上のコストはかかりません。ここでの
+        // `previous` は Changed イベント用にできるだけ覗いたものにすぎません（下の UpdateContext を
+        // ご覧ください）。「キーがまだ存在するか」という正確さの関門は、この一度きりの覗き見ではなく、
+        // 下にある AddOrUpdate 自身の addValueFactory が担っていて、内部のリトライのたびに
+        // 確認し直してくれます。
         if (!_items.TryGetValue(key, out var previous))
         {
             updated = null!;
@@ -143,19 +140,18 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
         }
 
         updated = result;
-        // `previous` is the pre-write peek, not necessarily the exact value this call's AddOrUpdate
-        // replaced - under concurrent Upsert/TryUpdate on the SAME key from multiple threads, it
-        // can trail by one generation. The store's own state is unaffected (still exactly
-        // correct); only the informational Previous field on the Changed event could be stale in
-        // that narrow window. Traded deliberately: capturing the exact replaced value here would
-        // require a per-call closure (see git history prior to this commit for the closure-based
-        // version, and its higher Upsert_ExistingKey allocation in PlayerData.Benchmarks).
+        // `previous` は書き込み前に覗いた値で、この呼び出しの AddOrUpdate が実際に置き換えた値と
+        // 必ずしも一致しません。同じキーに対して複数のスレッドから Upsert / TryUpdate が同時に走ると、
+        // 1世代遅れることがあります。ストア自体の状態には影響しません（そちらは正確なままです）。
+        // その狭い範囲で古くなりうるのは、Changed イベントの参考情報である Previous フィールドだけです。
+        // これは意図的な取捨選択です：ここで正確に置き換えた値を捕らえようとすると呼び出しごとの
+        // クロージャが必要になり、アロケーションも増えてしまいます。
         BumpAndNotify(key, PlayerDataChangeKind.Upserted, previous, updated);
         return true;
     }
 
-    // Bundles TryUpdate's per-call state into one value-type argument so both AddOrUpdate
-    // factories can be `static` (no closure/delegate allocation per call).
+    // TryUpdate の呼び出しごとの状態を1つの値型の引数にまとめたものです。おかげで AddOrUpdate の
+    // 両方の factory を `static` にでき、呼び出しごとのクロージャやデリゲートのアロケーションが要りません。
     private readonly struct UpdateContext<TState>
     {
         public UpdateContext(TState state, Func<TState, T, T> updater, KeyedDocumentStore<TKey, T> self)
@@ -194,12 +190,12 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
     {
         if (factory is null) throw new ArgumentNullException(nameof(factory));
 
-        // Peek-then-TryAdd instead of ConcurrentDictionary.GetOrAdd(key, factory): the factory
-        // overload can invoke factory concurrently on multiple threads racing for the same
-        // missing key, and offers no way to tell which invocation actually won without an extra
-        // allocation to carry that flag out. TryAdd's own return value already tells us that for
-        // free. Looping on a lost race (rather than trusting our discarded candidate) matches the
-        // old CAS-loop's guarantee of never returning a value that isn't actually stored.
+        // ConcurrentDictionary.GetOrAdd(key, factory) ではなく、覗いてから TryAdd する形にしています：
+        // factory のオーバーロードは、同じ不足キーを奪い合う複数のスレッドで factory を同時に呼ぶことが
+        // あり、どの呼び出しが実際に勝ったかを知るには、その印を持ち出すための余分なアロケーションが
+        // 必要になってしまいます。TryAdd 自身の戻り値なら、それをただで教えてくれます。競合に負けたら
+        // （捨てた候補を信じずに）ループする形にすることで、実際に保存されていない値は決して返さない
+        // という保証を保っています。
         while (true)
         {
             if (_items.TryGetValue(key, out var existing))
@@ -264,11 +260,11 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
 
     internal void FlushPendingNotifications()
     {
-        // Lock-free early-out: EndSuppress calls this on every participant at the end of every
-        // suppress cycle, so a store that saw no mutations during the cycle should not pay the
-        // Monitor enter/exit pair just to discover there is nothing to drain. A mutation racing
-        // this read (appending just after we observed null) belongs to the next cycle - the same
-        // window the lock-only version already had for appends arriving after its drain.
+        // ロックなしの早期退出です：EndSuppress は抑制サイクルの終わりごとにすべての参加者に対して
+        // これを呼びますので、サイクル中に変更がなかったストアが、流すものがないと知るためだけに
+        // Monitor の入退出の組を払わずに済むようにするためのものです。この読み取りと競合した変更
+        // （null を観測した直後に追加されたもの）は次のサイクルのものとして扱います。排出のあとに
+        // 届いた追加は次のサイクルで扱う、という範囲の決め方です。
         if (Volatile.Read(ref _pendingChanges) is null) return;
 
         List<BagChange<TKey, T>>? pending;
@@ -282,22 +278,22 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
         foreach (var change in pending)
             Changed?.Invoke(change);
 
-        // Hand the drained list back for the next suppress cycle. Skipped when a handler above
-        // threw (this line never runs), which only costs the recycling, not correctness.
+        // 排出したリストを、次の抑制サイクルで使い回せるように返しておきます。上のハンドラーが例外を
+        // 投げたときはこの行は実行されませんが、失われるのは再利用の機会だけで、正確さには影響しません。
         pending.Clear();
         lock (_pendingGate)
             _pendingChangesSpare ??= pending;
     }
 
-    // Per-thread slot AddOrUpdate's updateValueFactory uses to hand the existing value back out
-    // to SetCore below, replacing a separate TryGetValue that used to run before AddOrUpdate (two
-    // dictionary lookups per call instead of one). [ThreadStatic] rather than a plain static field
-    // is load-bearing: two threads racing SetCore on different keys must never observe each
-    // other's captured value. AddOrUpdate may invoke updateValueFactory more than once on this
-    // same thread if another thread's write interleaves the CAS, but only the last invocation
-    // before the successful CAS runs before SetCore reads the slot back, so it always reflects
-    // the value actually replaced - and SetCore drains it into a local and clears the slot before
-    // BumpAndNotify can trigger any same-thread reentrant call.
+    // スレッドごとのスロットで、AddOrUpdate の updateValueFactory が既存の値を下の SetCore へ
+    // 渡すために使います。AddOrUpdate の前に別の TryGetValue を走らせずに済みますので、呼び出し
+    // ごとのディクショナリ検索は2回ではなく1回で済みます。通常の static フィールドではなく
+    // [ThreadStatic] であることが要です：異なるキーで SetCore を競合している2つのスレッドが、
+    // お互いの捕らえた値を目にすることは決してあってはいけません。別のスレッドの書き込みが CAS の
+    // 間に割り込むと、AddOrUpdate はこの同じスレッドで updateValueFactory を複数回呼ぶことが
+    // ありますが、SetCore がスロットを読み戻す前に走るのは成功した CAS の直前の最後の呼び出しだけ
+    // ですので、常に実際に置き換えた値を反映します。さらに SetCore は、BumpAndNotify が同じ
+    // スレッドでの再入呼び出しを引き起こす前に、値をローカルへ吸い出してスロットをクリアします。
     [ThreadStatic]
     private static T? _capturedPrevious;
 
@@ -351,12 +347,13 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
                     _pendingChangesSpare = null;
                 }
 
-                // Coalesce consecutive same-key Upserts in place (first Previous, latest Value),
-                // matching DocumentStore's pending DocChange policy. The common suppress pattern
-                // - bulk-load or repeated writes of the same entity - otherwise appends one entry
-                // per mutation and pays O(n) list growth + an O(n) flush of redundant events.
-                // Only the trailing entry is considered so multi-key bulk inserts stay O(1) per
-                // call; non-adjacent same-key updates still append (rare under real suppress use).
+                // 連続する同じキーの Upsert はその場でまとめます（Previous は最初のもの、Value は
+                // 最新のもの）。DocumentStore の保留中の DocChange の方針に合わせたものです。よくある
+                // 抑制のパターン（一括読み込みや、同じエンティティへの繰り返しの書き込み）で変更のたびに
+                // エントリを増やしていくと、O(n) のリストの成長と、冗長なイベントの O(n) のフラッシュを
+                // 払うことになってしまいます。末尾のエントリだけを見るようにしてありますので、複数キーの
+                // 一括挿入でも呼び出しごとに O(1) のままです。隣り合わない同じキーの更新はそのまま
+                // 追加されます（実際の抑制の使い方ではまれです）。
                 if (change.Kind == PlayerDataChangeKind.Upserted && _pendingChanges.Count > 0)
                 {
                     var lastIndex = _pendingChanges.Count - 1;
@@ -378,10 +375,10 @@ public sealed class KeyedDocumentStore<TKey, T> : IBag<TKey, T>
         Changed?.Invoke(change);
     }
 
-    // Control-flow-only sentinel thrown from AddOrUpdate's addValueFactory to signal "the key
-    // was missing" back out through TryUpdate, distinguishing it from a real add. A cached
-    // singleton avoids allocating on this (rare - only hit when a concurrent Remove interleaves
-    // with TryUpdate) path.
+    // 制御フロー専用の番兵で、AddOrUpdate の addValueFactory から投げて、「キーがなかった」ことを
+    // TryUpdate へ伝え、本物の追加と区別するためのものです。キャッシュしたシングルトンにしてあります
+    // ので、この経路（まれで、同時の Remove が TryUpdate の間に割り込んだときにだけ通ります）で
+    // アロケーションせずに済みます。
     private sealed class KeyMissingSignal : Exception
     {
         public static readonly KeyMissingSignal Instance = new();

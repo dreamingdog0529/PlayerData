@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace PlayerData.Persistence;
 
-// Wraps DirectorySaveBackend under {root}/slot_{n}/ so multiple save slots share one root path.
+// DirectorySaveBackend を {root}/slot_{n}/ の下に包むもので、複数のセーブスロットが1つのルートパスを共有できるようにしています。
 public sealed class SlotSaveBackend : ISaveBackend
 {
     private readonly DirectorySaveBackend _inner;

@@ -4,16 +4,17 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Benchmarks;
 
-// Measures the SaveSession-attached DocumentStore/KeyedDocumentStore mutation path in isolation
-// (Update/Upsert only, no CommitAsync/backend I-O), to isolate the onMutated/suppression-query
-// consolidation (round-2 perf plan ST-1) from the CommitAsync-level costs SaveSessionBenchmarks
-// already covers. Both the unsuppressed path (SaveSession.OnMutated queries suppression once and
-// drives PublishDirty) and the SuppressNotifications-active path (RaiseChanged coalesces into
-// _pendingChange/_pendingChanges) are measured, since both delegates the consolidation replaced
-// queried suppression state on every mutation regardless of which branch ran.
-// These operations run in the tens-of-nanoseconds range, where single-process JIT tiering
-// variance can swamp a genuine few-ns effect; launchCount averages across separate processes to
-// keep that noise from being mistaken for a real regression or improvement.
+// SaveSession につながった DocumentStore / KeyedDocumentStore の変更まわりだけを切り出して測ります
+// （Update / Upsert のみで、CommitAsync やバックエンドへの入出力は含みません）。onMutated や抑制状態の
+// 問い合わせをまとめた変更（ラウンド2の性能計画 ST-1）の効果を、SaveSessionBenchmarks がすでに
+// カバーしている CommitAsync 側のコストと分けて見るためです。抑制されていない経路
+// （SaveSession.OnMutated が抑制状態を1回だけ問い合わせて PublishDirty を進める経路）も、
+// SuppressNotifications が有効な経路（RaiseChanged が _pendingChange / _pendingChanges に
+// まとめられる経路）も測っています。まとめる前のデリゲートは、どちらの分岐が走るときも、
+// 変更のたびに抑制状態を問い合わせていたためです。
+// これらの処理は数十ナノ秒の範囲で動くので、1プロセスだけだと JIT の段階的な最適化のばらつきに、
+// 本当の数ナノ秒の差が埋もれてしまうことがあります。launchCount で別プロセスの平均を取ることで、
+// そのノイズを、本当の悪化や改善と見間違えないようにしています。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 3, warmupCount: 5, iterationCount: 10)]
 public class SaveSessionMutationBenchmarks

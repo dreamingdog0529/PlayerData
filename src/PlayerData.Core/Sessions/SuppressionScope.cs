@@ -2,15 +2,17 @@ using System;
 
 namespace PlayerData.Sessions;
 
-// Returned by ISaveSession.SuppressNotifications. A struct so opening a suppression scope
-// allocates nothing; the interface returns this concrete type deliberately - an IDisposable
-// return would box the struct and reintroduce the very allocation the type exists to remove,
-// while `using` on the concrete type dispatches Dispose without boxing.
-// Disposing the same copy twice is idempotent (the owner field is cleared), but each copy of a
-// not-yet-disposed scope carries its own owner reference, so disposing two copies over-closes
-// the session's suppression depth - SaveSession.EndSuppress detects that and throws rather than
-// silently corrupting the counter. Treat a scope as dispose-exactly-once, as the `using`
-// pattern naturally does. default(SuppressionScope) disposes as a no-op.
+// ISaveSession.SuppressNotifications が返すものです。struct にしてありますので、抑制スコープを
+// 開いても何もアロケーションしません。インターフェースがこの具象型を返すのは意図的なもので、
+// IDisposable を返す形にすると struct がボックス化されてしまい、この型がなくそうとしている
+// アロケーションが戻ってきてしまいます。一方、具象型に対する `using` であれば、ボックス化なしに
+// Dispose が呼べます。
+// 同じコピーを2回破棄しても冪等です（owner フィールドがクリアされるため）が、まだ破棄されて
+// いないスコープのコピーはそれぞれが owner への参照を持っていますので、2つのコピーを破棄すると
+// セッションの抑制の深さを閉じすぎてしまいます。その場合は SaveSession.EndSuppress が検知して、
+// カウンターを黙って壊してしまう代わりに例外を投げます。スコープはちょうど1回だけ破棄するもの
+// として扱ってください。`using` の形を使えば自然にそうなります。なお、
+// default(SuppressionScope) の破棄は何もしないものとして扱われます。
 public struct SuppressionScope : IDisposable
 {
     private SaveSession? _owner;

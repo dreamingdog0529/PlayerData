@@ -3,7 +3,7 @@ using PlayerData.Schema;
 
 namespace PlayerData.Unity.Editor.Tests
 {
-    // Collection entity with a single [PlayerDataKey] member.
+    // [PlayerDataKey] メンバーを1つだけ持つ、コレクションのエンティティです。
     [MemoryPackable(GenerateType.VersionTolerant)]
     public partial class SampleItem
     {
@@ -15,8 +15,8 @@ namespace PlayerData.Unity.Editor.Tests
         public int Count { get; set; }
     }
 
-    // Valid session covering all three storage-key resolution rules. The source generator runs
-    // on this class inside Unity, so it also proves generated session code compiles here.
+    // ストレージキーの解決ルール3つすべてを扱う、有効なセッションです。ソースジェネレータは Unity の中で
+    // このクラスに対して動くので、生成されたセッションコードがここでコンパイルできることの確認にもなります。
     [PlayerDataSession]
     [PlayerDataSingle(typeof(SampleProfile))]
     [PlayerDataSingle(typeof(SampleStats), "Stats")]
@@ -25,9 +25,9 @@ namespace PlayerData.Unity.Editor.Tests
     {
     }
 
-    // The declarations below are intentionally invalid. They deliberately omit
-    // [PlayerDataSession] so the source generator (whose diagnostics are compile errors) never
-    // sees them; SessionSchemaResolver is pointed at these types directly in tests.
+    // 以下の宣言は、わざと無効なものにしています。あえて [PlayerDataSession] を付けないことで、
+    // ソースジェネレータ（診断がコンパイルエラーになります）に見せないようにしています。
+    // SessionSchemaResolver は、テストの中でこれらの型を直接指すようにしています。
 
     [MemoryPackable(GenerateType.VersionTolerant)]
     public partial class SampleKeyless
@@ -74,17 +74,17 @@ namespace PlayerData.Unity.Editor.Tests
     {
     }
 
-    // "Session" maps to the generator-emitted "_session" backing field; "IsDirty" is a reserved
-    // generated member name. The generator rejects both.
+    // "Session" はジェネレータが出力する "_session" バッキングフィールドに対応します。"IsDirty" は予約された
+    // 生成メンバー名です。ジェネレータはどちらも拒否します。
     [PlayerDataSingle(typeof(SampleProfile), "Session")]
     [PlayerDataSingle(typeof(SampleStats), "IsDirty")]
     public sealed class SessionWithReservedNames
     {
     }
 
-    // Schema-only fixture (valid declaration): lets tests load a payload written by the "newer"
-    // SampleWideDocV2 under a key declared as SampleWideDocV1, which must classify as
-    // ReadOnlyRoundTrip.
+    // スキーマ専用のフィクスチャ（有効な宣言）です。「新しい」SampleWideDocV2 が書いたペイロードを、
+    // SampleWideDocV1 として宣言されたキーの下でテストが読み込めるようにするもので、
+    // ReadOnlyRoundTrip に分類される必要があります。
     [PlayerDataSingle(typeof(SampleWideDocV1), "Wide")]
     public sealed class SessionWithWideDoc
     {

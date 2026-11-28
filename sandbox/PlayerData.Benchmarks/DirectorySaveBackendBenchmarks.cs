@@ -6,17 +6,17 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Benchmarks;
 
-// Compares the current DirectorySaveBackend.BuildManifest/ParseManifest (fixed pointer +
-// BinaryPrimitives, see PlayerData.Core, ST-2 of plan 202607131429-playerdata-extreme-perf) against
-// a frozen copy of the pre-optimization implementation (MemoryStream + BinaryWriter/BinaryReader,
-// taken verbatim from commit e982877). The old code is kept here only as a benchmark baseline, not
-// as production code - it is dead outside this comparison.
+// 現在の DirectorySaveBackend.BuildManifest / ParseManifest（固定ポインタと BinaryPrimitives を使う形です。
+// PlayerData.Core 側と、計画 202607131429-playerdata-extreme-perf の ST-2 をご覧ください）と、最適化前の
+// 実装を凍結したコピー（MemoryStream と BinaryWriter / BinaryReader を使う形で、コミット e982877 から
+// そのまま持ってきたものです）を比べます。古いコードは、比べるための基準としてここに置いているだけです。
+// 本番のコードではなく、この比較の外では使われません。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 3, warmupCount: 3, iterationCount: 5)]
 public class DirectorySaveBackendBenchmarks
 {
-    // Representative of a typical SaveSession: a handful of registered documents/collections
-    // (not per-item collection entries - those live inside each document's own MemoryPack bytes).
+    // ふだんの SaveSession の代表的な形です。登録されたドキュメントやコレクションが数個だけあります
+    // （コレクションの項目ごとのエントリではありません。それらは、各ドキュメント自身の MemoryPack のバイト列の中に入っています）。
     private static readonly string[] Keys = { "profile", "items", "deck", "currency", "settings" };
 
     private byte[] _manifestBytes = null!;
@@ -39,7 +39,7 @@ public class DirectorySaveBackendBenchmarks
     [Benchmark]
     public (int FormatVersion, string[] Keys) ParseManifest_New_UnsafeBinaryPrimitives() => DirectorySaveBackend.ParseManifest(_manifestBytes);
 
-    // --- Frozen baseline, copied verbatim from PlayerData.Core/DirectorySaveBackend.cs @ e982877 ---
+    // --- ここから凍結した基準です。PlayerData.Core/DirectorySaveBackend.cs の e982877 時点のものを、そのままコピーしています ---
 
     private static byte[] OldBuildManifest(int formatVersion, string[] keys)
     {

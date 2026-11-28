@@ -1,6 +1,6 @@
 ﻿namespace PlayerData.Unity.Editor
 {
-    /// <summary>Shared constants for the PlayerData editor tooling.</summary>
+    /// <summary>PlayerData のエディターツールで共有する定数をまとめています。</summary>
     internal static class PlayerDataEditorMenu
     {
         public const string WindowMenuPath = "Window/PlayerData/Data Viewer";

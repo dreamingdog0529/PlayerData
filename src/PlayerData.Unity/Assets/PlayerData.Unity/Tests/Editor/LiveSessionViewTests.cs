@@ -210,7 +210,7 @@ namespace PlayerData.Unity.Editor.Tests
 
                 Assert.That(canEdit, Is.False);
                 Assert.That(reason, Is.Not.Null.And.Not.Empty);
-                // Viewing still works even when editing is gated off.
+                // 編集がゲートで止められているときでも、閲覧はそのままできます。
                 Assert.That(view.GetJson("Plain"), Does.Contain("Value"));
 
                 SamplePlainDoc before = gate.Plain.Value;
@@ -255,8 +255,8 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(_view.ConsumeChangeFlag(), Is.False);
         }
 
-        // Hand-written ISaveSession with a doc whose type MemoryPack cannot serialize: exercises
-        // the live editability gate, which generated sessions (always MemoryPackable) cannot.
+        // MemoryPack でシリアライズできない型のドキュメントを持つ、手書きの ISaveSession です。
+        // 生成されるセッション（常時 MemoryPackable です）では試せない、ライブ編集の可否のゲートを試すためのものです。
         private sealed class GateSession : ISaveSession
         {
             private readonly SaveSession _inner;

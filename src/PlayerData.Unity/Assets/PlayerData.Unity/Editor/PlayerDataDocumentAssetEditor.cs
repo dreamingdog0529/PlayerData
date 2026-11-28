@@ -8,8 +8,8 @@ using UnityEngine.UIElements;
 namespace PlayerData.Unity.Editor
 {
     /// <summary>
-    /// Inspector for <see cref="PlayerDataDocumentAsset"/>: session/document pickers, Fields
-    /// editors (singles), JSON (collections / advanced), Apply to asset, Export to save folder.
+    /// <see cref="PlayerDataDocumentAsset"/> の Inspector です。セッションとドキュメントのピッカー、Fields
+    /// エディター（単一の場合）、JSON（コレクション / 高度な編集）、アセットへの Apply、セーブフォルダーへの Export があります。
     /// </summary>
     [CustomEditor(typeof(PlayerDataDocumentAsset))]
     public sealed class PlayerDataDocumentAssetEditor : UnityEditor.Editor
@@ -76,7 +76,7 @@ namespace PlayerData.Unity.Editor
             exportRow.Add(exportButton);
             _root.Add(exportRow);
 
-            // Keep serialized fields in sync if the user edits via the default property path.
+            // ユーザーがデフォルトのプロパティ経路で編集したときも、シリアライズされたフィールドを同期したままにします。
             _root.TrackSerializedObjectValue(serializedObject, _ => RebuildFromAsset());
 
             RebuildFromAsset();
@@ -93,7 +93,7 @@ namespace PlayerData.Unity.Editor
                 string session = Asset.SessionTypeName;
                 if (!string.IsNullOrEmpty(session) && !sessions.Contains(session))
                 {
-                    // Keep a missing type visible so the user sees it failed to resolve.
+                    // 見つからない型も見えるままにして、解決に失敗したことがユーザーにわかるようにします。
                     sessions = new List<string>(sessions) { session };
                     _sessionDropdown.choices = sessions;
                 }
@@ -257,13 +257,13 @@ namespace PlayerData.Unity.Editor
             if (_fieldsModel is null || _fieldsModel.HasInvalid)
                 return;
 
-            // Live-update the JSON field so Advanced and Fields stay aligned while editing.
+            // JSON フィールドをその場で更新して、編集中も Advanced と Fields がずれないようにします。
             _jsonField.SetValueWithoutNotify(_fieldsModel.ToJson());
         }
 
         private void OnJsonEdited()
         {
-            // JSON edits stay uncommitted until Apply (same as the Data Viewer).
+            // JSON の編集は Apply するまで確定しません（Data Viewer と同じです）。
         }
 
         private void OnApply()
@@ -271,8 +271,8 @@ namespace PlayerData.Unity.Editor
             string json = _jsonField.value;
             if (_fieldsModel is not null && !_fieldsModel.HasInvalid && _descriptor is not null && !_descriptor.IsCollection)
             {
-                // Prefer Fields when they are valid — they are the non-engineer surface.
-                // If the user only edited JSON, fields may be stale; when fields are dirty use them.
+                // Fields が有効なときはそちらを優先します。エンジニアでない方のための画面だからです。
+                // ユーザーが JSON だけを編集したときは、フィールドが古くなっていることがあります。フィールドが dirty なときはそちらを使います。
                 if (_fieldsModel.IsDirty)
                     json = _fieldsModel.ToJson();
             }
@@ -306,7 +306,7 @@ namespace PlayerData.Unity.Editor
 
         private void OnExport()
         {
-            // Commit current Fields/JSON into the asset first so export matches what the user sees.
+            // まず現在の Fields/JSON をアセットに確定して、エクスポートがユーザーの見ている内容と合うようにします。
             OnApply();
             if (!PlayerDataDocumentAssetUtility.TryValidate(Asset, out _, out _))
                 return;

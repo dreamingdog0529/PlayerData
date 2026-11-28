@@ -3,10 +3,10 @@ using PlayerData.Documents;
 
 namespace PlayerData.Benchmarks;
 
-// Compares the capturing-closure call shape (pre-existing API) against the TState overloads
-// added to KeyedDocumentStore<TKey,T>, and reports the ImmutableDictionary write baseline
-// (Upsert/Set/Remove) which is unchanged by this pass - the lock-free CAS design was kept, so
-// O(log n) node allocation on every write is an accepted trade-off, not a regression.
+// キャプチャするクロージャを使う呼び出し方（もともとの API）と、KeyedDocumentStore<TKey,T> に追加した
+// TState ありのオーバーロードを比べます。あわせて、ImmutableDictionary への書き込みの基準も報告します
+// （Upsert / Set / Remove）。こちらは今回の変更では変わっていません。ロックなしの CAS の設計を
+// そのままにしたので、書き込みのたびに O(log n) のノードが確保されるのは、悪化ではなく受け入れたトレードオフです。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 1, warmupCount: 3, iterationCount: 5)]
 public class KeyedDocumentStoreBenchmarks
@@ -16,9 +16,9 @@ public class KeyedDocumentStoreBenchmarks
 
     private KeyedDocumentStore<string, InventoryItem> _store = null!;
 
-    // Dedicated Clean/Dirty stores for IsDirty (round-2 perf plan ST-2): isolates the
-    // Volatile.Read(_version)/Volatile.Read(_cleanVersion) comparison itself from the
-    // Upsert/TryUpdate/GetOrAdd call paths the other benchmarks in this class exercise.
+    // IsDirty 専用の、きれいな状態と汚れた状態のストアです（ラウンド2の性能計画 ST-2）。Volatile.Read(_version) と
+    // Volatile.Read(_cleanVersion) の比較そのものを、このクラスのほかのベンチマークが使う
+    // Upsert / TryUpdate / GetOrAdd の呼び出し経路から切り離して測ります。
     private KeyedDocumentStore<string, InventoryItem> _cleanStore = null!;
     private KeyedDocumentStore<string, InventoryItem> _dirtyStore = null!;
 
@@ -65,8 +65,8 @@ public class KeyedDocumentStoreBenchmarks
         return _store.GetOrAdd("item1", Amount, static (id, seed) => new InventoryItem(id, seed));
     }
 
-    // Baseline: ImmutableDictionary.SetItem allocates O(log n) tree nodes per write regardless
-    // of closure usage - this is the accepted lock-free trade-off, not something this pass changes.
+    // 基準の話です。ImmutableDictionary.SetItem は、クロージャを使うかどうかに関係なく、書き込みのたびに
+    // O(log n) のツリーのノードを確保します。これはロックなしで済ませるための受け入れたトレードオフで、今回の変更で変えるものではありません。
     [Benchmark]
     public InventoryItem Upsert_ExistingKey()
     {

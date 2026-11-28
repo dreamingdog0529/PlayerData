@@ -10,7 +10,7 @@ using PlayerData.Schema;
 
 namespace PlayerData.Unity.Editor
 {
-    /// <summary>Editor-side schema of one document declared on a [PlayerDataSession] class.</summary>
+    /// <summary>[PlayerDataSession] クラスで宣言されたドキュメント 1 件の、エディター側のスキーマです。</summary>
     public sealed class DocumentDescriptor
     {
         public DocumentDescriptor(string storageKey, Type documentType, Type payloadType, Type? keyType, string propertyName)
@@ -25,21 +25,21 @@ namespace PlayerData.Unity.Editor
         public string StorageKey { get; }
 
         /// <summary>
-        /// Generated property name (attribute PropertyName, or DocumentType.Name when omitted).
-        /// Used for friendly list labels; storage key resolution still uses Key ?? propertyName.
+        /// 生成されるプロパティ名です（属性の PropertyName、省略したときは DocumentType.Name です）。
+        /// わかりやすいリストのラベルに使います。ストレージキーの解決では、相変わらず Key ?? propertyName を使います。
         /// </summary>
         public string PropertyName { get; }
 
-        /// <summary>Declared entity type (the T of IDoc&lt;T&gt; / IBag&lt;TKey, T&gt;).</summary>
+        /// <summary>宣言された entity 型です（IDoc&lt;T&gt; / IBag&lt;TKey, T&gt; の T です）。</summary>
         public Type DocumentType { get; }
 
         /// <summary>
-        /// Type the stored payload deserializes to: <see cref="DocumentType"/> for singles,
-        /// ConcurrentDictionary&lt;TKey, T&gt; for collections (SaveSession's wire format).
+        /// 保存されたペイロードがデシリアライズされる型です。単一の場合は <see cref="DocumentType"/>、
+        /// コレクションの場合は ConcurrentDictionary&lt;TKey, T&gt; です（SaveSession のワイヤ形式です）。
         /// </summary>
         public Type PayloadType { get; }
 
-        /// <summary>[PlayerDataKey] member type for collections; null for single documents.</summary>
+        /// <summary>コレクション向けの [PlayerDataKey] メンバーの型です。単一ドキュメントでは null になります。</summary>
         public Type? KeyType { get; }
 
         public bool IsCollection => KeyType is not null;
@@ -58,26 +58,26 @@ namespace PlayerData.Unity.Editor
 
         public IReadOnlyList<DocumentDescriptor> Documents { get; }
 
-        /// <summary>Human-readable reasons for document declarations that were skipped.</summary>
+        /// <summary>スキップされたドキュメント宣言について、人間が読める理由をまとめています。</summary>
         public IReadOnlyList<string> Diagnostics { get; }
     }
 
     /// <summary>
-    /// Rebuilds the document schema of a session type from its runtime attributes, mirroring the
-    /// source generator's resolution rules (storage key = Key ?? propertyName ?? DocumentType.Name).
-    /// The mirror is locked by SessionSchemaResolverTests; if the generator's rules change, those
-    /// tests must be updated in lockstep.
+    /// セッション型のドキュメントスキーマを、そのランタイム属性から再構築します。ソースジェネレーターの
+    /// 解決ルールを再現しています（ストレージキーは Key ?? propertyName ?? DocumentType.Name です）。
+    /// この再現は SessionSchemaResolverTests で固定しています。ジェネレーターのルールが変わったら、それらの
+    /// テストも歩調を合わせて更新してください。
     /// </summary>
     public static class SessionSchemaResolver
     {
-        // Keep in sync with PlayerDataGenerator.ReservedPropertyNames.
+        // PlayerDataGenerator.ReservedPropertyNames と同期を保ってください。
         private static readonly HashSet<string> ReservedPropertyNames = new HashSet<string>(StringComparer.Ordinal)
         {
             "IsDirty", "IsLoaded", "Loaded", "Committed", "DirtyChanged",
             "LoadAsync", "CommitAsync", "SuppressNotifications", "AddValidator", "DisposeAsync", "OpenAsync",
         };
 
-        /// <summary>All [PlayerDataSession] types in the project, sorted for stable UI listing.</summary>
+        /// <summary>プロジェクト内のすべての [PlayerDataSession] 型です。UI の一覧が安定するよう、並び替えてあります。</summary>
         public static List<Type> FindSessionTypes()
         {
             List<Type> types = new List<Type>();
@@ -94,8 +94,8 @@ namespace PlayerData.Unity.Editor
             List<DocumentDescriptor> documents = new List<DocumentDescriptor>();
             List<string> diagnostics = new List<string>();
             HashSet<string> seenPropertyNames = new HashSet<string>(StringComparer.Ordinal);
-            // "_session" is pre-seeded because the generator always emits a `SaveSession _session`
-            // backing field (PlayerDataGenerator seeds its seenFieldNames identically).
+            // 「_session」はあらかじめ種として入れてあります。ジェネレーターはいつも `SaveSession _session` という
+            // バッキングフィールドを出すためです（PlayerDataGenerator も、その seenFieldNames に同じように種を入れています）。
             HashSet<string> seenFieldNames = new HashSet<string>(StringComparer.Ordinal) { "_session" };
             HashSet<string> seenStorageKeys = new HashSet<string>(StringComparer.Ordinal);
 
@@ -176,8 +176,8 @@ namespace PlayerData.Unity.Editor
                 }
                 else
                 {
-                    // The generator additionally validates the document's default factory here;
-                    // the editor never constructs defaults, so that check is not mirrored.
+                    // ジェネレーターは、ここでドキュメントのデフォルトファクトリも追加で検証しますが、
+                    // エディターではデフォルトを構築することはないので、そのチェックは再現していません。
                     if (!seenStorageKeys.Add(storageKey))
                     {
                         diagnostics.Add($"Multiple documents share the storage key '{storageKey}'.");
@@ -199,7 +199,7 @@ namespace PlayerData.Unity.Editor
 
         private static bool TryGetKeyType(Type documentType, out Type? keyType, out int keyMemberCount)
         {
-            // The generator inspects declared members only (INamedTypeSymbol.GetMembers()).
+            // ジェネレーターは、宣言されたメンバーだけを見ます（INamedTypeSymbol.GetMembers() です）。
             const BindingFlags declaredInstance =
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
 
@@ -236,8 +236,8 @@ namespace PlayerData.Unity.Editor
         private static string ToFieldName(string propertyName) =>
             "_" + char.ToLowerInvariant(propertyName[0]) + propertyName.Substring(1);
 
-        // Lexical identifier check; mirrors the generator's SyntaxFacts.IsValidIdentifier closely
-        // enough for diagnostics (keywords are already rejected by the consumer's compilation).
+        // 字句レベルの識別子チェックです。ジェネレーターの SyntaxFacts.IsValidIdentifier を、診断に十分な程度に
+        // 近く再現しています（キーワードは、使う側のコンパイルですでに弾かれます）。
         private static bool IsValidIdentifier(string name)
         {
             if (string.IsNullOrEmpty(name)) return false;

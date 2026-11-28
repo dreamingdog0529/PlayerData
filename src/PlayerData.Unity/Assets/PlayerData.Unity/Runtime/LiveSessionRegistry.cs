@@ -19,9 +19,9 @@ namespace PlayerData.Unity
         }
     }
 
-    // Opt-in seam: game code registers its live ISaveSession instances here so editor tooling
-    // can discover them during play mode. Outside the editor nothing is stored - Register only
-    // validates arguments and returns a shared no-op token, so player builds pay nothing.
+    // 任意で使うためのつなぎ目です。ゲーム側のコードが、動いている ISaveSession をここに登録しておくと、エディタ側のツールが
+    // 再生モード中にそれを見つけられるようになります。エディタの外では何も保存されません。Register は
+    // 引数をチェックして、共有の何もしないトークンを返すだけなので、プレイヤービルド側の負担はありません。
     public static class LiveSessionRegistry
     {
 #if UNITY_EDITOR
@@ -30,7 +30,7 @@ namespace PlayerData.Unity
 
         public static event Action? Changed;
 #else
-        // Never raised in player builds; explicit accessors avoid the unused-event warning.
+        // プレイヤービルドでは発火しません。明示的なアクセサにしておくことで、未使用イベントの警告を避けています。
         public static event Action? Changed { add { } remove { } }
 #endif
 
@@ -78,8 +78,8 @@ namespace PlayerData.Unity
         [InitializeOnLoadMethod]
         private static void HookPlayModeCleanup()
         {
-            // Clearing on ExitingPlayMode guards against stale entries when domain reload is
-            // disabled (Enter Play Mode Options), where static state survives play sessions.
+            // ExitingPlayMode でクリアしておくと、ドメインリロードが無効な場合でも古いエントリが残りません。
+            // 無効になるのは Enter Play Mode Options の設定のことで、静的な状態が再生セッションをまたいで残ってしまうケースです。
             EditorApplication.playModeStateChanged += state =>
             {
                 if (state == PlayModeStateChange.ExitingPlayMode)
@@ -115,7 +115,7 @@ namespace PlayerData.Unity
                 bool removed;
                 lock (Gate)
                 {
-                    // Remove returning false covers both double-Dispose and dispose-after-Clear.
+                    // Remove が false を返すケースで、二重の Dispose と、Clear のあとの Dispose の両方をカバーしています。
                     removed = Registrations.Remove(this);
                 }
                 if (removed)

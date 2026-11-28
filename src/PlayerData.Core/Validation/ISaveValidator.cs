@@ -1,9 +1,9 @@
 using PlayerData.Sessions;
 namespace PlayerData.Validation;
 
-// Session-level commit gate. Registered via SaveSession.AddValidator / ISaveSession.AddValidator.
+// セッション単位の、コミット前のチェック役です。SaveSession.AddValidator / ISaveSession.AddValidator から登録します。
 public interface ISaveValidator
 {
-    // Throw on failure (fail-fast; exceptions are not swallowed).
+    // 失敗したときは例外を投げてください（fail-fast で、例外が握りつぶされることはありません）。
     void Validate(ISaveSession session);
 }

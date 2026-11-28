@@ -8,7 +8,7 @@ using PlayerData.Sessions;
 
 namespace PlayerData.Unity.Editor
 {
-    /// <summary>A directory containing a manifest.bin (one save).</summary>
+    /// <summary>manifest.bin を含むディレクトリです（セーブ 1 件分です）。</summary>
     public sealed class SaveLocation
     {
         public SaveLocation(string directory, int? slot)
@@ -19,7 +19,7 @@ namespace PlayerData.Unity.Editor
 
         public string Directory { get; }
 
-        /// <summary>Slot number when the directory is a SlotSaveBackend "slot_{n}" folder.</summary>
+        /// <summary>ディレクトリが SlotSaveBackend の「slot_{n}」フォルダーのときのスロット番号です。</summary>
         public int? Slot { get; }
     }
 
@@ -27,16 +27,16 @@ namespace PlayerData.Unity.Editor
     {
         Editable,
 
-        /// <summary>JSON cannot represent the payload losslessly; viewing only.</summary>
+        /// <summary>JSON ではペイロードを無損失に表せないので、表示だけです。</summary>
         ReadOnlyRoundTrip,
 
-        /// <summary>Save FormatVersion differs from SaveSession.CurrentFormatVersion; viewing only.</summary>
+        /// <summary>セーブの FormatVersion が SaveSession.CurrentFormatVersion と違うので、表示だけです。</summary>
         ReadOnlyFormatVersion,
 
-        /// <summary>Key is not declared on the selected session type; preserved verbatim on write-back.</summary>
+        /// <summary>選択中のセッション型で宣言されていないキーです。書き戻すときはそのまま保持されます。</summary>
         UnknownKey,
 
-        /// <summary>MemoryPack deserialization failed (encrypted, obfuscated or corrupt payload).</summary>
+        /// <summary>MemoryPack のデシリアライズに失敗しました（暗号化、難読化、またはペイロードの破損が考えられます）。</summary>
         Unreadable,
     }
 
@@ -53,7 +53,7 @@ namespace PlayerData.Unity.Editor
 
         public string StorageKey { get; }
 
-        /// <summary>Schema descriptor; null for unknown keys.</summary>
+        /// <summary>スキーマの記述です。未知のキーでは null になります。</summary>
         public DocumentDescriptor? Descriptor { get; }
 
         public byte[] Bytes { get; }
@@ -84,17 +84,17 @@ namespace PlayerData.Unity.Editor
     }
 
     /// <summary>
-    /// Discovers, loads, classifies and writes back saves in the DirectorySaveBackend layout
-    /// ({root}/manifest.bin + {root}/docs/*.bin, slots as {root}/slot_{n}/...). Write-back always
-    /// replaces exactly one editable document and keeps every other document (unknown keys
-    /// included) plus the FormatVersion intact, because DirectorySaveBackend deletes doc files
-    /// that are missing from the written bundle.
+    /// DirectorySaveBackend のレイアウトで、セーブを見つけて、読み込んで、分類して、書き戻します
+    /// （{root}/manifest.bin + {root}/docs/*.bin、スロットは {root}/slot_{n}/... です）。書き戻すときは、いつも
+    /// 編集できるドキュメントをちょうど 1 件だけ置き換え、それ以外のドキュメント（未知のキーを含みます）と
+    /// FormatVersion はそのまま保ちます。DirectorySaveBackend は、書き込んだバンドルに含まれていない doc ファイルを
+    /// 削除してしまうためです。
     /// </summary>
     public static class SaveDataStore
     {
         private const string ManifestFileName = "manifest.bin";
 
-        /// <summary>Finds all directories containing a manifest.bin under root (root included).</summary>
+        /// <summary>root の下（root 自身も含みます）で、manifest.bin を含むディレクトリをすべて探します。</summary>
         public static List<SaveLocation> FindSaves(string rootDirectory, int maxDepth = 3)
         {
             List<SaveLocation> found = new List<SaveLocation>();
@@ -107,9 +107,9 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Loads and classifies a save against the session schema. Returns null with error = null
-        /// when no manifest exists, and null with a non-null error when the save cannot be read
-        /// (corrupt or encrypted manifest, missing document files).
+        /// セッションのスキーマに照らして、セーブを読み込んで分類します。マニフェストがないときは null を error = null で返し、
+        /// セーブを読めないとき（マニフェストの破損や暗号化、ドキュメントファイルの不足など）は、null を null でない error とともに返します。
+        ///
         /// </summary>
         public static LoadedSave? TryLoad(SaveLocation location, SessionSchema schema, out string? error)
         {
@@ -140,8 +140,8 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Replaces exactly one editable document, writes the whole bundle back and returns the
-        /// reloaded save. Throws when the target document does not exist or is not editable.
+        /// 編集できるドキュメントをちょうど 1 件だけ置き換え、バンドル全体を書き戻して、読み直した
+        /// セーブを返します。対象のドキュメントがない、または編集できないときは例外を投げます。
         /// </summary>
         public static LoadedSave WriteDocument(LoadedSave save, string storageKey, byte[] newBytes, SessionSchema schema)
         {

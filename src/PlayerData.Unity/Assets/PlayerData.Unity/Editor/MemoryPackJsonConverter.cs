@@ -8,26 +8,26 @@ using Newtonsoft.Json.Serialization;
 namespace PlayerData.Unity.Editor
 {
     /// <summary>
-    /// Converts MemoryPack document payloads to and from editable JSON.
-    /// JSON is only an editing surface — MemoryPack bytes remain the storage format.
-    /// Callers must gate editing behind <see cref="CanRoundTrip"/> so documents that JSON
-    /// cannot represent losslessly are never written back.
+    /// MemoryPack のドキュメントのペイロードと、編集できる JSON とを相互に変換します。
+    /// JSON はあくまで編集用の姿で、保存形式は MemoryPack のバイト列のままです。
+    /// 呼び出し側では、編集を <see cref="CanRoundTrip"/> でガードしてください。JSON では
+    /// 無損失に表せないドキュメントを、決して書き戻さないためです。
     /// </summary>
     public static class MemoryPackJsonConverter
     {
-        // Shared instance: DefaultContractResolver caches contracts per instance, and
-        // ResolveObjectContract below must observe the exact same member-selection rule.
+        // 共有インスタンスです。DefaultContractResolver はインスタンスごとにコントラクトをキャッシュしますし、
+        // 下の ResolveObjectContract では、まったく同じメンバー選択ルールを見ないといけないためです。
         private static readonly MemoryPackContractResolver Resolver = new MemoryPackContractResolver();
 
         private static readonly JsonSerializerSettings Settings = new JsonSerializerSettings
         {
             ContractResolver = Resolver,
             Formatting = Formatting.Indented,
-            // Keep string members verbatim; date-looking strings must not be re-formatted.
+            // 文字列メンバーはそのまま保ちます。日付っぽく見える文字列も、書式を変えないでください。
             DateParseHandling = DateParseHandling.None,
-            // Fail loudly on property-name typos instead of silently dropping the edit.
+            // プロパティ名のタイプミスでは、編集を静かに捨てず、はっきり失敗させます。
             MissingMemberHandling = MissingMemberHandling.Error,
-            // Replace pre-initialized members instead of appending to their default contents.
+            // あらかじめ初期化されたメンバーは、デフォルトの中身に追加するのではなく、置き換えます。
             ObjectCreationHandling = ObjectCreationHandling.Replace,
         };
 
@@ -49,7 +49,7 @@ namespace PlayerData.Unity.Editor
             return MemoryPackSerializer.Serialize(documentType, value);
         }
 
-        /// <summary>Serializes a live object with the same settings as the byte-level APIs.</summary>
+        /// <summary>バイト列レベルの API と同じ設定で、ライブオブジェクトをシリアライズします。</summary>
         public static string ToJson(object value, Type documentType)
         {
             if (value is null) throw new ArgumentNullException(nameof(value));
@@ -58,7 +58,7 @@ namespace PlayerData.Unity.Editor
             return JsonConvert.SerializeObject(value, documentType, Settings);
         }
 
-        /// <summary>Deserializes JSON to a live object with the same settings as the byte-level APIs.</summary>
+        /// <summary>バイト列レベルの API と同じ設定で、JSON をライブオブジェクトにデシリアライズします。</summary>
         public static object ObjectFromJson(string json, Type documentType)
         {
             if (json is null) throw new ArgumentNullException(nameof(json));
@@ -71,8 +71,8 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// True when bytes → object → JSON → object → bytes reproduces the payload exactly,
-        /// i.e. JSON editing cannot silently lose data for this document.
+        /// バイト列 → オブジェクト → JSON → オブジェクト → バイト列と変換してもペイロードがそのまま再現できるときに true です。
+        /// つまり、このドキュメントでは JSON 編集でデータが静かに失われることはありません。
         /// </summary>
         public static bool CanRoundTrip(byte[] bytes, Type documentType, out string? failureReason)
         {
@@ -97,9 +97,9 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// The member-selection rule as a resolved contract, for the field editor. Exposed from
-        /// here (instead of re-implementing the rule) so JSON editing and per-field editing can
-        /// never diverge on which members a document exposes.
+        /// フィールドエディター向けに、メンバー選択ルールを解決済みのコントラクトとして返します。ここから公開しているのは、
+        /// ルールを再実装せずに済ませるためで、JSON 編集とフィールドごとの編集とで、ドキュメントが公開する
+        /// メンバーがずれてしまわないようにするためです。
         /// </summary>
         internal static JsonObjectContract ResolveObjectContract(Type documentType)
         {
@@ -112,8 +112,8 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Mirrors MemoryPack member selection for Json.NET: include non-public members marked
-        /// [MemoryPackInclude], exclude members marked [MemoryPackIgnore].
+        /// Json.NET 向けに MemoryPack のメンバー選択を再現しています。[MemoryPackInclude] が付いた非公開メンバーを含め、
+        /// [MemoryPackIgnore] が付いたメンバーを除外します。
         /// </summary>
         private sealed class MemoryPackContractResolver : DefaultContractResolver
         {

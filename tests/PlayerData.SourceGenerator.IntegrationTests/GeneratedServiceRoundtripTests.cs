@@ -10,8 +10,8 @@ using PlayerData.Sessions;
 
 namespace PlayerData.SourceGenerator.IntegrationTests;
 
-// Exercises the generated GameSave session (compiled from PlayerData.Core's embedded analyzer
-// via PackageReference) - not an in-memory Roslyn-driver text assertion.
+// 生成された GameSave のセッションを通します（PlayerData.Core に埋め込まれたアナライザでコンパイルされたもので、
+// PackageReference 経由です）。メモリ上で Roslyn のドライバを使って、文字列を確認する形ではありません。
 public class GeneratedServiceRoundtripTests
 {
     private string _directory = null!;
@@ -114,7 +114,7 @@ public class GeneratedServiceRoundtripTests
 
         var reader = await GameSave.OpenAsync(new DirectorySaveBackend(_directory));
         Assert.That(reader.Inventory.Get("potion").Count, Is.EqualTo(5));
-        Assert.That(reader.Profile.Value.Level, Is.EqualTo(1)); // default factory value
+        Assert.That(reader.Profile.Value.Level, Is.EqualTo(1)); // 既定のファクトリの値です
     }
 
     [Test]

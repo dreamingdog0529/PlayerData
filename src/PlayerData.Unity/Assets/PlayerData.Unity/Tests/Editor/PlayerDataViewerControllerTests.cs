@@ -54,8 +54,8 @@ namespace PlayerData.Unity.Editor.Tests
             Assert.That(error, Is.Null);
             Assert.That(ProfileJson(), Does.Contain("edited"));
 
-            // A fresh controller reading from disk sees the persisted value, and the other
-            // documents (unknown key included) are intact.
+            // ディスクから読み直した新しいコントローラでは保存済みの値が見えていて、ほかの
+            // ドキュメント（不明なキーを含みます）もそのまま残っています。
             PlayerDataViewerController fresh = new PlayerDataViewerController();
             fresh.SelectSession(typeof(SampleEditorSession));
             fresh.Scan(_saveRoot);

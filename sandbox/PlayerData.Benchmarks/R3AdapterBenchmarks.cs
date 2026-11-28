@@ -5,11 +5,11 @@ using PlayerData.Documents;
 
 namespace PlayerData.Benchmarks;
 
-// Measures a single subscribe-then-dispose round trip through PlayerDataStoreR3Extensions /
-// PlayerDataCollectionR3Extensions (round-2 perf plan ST-3, baseline for ST-5). Each [Benchmark]
-// call is the unit of work being priced: SubscribeCore allocates a local-function Handler closure
-// plus a Disposable.Create-wrapping lambda closure, on every call. replayCurrent:false isolates
-// that subscribe-mechanism cost from the extra OnNext(store.Value) replay call.
+// PlayerDataStoreR3Extensions / PlayerDataCollectionR3Extensions 経由で、購読してから破棄するまでの
+// 往復を1回分だけ測ります（ラウンド2の性能計画 ST-3 で、ST-5 の基準になるものです）。[Benchmark] の
+// 呼び出し1回が、測りたい仕事の単位です。SubscribeCore は呼び出しのたびに、ローカル関数の Handler
+// クロージャと、それを Disposable.Create で包むラムダのクロージャを確保します。replayCurrent:false に
+// することで、余分な OnNext(store.Value) の再生呼び出しではなく、購読の仕組み自体のコストを切り出せます。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 3, warmupCount: 5, iterationCount: 10)]
 public class R3AdapterBenchmarks

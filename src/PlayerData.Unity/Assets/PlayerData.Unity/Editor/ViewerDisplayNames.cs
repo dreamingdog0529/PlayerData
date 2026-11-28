@@ -5,8 +5,8 @@ using UnityEngine;
 namespace PlayerData.Unity.Editor
 {
     /// <summary>
-    /// Plain-language labels for the Data Viewer. Keeps technical enum names and FQCNs out of the
-    /// UI. Pure functions for EditMode tests.
+    /// Data Viewer 向けの、わかりやすい言葉のラベルをまとめています。技術的な enum 名や FQCN が
+    /// UI に出てこないようにしています。EditMode テストで使えるよう、純粋な関数だけにしています。
     /// </summary>
     public static class ViewerDisplayNames
     {
@@ -35,8 +35,8 @@ namespace PlayerData.Unity.Editor
         public const string OpenFileLabel = "Open file";
 
         /// <summary>
-        /// The "open the containing folder" button label, worded for the host OS's file browser
-        /// (Explorer / Finder / file manager). Pure — takes the platform so it stays testable.
+        /// 「入っているフォルダーを開く」ボタンのラベルです。ホスト OS のファイルブラウザーに合わせた言い方にしています
+        /// （Explorer / Finder / ファイルマネージャー）。テストしやすいよう、プラットフォームを受け取る純粋な関数にしています。
         /// </summary>
         public static string RevealLabel(RuntimePlatform platform)
         {
@@ -95,7 +95,7 @@ namespace PlayerData.Unity.Editor
             return type.Name;
         }
 
-        /// <summary>Prefer property name, then type name, then storage key for list rows.</summary>
+        /// <summary>リストの行では、プロパティ名、型名、ストレージキーの順に優先して使います。</summary>
         public static string DocumentDisplayName(string storageKey, string? propertyName, string? typeName)
         {
             if (!string.IsNullOrEmpty(propertyName))
@@ -122,8 +122,8 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Short type names for dropdowns; duplicates get a numeric suffix (Foo (1), Foo (2)).
-        /// Order matches <paramref name="types"/>.
+        /// ドロップダウン向けの短い型名を作ります。重複したときは数字の suffix を付けます（Foo (1)、Foo (2) のような感じです）。
+        /// 並び順は <paramref name="types"/> と同じです。
         /// </summary>
         public static List<string> DisambiguatedShortNames(IReadOnlyList<Type> types)
         {
@@ -155,8 +155,8 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Builds a default JSON object for an entity type (empty instance). Used when creating
-        /// document assets. Fails with a reason when the type cannot be constructed or serialized.
+        /// entity 型のデフォルトの JSON オブジェクト（空のインスタンス）を作ります。ドキュメントアセットを
+        /// 作るときに使います。その型を構築できない、またはシリアライズできないときは、理由を添えて失敗します。
         /// </summary>
         public static bool TryCreateDefaultJson(Type entityType, out string json, out string? error)
         {
@@ -184,7 +184,7 @@ namespace PlayerData.Unity.Editor
             try
             {
                 json = MemoryPackJsonConverter.ToJson(instance, entityType);
-                // Ensure the template can be fed back through the same pipeline as Apply.
+                // テンプレートが Apply と同じパイプラインにそのまま流せることを確かめています。
                 _ = MemoryPackJsonConverter.ObjectFromJson(json, entityType);
                 error = null;
                 return true;

@@ -35,7 +35,7 @@ public class CompressedSaveBackendTests
         return data;
     }
 
-    // Highly compressible payload so "stored bytes are smaller" assertions are meaningful.
+    // よく縮むデータです。「保持されるバイト列が小さい」という確認が意味を持つようにしています。
     private static byte[] MakeCompressible(int length)
     {
         var data = new byte[length];
@@ -80,8 +80,8 @@ public class CompressedSaveBackendTests
     [Test]
     public async Task Constructor_CompressionLevel_IsHonoredForFastestVsOptimal()
     {
-        // Both levels must round-trip; Optimal should not expand compressible data more than Fastest
-        // in a way that breaks the format (we only assert both succeed and produce valid headers).
+        // どちらのレベルでも往復できなければなりません。Optimal が Fastest より、形式を壊すほどよく縮むデータを
+        // 膨らませることもないはずです（両方が成功して、正しいヘッダーができることだけを確認しています）。
         var plaintext = MakeCompressible(2048);
 
         var optimalDir = Path.Combine(_directory, "optimal");
@@ -168,7 +168,7 @@ public class CompressedSaveBackendTests
         await backend.WriteAsync(new SaveBundle(1, new Dictionary<string, byte[]> { ["doc"] = MakePlaintext(10) }));
 
         var path = Path.Combine(_directory, "docs", "doc.bin");
-        await File.WriteAllBytesAsync(path, new byte[] { 0x01, 0x00 }); // shorter than 5-byte header
+        await File.WriteAllBytesAsync(path, new byte[] { 0x01, 0x00 }); // 5バイトのヘッダーより短いです
 
         Assert.ThrowsAsync<InvalidDataException>(async () => await backend.ReadAsync());
     }
@@ -195,11 +195,11 @@ public class CompressedSaveBackendTests
 
         var path = Path.Combine(_directory, "docs", "doc.bin");
         var raw = await File.ReadAllBytesAsync(path);
-        // Flip bytes in the deflate body (past the 5-byte header) without touching the declared length.
+        // 宣言された長さには触らずに、deflate の本体（5バイトのヘッダーの先）のバイトをひっくり返します。
         for (var i = 5; i < raw.Length; i++) raw[i] ^= 0xA5;
         await File.WriteAllBytesAsync(path, raw);
 
-        // DeflateStream may throw InvalidDataException, or our length checks may throw the same.
+        // DeflateStream が InvalidDataException を投げることもあれば、こちらの長さの確認が同じ例外を投げることもあります。
         Assert.ThrowsAsync<InvalidDataException>(async () => await backend.ReadAsync());
     }
 
@@ -221,7 +221,7 @@ public class CompressedSaveBackendTests
     [Test]
     public async Task StackedWithEncrypted_CompressThenEncrypt_RoundTrips()
     {
-        // Recommended order: compress first (inner), encrypt outer.
+        // おすすめの順番です。まず圧縮して（内側）、外側を暗号化します。
         ISaveBackend backend = new EncryptedSaveBackend(
             new CompressedSaveBackend(new DirectorySaveBackend(_directory)),
             Key);
@@ -232,7 +232,7 @@ public class CompressedSaveBackendTests
         var result = await backend.ReadAsync();
         Assert.That(result!.Documents["doc"], Is.EqualTo(plaintext));
 
-        // On-disk bytes must not match either plaintext or a bare compressed header alone in a trivial way.
+        // ディスク上のバイト列は、平文とも、むき出しの圧縮ヘッダーだけとも、安易な形では一致しないはずです。
         var raw = await File.ReadAllBytesAsync(Path.Combine(_directory, "docs", "doc.bin"));
         Assert.That(raw, Is.Not.EqualTo(plaintext));
         Assert.That(raw[0], Is.EqualTo(0x01)); // EncryptedSaveBackend FormatTag

@@ -4,7 +4,7 @@ using System.Reflection;
 
 namespace PlayerData.Unity.Editor
 {
-    /// <summary>View state of one document, prepared for display.</summary>
+    /// <summary>ドキュメント 1 件のビューの状態です。表示用に準備してあります。</summary>
     public sealed class DocumentView
     {
         public DocumentView(DocumentEntry entry, string? json, string? jsonError)
@@ -16,7 +16,7 @@ namespace PlayerData.Unity.Editor
 
         public DocumentEntry Entry { get; }
 
-        /// <summary>Pretty-printed JSON; null when the payload cannot be rendered.</summary>
+        /// <summary>整えて表示した JSON です。ペイロードを表示できないときは null になります。</summary>
         public string? Json { get; }
 
         public string? JsonError { get; }
@@ -25,8 +25,8 @@ namespace PlayerData.Unity.Editor
     }
 
     /// <summary>
-    /// UI-independent state behind PlayerDataViewerWindow, kept separate so EditMode tests can
-    /// drive the full session → scan → load → view flow without a window.
+    /// PlayerDataViewerWindow の裏側にある、UI に依存しない状態です。EditMode テストがウィンドウなしで、
+    /// セッション → スキャン → 読み込み → 表示という一連の流れを動かせるよう、分けてあります。
     /// </summary>
     public sealed class PlayerDataViewerController
     {
@@ -48,9 +48,9 @@ namespace PlayerData.Unity.Editor
             List<Type> result = new List<Type>(discovered.Count);
             foreach (Type type in discovered)
             {
-                // Test-only session fixtures (compiled under UNITY_INCLUDE_TESTS) would otherwise
-                // clutter this package's own dev-project dropdown. A package consumer never sees
-                // them — their test assembly is not compiled — so this only affects development.
+                // テスト専用のセッションフィクスチャ（UNITY_INCLUDE_TESTS の下でコンパイルされます）が、そのままだと
+                // このパッケージ自身の開発プロジェクトのドロップダウンを煩雑にしてしまいます。パッケージを使う側では、
+                // そのテストアセンブリはコンパイルされないので目にすることはありません。つまり、これは開発中にだけ影響します。
                 if (!IsFromTestAssembly(type))
                     result.Add(type);
             }
@@ -58,8 +58,8 @@ namespace PlayerData.Unity.Editor
             SessionTypes = result;
         }
 
-        // Every Unity EditMode/PlayMode test assembly references the NUnit framework and no
-        // production assembly does, which makes it a reliable "is a test type" marker.
+        // Unity の EditMode/PlayMode のテストアセンブリはどれも NUnit フレームワークを参照していて、本番の
+        // アセンブリは参照していません。なので、これは「テスト用の型かどうか」の確かな目印になります。
         private static bool IsFromTestAssembly(Type type)
         {
             foreach (AssemblyName referenced in type.Assembly.GetReferencedAssemblies())
@@ -77,7 +77,7 @@ namespace PlayerData.Unity.Editor
 
             Schema = SessionSchemaResolver.Resolve(sessionType);
 
-            // Classification depends on the schema, so an already-selected save is re-read.
+            // 分類はスキーマに依存するので、すでに選ばれているセーブは読み直します。
             if (SelectedSave is not null)
                 LoadSelected();
         }
@@ -91,9 +91,9 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Loads every scanned save with the current schema, for the tree view. Locations whose
-        /// manifest cannot be read are omitted; without a schema no save can be classified, so
-        /// the result is empty. Returns a fresh list on every call.
+        /// ツリービュー向けに、現在のスキーマでスキャン済みのセーブをすべて読み込みます。マニフェストを
+        /// 読めない場所は省きます。スキーマがないと、どのセーブも分類できないので、
+        /// 結果は空になります。呼び出すたびに、新しいリストを返します。
         /// </summary>
         public IReadOnlyList<LoadedSave> LoadScannedSaves()
         {
@@ -151,9 +151,9 @@ namespace PlayerData.Unity.Editor
         }
 
         /// <summary>
-        /// Parses the edited JSON, writes the document back and reloads the save. Returns false
-        /// with an error (and without touching the disk) when the JSON is invalid or the document
-        /// is not editable.
+        /// 編集された JSON をパースし、ドキュメントを書き戻して、セーブを読み直します。JSON が無効なときや、
+        /// ドキュメントが編集できないときは、ディスクには触らず、エラーとともに false を返します。
+        ///
         /// </summary>
         public bool ApplyJson(string storageKey, string json, out string? error)
         {

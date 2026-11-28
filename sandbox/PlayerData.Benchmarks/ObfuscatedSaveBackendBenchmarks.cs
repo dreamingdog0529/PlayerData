@@ -4,11 +4,11 @@ using PlayerData.Persistence;
 
 namespace PlayerData.Benchmarks;
 
-// Compares the current ObfuscatedSaveBackend.Transform (System.Numerics.Vector<byte> SIMD XOR,
-// see PlayerData.Core, ST-6 of plan 202607141500-playerdata-core-perf-tuning) against a frozen
-// copy of the pre-ST-6 scalar byte-at-a-time loop. The old code is kept here only as a benchmark
-// baseline, not as production code - it is dead outside this comparison. PayloadSize includes 33
-// (one past the 32-byte mask period) to keep the scalar tail-loop path exercised even at small sizes.
+// 現在の ObfuscatedSaveBackend.Transform（System.Numerics.Vector<byte> による SIMD の XOR です。
+// PlayerData.Core 側と、計画 202607141500-playerdata-core-perf-tuning の ST-6 をご覧ください）と、ST-6 より
+// 前の、バイトを1つずつ処理するスカラーのループを凍結したコピーを比べます。古いコードは、比べるための基準として
+// ここに置いているだけです。本番のコードではなく、この比較の外では使われません。PayloadSize には 33 も含めています
+// （32バイトのマスクの周期を1つ過ぎたところです）。小さいサイズでも、スカラーの残り処理の経路が通るようにするためです。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 1, warmupCount: 3, iterationCount: 5)]
 public class ObfuscatedSaveBackendBenchmarks
@@ -31,7 +31,7 @@ public class ObfuscatedSaveBackendBenchmarks
     [Benchmark]
     public byte[] Transform_New_SimdVector() => ObfuscatedSaveBackend.Transform(_data);
 
-    // --- Frozen baseline, copied verbatim from PlayerData.Core/ObfuscatedSaveBackend.cs before ST-6 ---
+    // --- ここから凍結した基準です。PlayerData.Core/ObfuscatedSaveBackend.cs の ST-6 より前のものを、そのままコピーしています ---
 
     private static readonly byte[] OldMask =
     {

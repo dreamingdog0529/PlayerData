@@ -5,12 +5,12 @@ using PlayerData.Persistence;
 
 namespace PlayerData.Benchmarks;
 
-// Prices the CompressedSaveBackend.Compress/Decompress kernels directly (via InternalsVisibleTo),
-// isolated from the per-call Dictionary/SaveBundle machinery the way EncryptedSaveBackendBenchmarks
-// prices Protect/Unprotect. Two payload shapes bracket the real range: Compressible=true is a
-// 3-symbol repeating pattern (deflate shrinks it hard, exercising the growth-free fast path);
-// Compressible=false is PRNG noise (deflate expands slightly, exercising buffer growth and the
-// worst-case CPU cost). The inner backend is never touched - the kernels take/return byte[] arrays.
+// CompressedSaveBackend.Compress / Decompress の核を直接測ります（InternalsVisibleTo 経由です）。
+// EncryptedSaveBackendBenchmarks が Protect / Unprotect を測るのと同じように、呼び出しごとの
+// Dictionary / SaveBundle の仕組みからは切り離しています。2種類のデータの形で、実際の範囲を挟みます。
+// Compressible=true は、3種類の記号が繰り返される形です（deflate で大きく縮み、伸びない速い経路を通ります）。
+// Compressible=false は PRNG のノイズです（deflate で少し膨らみ、バッファの伸長と CPU コストの
+// 最悪ケースを通ります）。内側のバックエンドには触りません。核は byte[] の配列を受け取って返すだけです。
 [MemoryDiagnoser]
 [SimpleJob(launchCount: 1, warmupCount: 3, iterationCount: 5)]
 public class CompressedSaveBackendBenchmarks
