@@ -46,7 +46,7 @@ jobs:
             src/PlayerData.MessagePipe/PlayerData.MessagePipe.csproj \
             src/PlayerData.R3/PlayerData.R3.csproj \
             src/PlayerData.VitalRouter/PlayerData.VitalRouter.csproj; do
-            dotnet pack "$proj" -c Release -p:Version="$version" -o ./nupkgs
+            dotnet pack "$proj" -c Release -p:Version="$version" -p:GeneratePackageOnBuild=false -o ./nupkgs
           done
 
       - name: Upload nupkgs to release
