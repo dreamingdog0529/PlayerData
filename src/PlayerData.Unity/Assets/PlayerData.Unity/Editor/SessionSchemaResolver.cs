@@ -1,9 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection;
 using MemoryPack;
 using UnityEditor;
+using PlayerData.Documents;
+using PlayerData.Sessions;
+using PlayerData.Schema;
 
 namespace PlayerData.Unity.Editor
 {

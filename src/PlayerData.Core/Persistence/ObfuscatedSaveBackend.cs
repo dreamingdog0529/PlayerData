@@ -4,8 +4,9 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using PlayerData.Sessions;
 
-namespace PlayerData;
+namespace PlayerData.Persistence;
 
 // Wraps an ISaveBackend to obscure each document's bytes with a fixed, position-dependent XOR
 // mask. This is not a security feature: the mask is a compile-time constant with no external

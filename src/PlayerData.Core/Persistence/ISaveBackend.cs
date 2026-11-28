@@ -1,7 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PlayerData;
+namespace PlayerData.Persistence;
 
 /// <summary>Persists and restores a <see cref="SaveBundle"/>.</summary>
 /// <remarks>

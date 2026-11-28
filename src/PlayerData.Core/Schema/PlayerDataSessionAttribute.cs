@@ -1,6 +1,6 @@
 using System;
 
-namespace PlayerData;
+namespace PlayerData.Schema;
 
 // Marks a partial class as a save-session surface. Documents are declared as class-level
 // [PlayerDataSingle] / [PlayerDataCollection] attributes (stack one per document); the

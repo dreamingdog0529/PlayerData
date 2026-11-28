@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using PlayerData.VitalRouter;
 using VitalRouter;
+using PlayerData.Documents;
 
 namespace PlayerData.Benchmarks;
 

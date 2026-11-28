@@ -1,6 +1,6 @@
 using System;
 
-namespace PlayerData;
+namespace PlayerData.Sessions;
 
 // Returned by ISaveSession.SuppressNotifications. A struct so opening a suppression scope
 // allocates nothing; the interface returns this concrete type deliberately - an IDisposable

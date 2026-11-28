@@ -1,5 +1,6 @@
 using MemoryPack;
 using PlayerData;
+using PlayerData.Schema;
 
 namespace Sample;
 

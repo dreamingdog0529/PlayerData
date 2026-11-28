@@ -6,8 +6,9 @@ using System.IO;
 using System.IO.Compression;
 using System.Threading;
 using System.Threading.Tasks;
+using PlayerData.Sessions;
 
-namespace PlayerData;
+namespace PlayerData.Persistence;
 
 // Wraps an ISaveBackend to compress each document's bytes with Deflate (raw DEFLATE, no
 // GZip/zlib header). This is a size optimization only: it provides no confidentiality or

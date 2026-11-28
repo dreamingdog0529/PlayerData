@@ -1,4 +1,4 @@
-namespace PlayerData;
+namespace PlayerData.Documents;
 
 public enum DataChangeCause
 {

@@ -4,6 +4,9 @@ using System.Threading.Tasks;
 using NUnit.Framework;
 using PlayerData;
 using Sample;
+using PlayerData.Persistence;
+using PlayerData.Validation;
+using PlayerData.Sessions;
 
 namespace PlayerData.SourceGenerator.IntegrationTests;
 

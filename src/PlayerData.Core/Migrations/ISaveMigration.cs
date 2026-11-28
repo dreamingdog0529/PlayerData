@@ -1,4 +1,5 @@
-namespace PlayerData;
+using PlayerData.Persistence;
+namespace PlayerData.Migrations;
 
 /// <summary>Migrates a save bundle from <see cref="FromVersion"/> to <see cref="ToVersion"/>.</summary>
 /// <remarks>Ownership: the input bundle's ownership transfers to the migration - it may mutate

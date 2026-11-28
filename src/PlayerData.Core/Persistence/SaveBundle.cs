@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace PlayerData;
+namespace PlayerData.Persistence;
 
 public sealed class SaveBundle
 {

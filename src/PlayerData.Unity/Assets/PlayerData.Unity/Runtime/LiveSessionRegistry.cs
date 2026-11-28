@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 #if UNITY_EDITOR
 using UnityEditor;
+using PlayerData.Sessions;
 #endif
 
 namespace PlayerData.Unity

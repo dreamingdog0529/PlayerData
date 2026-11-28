@@ -1,10 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MemoryPack;
 using NUnit.Framework;
+using PlayerData.Persistence;
+using PlayerData.Sessions;
 
 namespace PlayerData.Unity.Editor.Tests
 {

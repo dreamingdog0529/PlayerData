@@ -1,6 +1,6 @@
 using System;
 
-namespace PlayerData;
+namespace PlayerData.Validation;
 
 public sealed class SaveValidationException : Exception
 {

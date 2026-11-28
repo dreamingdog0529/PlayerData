@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using UnityEngine;
+using PlayerData.Schema;
 
 namespace PlayerData.Unity.Editor
 {

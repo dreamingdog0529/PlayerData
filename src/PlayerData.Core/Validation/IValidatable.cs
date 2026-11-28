@@ -1,4 +1,5 @@
-namespace PlayerData;
+using PlayerData.Sessions;
+namespace PlayerData.Validation;
 
 // Optional seam for document / entity types. SaveSession.CommitAsync invokes Validate() on
 // every IValidatable value in dirty (and clean) participants before writing.

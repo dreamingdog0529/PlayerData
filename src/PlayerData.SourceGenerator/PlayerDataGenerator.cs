@@ -13,10 +13,10 @@ namespace PlayerData.SourceGenerator;
 [Generator]
 public sealed class PlayerDataGenerator : IIncrementalGenerator
 {
-    private const string SingleAttributeMetadataName = "PlayerData.PlayerDataSingleAttribute";
-    private const string CollectionAttributeMetadataName = "PlayerData.PlayerDataCollectionAttribute";
-    private const string SessionAttributeMetadataName = "PlayerData.PlayerDataSessionAttribute";
-    private const string KeyAttributeMetadataName = "PlayerData.PlayerDataKeyAttribute";
+    private const string SingleAttributeMetadataName = "PlayerData.Schema.PlayerDataSingleAttribute";
+    private const string CollectionAttributeMetadataName = "PlayerData.Schema.PlayerDataCollectionAttribute";
+    private const string SessionAttributeMetadataName = "PlayerData.Schema.PlayerDataSessionAttribute";
+    private const string KeyAttributeMetadataName = "PlayerData.Schema.PlayerDataKeyAttribute";
     private const string MemoryPackableAttributeMetadataName = "MemoryPack.MemoryPackableAttribute";
 
     // Fixed members every generated session always emits; a document property name must not
@@ -196,7 +196,7 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
         var ctorBody = new List<string>
         {
             "if (backend is null) throw new global::System.ArgumentNullException(nameof(backend));",
-            "_session = new global::PlayerData.SaveSession(backend, migrations);",
+            "_session = new global::PlayerData.Sessions.SaveSession(backend, migrations);",
         };
 
         foreach (var doc in documents)
@@ -210,15 +210,15 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
                 var keyRef = doc.KeyType!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                 var typeRef = doc.EntityType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                 var keyAccess = FormatKeyAccess(doc.KeyMember!);
-                fields.Add($"private readonly global::PlayerData.IBag<{keyRef}, {typeRef}> {fieldName};");
-                props.Add($"public global::PlayerData.IBag<{keyRef}, {typeRef}> {propName} => {fieldName};");
+                fields.Add($"private readonly global::PlayerData.Documents.IBag<{keyRef}, {typeRef}> {fieldName};");
+                props.Add($"public global::PlayerData.Documents.IBag<{keyRef}, {typeRef}> {propName} => {fieldName};");
                 ctorBody.Add($"{fieldName} = _session.AddCollection<{keyRef}, {typeRef}>({keyLiteral}, static e => e{keyAccess});");
             }
             else
             {
                 var typeRef = doc.EntityType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                fields.Add($"private readonly global::PlayerData.IDoc<{typeRef}> {fieldName};");
-                props.Add($"public global::PlayerData.IDoc<{typeRef}> {propName} => {fieldName};");
+                fields.Add($"private readonly global::PlayerData.Documents.IDoc<{typeRef}> {fieldName};");
+                props.Add($"public global::PlayerData.Documents.IDoc<{typeRef}> {propName} => {fieldName};");
                 ctorBody.Add($"{fieldName} = _session.AddDocument({keyLiteral}, {doc.DefaultFactoryExpression});");
             }
         }
@@ -243,19 +243,19 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
             sb.AppendLine("{");
         }
 
-        sb.AppendLine($"{indent}{accessibility}partial class {session.Name} : global::PlayerData.ISaveSession");
+        sb.AppendLine($"{indent}{accessibility}partial class {session.Name} : global::PlayerData.Sessions.ISaveSession");
         sb.AppendLine($"{indent}{{");
-        sb.AppendLine($"{indent}    private readonly global::PlayerData.SaveSession _session;");
+        sb.AppendLine($"{indent}    private readonly global::PlayerData.Sessions.SaveSession _session;");
         foreach (var f in fields)
             sb.AppendLine($"{indent}    {f}");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public {session.Name}(global::PlayerData.ISaveBackend backend, global::System.Collections.Generic.IEnumerable<global::PlayerData.ISaveMigration>? migrations = null)");
+        sb.AppendLine($"{indent}    public {session.Name}(global::PlayerData.Persistence.ISaveBackend backend, global::System.Collections.Generic.IEnumerable<global::PlayerData.Migrations.ISaveMigration>? migrations = null)");
         sb.AppendLine($"{indent}    {{");
         foreach (var line in ctorBody)
             sb.AppendLine($"{indent}        {line}");
         sb.AppendLine($"{indent}    }}");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public static async global::System.Threading.Tasks.ValueTask<{session.Name}> OpenAsync(global::PlayerData.ISaveBackend backend, global::System.Threading.CancellationToken cancellationToken = default, global::System.Collections.Generic.IEnumerable<global::PlayerData.ISaveMigration>? migrations = null)");
+        sb.AppendLine($"{indent}    public static async global::System.Threading.Tasks.ValueTask<{session.Name}> OpenAsync(global::PlayerData.Persistence.ISaveBackend backend, global::System.Threading.CancellationToken cancellationToken = default, global::System.Collections.Generic.IEnumerable<global::PlayerData.Migrations.ISaveMigration>? migrations = null)");
         sb.AppendLine($"{indent}    {{");
         sb.AppendLine($"{indent}        var session = new {session.Name}(backend, migrations);");
         sb.AppendLine($"{indent}        await session.LoadAsync(cancellationToken).ConfigureAwait(false);");
@@ -286,15 +286,15 @@ public sealed class PlayerDataGenerator : IIncrementalGenerator
         sb.AppendLine($"{indent}        remove => _session.DirtyChanged -= value;");
         sb.AppendLine($"{indent}    }}");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public global::System.Threading.Tasks.ValueTask<global::PlayerData.LoadResult> LoadAsync(global::System.Threading.CancellationToken cancellationToken = default) => _session.LoadAsync(cancellationToken);");
+        sb.AppendLine($"{indent}    public global::System.Threading.Tasks.ValueTask<global::PlayerData.Sessions.LoadResult> LoadAsync(global::System.Threading.CancellationToken cancellationToken = default) => _session.LoadAsync(cancellationToken);");
         sb.AppendLine();
         sb.AppendLine($"{indent}    public global::System.Threading.Tasks.ValueTask CommitAsync(global::System.Threading.CancellationToken cancellationToken = default) => _session.CommitAsync(cancellationToken);");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public global::PlayerData.SuppressionScope SuppressNotifications() => _session.SuppressNotifications();");
+        sb.AppendLine($"{indent}    public global::PlayerData.Sessions.SuppressionScope SuppressNotifications() => _session.SuppressNotifications();");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public void AddValidator(global::PlayerData.ISaveValidator validator) => _session.AddValidator(validator);");
+        sb.AppendLine($"{indent}    public void AddValidator(global::PlayerData.Validation.ISaveValidator validator) => _session.AddValidator(validator);");
         sb.AppendLine();
-        sb.AppendLine($"{indent}    public void AddValidator(global::System.Action<global::PlayerData.ISaveSession> validate) => _session.AddValidator(validate);");
+        sb.AppendLine($"{indent}    public void AddValidator(global::System.Action<global::PlayerData.Sessions.ISaveSession> validate) => _session.AddValidator(validate);");
         sb.AppendLine();
         if (autoCommit)
         {
