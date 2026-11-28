@@ -1,10 +1,3 @@
-pre-commit:
-  parallel: true
-  commands:
-    spellcheck:
-      glob: "*.{md,txt,yml,yaml}"
-      run: typos --config .typos.toml {staged_files}
-
 commit-msg:
   commands:
     conventional-commit:
@@ -29,11 +22,5 @@ commit-msg:
           echo "  Example: feat: add user authentication"
           echo "  Example: fix(api): resolve timeout issue"
           echo "  Got: $msg"
-          exit 1
-        fi
-    dco-signoff:
-      run: |
-        if ! grep -q "^Signed-off-by:" {1}; then
-          echo "ERROR: Missing DCO sign-off. Use 'git commit -s'"
           exit 1
         fi

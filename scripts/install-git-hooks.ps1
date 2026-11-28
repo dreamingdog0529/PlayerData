@@ -1,10 +1,10 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Install local git hooks (Conventional Commits + DCO).
+  Install local git hooks (Conventional Commits).
 
 .DESCRIPTION
-  Prefers lefthook when available (same as oss-project-template / `task setup`).
+  Prefers lefthook when available (same as `task setup`).
   Falls back to core.hooksPath = .githooks for environments without lefthook.
 
 .EXAMPLE
@@ -24,8 +24,8 @@ try {
     $lefthook = Get-Command lefthook -ErrorAction SilentlyContinue
     if ($lefthook) {
         & lefthook install
-        Write-Host "lefthook installed (pre-commit spellcheck, commit-msg conventional + DCO)."
-        Write-Host 'Example:  git commit -s -m "fix: correct off-by-one in parser"'
+        Write-Host "lefthook installed (commit-msg conventional commits check)."
+        Write-Host 'Example:  git commit -m "fix: correct off-by-one in parser"'
         return
     }
 
@@ -38,8 +38,8 @@ try {
     git config core.hooksPath .githooks
     $current = git config --get core.hooksPath
     Write-Host "lefthook not found; using core.hooksPath = $current"
-    Write-Host "Local commit-msg hook enabled (Conventional Commits + DCO)."
-    Write-Host 'Example:  git commit -s -m "fix: correct off-by-one in parser"'
+    Write-Host "Local commit-msg hook enabled (Conventional Commits)."
+    Write-Host 'Example:  git commit -m "fix: correct off-by-one in parser"'
     Write-Host "Optional: install lefthook and re-run this script, or run: task setup"
 }
 finally {

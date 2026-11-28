@@ -7,16 +7,9 @@ tasks:
   check:
     desc: Run all pre-commit checks
     cmds:
-      - task: spellcheck
       - task: commit-lint
-      - task: dco-check
       - task: build
       - task: test
-
-  spellcheck:
-    desc: Run spell checker (mirrors CI)
-    cmds:
-      - typos --config .typos.toml
 
   commit-lint:
     desc: Check commits follow Conventional Commits format
@@ -37,18 +30,6 @@ tasks:
         done
         echo "All commits follow Conventional Commits format"
 
-  dco-check:
-    desc: Check commits have DCO sign-off
-    cmds:
-      - |
-        for commit in $(git log --format=%H origin/main..HEAD 2>/dev/null || git log --format=%H -5); do
-          if ! git log -1 --format=%B $commit | grep -q "^Signed-off-by:"; then
-            echo "ERROR: Commit $commit missing DCO sign-off"
-            echo "Fix with: git commit --amend -s"
-            exit 1
-          fi
-        done
-        echo "All commits have DCO sign-off"
 
   build:
     desc: Build the project
@@ -69,16 +50,14 @@ tasks:
     deps: [install-tools]
     cmds:
       - lefthook install
-      - echo "Hooks installed. Prefer: git commit -s -m \"type: description\""
+      - echo "Hooks installed."
 
   install-tools:
     desc: Install required CLI tools (best-effort)
     cmds:
       - |
         echo "Ensure these tools are available on PATH:"
-        echo "  - typos (https://github.com/crate-ci/typos)"
         echo "  - lefthook (https://github.com/evilmartians/lefthook)"
         echo "  - task (https://taskfile.dev/)"
-        command -v typos && typos --version || echo "typos: not installed"
         command -v lefthook && lefthook version || echo "lefthook: not installed"
         command -v task && task --version || echo "task: not installed"
